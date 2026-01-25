@@ -1,0 +1,17 @@
+{
+  "name": "mew2-relay",
+  "version": "1.0.0",
+  "description": "GunDB Relay Server",
+  "main": "server.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.975.0",
+    "@aws-sdk/s3-request-presigner": "^3.975.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "gun": "^0.2020.1240"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}

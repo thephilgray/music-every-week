@@ -1,0 +1,19 @@
+node_modules/
+dist/
+bin/
+*.js.map
+*.ts.map
+.DS_Store
+.pulumi/
+PEM
+pub
+*.log
+
+# Environment Variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# GunDB
+radata/

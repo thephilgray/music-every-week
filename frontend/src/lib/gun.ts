@@ -1,6 +1,5 @@
 import Gun from 'gun/gun';
 import 'gun/sea';
-import 'gun/axe';
 
 // TODO: Replace with environment variable or actual Cloud Run URL
 const PEERS = [
@@ -10,7 +9,8 @@ const PEERS = [
 const gun = Gun({
   peers: PEERS,
   localStorage: true, // Persist local data
-  radisk: true // Use Radisk for storage
+  radisk: true, // Use Radisk for storage
+  axe: false // Explicitly disable AXE
 });
 
 // For debugging in console

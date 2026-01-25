@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { SubmitTrack } from '../components/SubmitTrack';
 import { CommentSection } from '../components/CommentSection';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EditRequest } from '../components/EditRequest';
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
-  const { gun } = useGun();
+  const { gun, pubKey } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
 
@@ -49,8 +52,44 @@ export function RequestDetail() {
   }, [id, gun]);
 
   if (!request) {
-      return <div className="p-10 text-center text-gray-500">Loading Request...</div>;
+      return (
+        <div className="max-w-5xl mx-auto pb-20">
+            <div className="mb-6 pt-4">
+                <Skeleton className="h-5 w-32" />
+            </div>
+            
+            <div className="flex flex-col md:flex-row gap-8 mb-10">
+                <Skeleton className="w-48 h-48 rounded-lg flex-shrink-0" />
+                <div className="flex-1">
+                    <div className="flex items-start justify-between mb-4">
+                        <Skeleton className="h-10 w-2/3" />
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                    </div>
+                    
+                    <Skeleton className="h-6 w-full mb-2" />
+                    <Skeleton className="h-6 w-3/4 mb-4" />
+                    
+                    <div className="flex items-center gap-6 mb-6">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-5 w-40" />
+                    </div>
+
+                    <Skeleton className="h-10 w-40 rounded-lg" />
+                </div>
+            </div>
+            
+            <div className="border-t border-gray-800 pt-8">
+                <Skeleton className="h-8 w-48 mb-4" />
+                <div className="space-y-4">
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                </div>
+            </div>
+        </div>
+      );
   }
+
+  const isOwner = pubKey && request.ownerPub === pubKey;
 
   return (
     <div className="max-w-5xl mx-auto pb-20">
@@ -70,7 +109,18 @@ export function RequestDetail() {
           
           <div className="flex-1">
               <div className="flex items-start justify-between">
-                <h1 className="text-4xl font-bold text-white mb-2">{request.title}</h1>
+                <div className="flex items-center gap-4">
+                    <h1 className="text-4xl font-bold text-white mb-2">{request.title}</h1>
+                    {isOwner && (
+                        <button 
+                            onClick={() => setIsEditOpen(true)}
+                            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
+                            title="Edit Request"
+                        >
+                            <Edit className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
                     request.visibility === 'public' 
                     ? 'bg-green-900/30 border-green-700 text-green-400' 
@@ -171,6 +221,17 @@ export function RequestDetail() {
             onSuccess={() => {
                 // optional: trigger a toast or refresh logic if needed
             }}
+          />
+      )}
+      
+      {isEditOpen && request && (
+          <EditRequest 
+             request={request}
+             onClose={() => setIsEditOpen(false)}
+             onUpdate={() => {
+                 // GunDB updates are live, so we might not need to manually refresh state 
+                 // if the listener is robust, but we can trigger a re-fetch if needed.
+             }}
           />
       )}
     </div>

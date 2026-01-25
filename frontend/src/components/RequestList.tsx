@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useGun } from '../contexts/GunContext';
 import type { FileRequest } from '../types';
 import { Link } from 'react-router-dom';
+import { Skeleton } from './ui/Skeleton';
 
 export function RequestList() {
   const { gun } = useGun();
   const [requests, setRequests] = useState<FileRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Subscribe to all file_requests
@@ -17,16 +19,43 @@ export function RequestList() {
        
        const newRequest: FileRequest = {
          id: key,
-         ...data
+         ...data,
+         // Parse JSON fields if they are strings
+         pending_emails: typeof data.pending_emails === 'string' ? JSON.parse(data.pending_emails) : data.pending_emails,
+         participants: typeof data.participants === 'string' ? JSON.parse(data.participants) : data.participants
        };
        
        requestsMap.set(key, newRequest);
        setRequests(Array.from(requestsMap.values()));
+       if (requestsMap.size > 0) setLoading(false);
     });
     
     // Cleanup not strictly necessary for Gun .on() in this simple case, 
     // but in production we'd want to manage subscriptions.
+    const timer = setTimeout(() => setLoading(false), 2000);
+    return () => clearTimeout(timer);
   }, [gun]);
+
+  if (loading && requests.length === 0) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map(i => (
+              <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden h-full flex flex-col">
+                  <Skeleton className="aspect-video w-full bg-gray-700" />
+                  <div className="p-4 flex-1 flex flex-col gap-4">
+                      <Skeleton className="h-6 w-3/4" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-1/2" />
+                      <div className="mt-auto pt-4 border-t border-gray-700/50 flex justify-between">
+                          <Skeleton className="h-3 w-1/4" />
+                          <Skeleton className="h-3 w-1/4" />
+                      </div>
+                  </div>
+              </div>
+          ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -61,8 +90,9 @@ export function RequestList() {
       ))}
       
       {requests.length === 0 && (
-        <div className="col-span-full text-center py-12 text-gray-500">
-           No requests found. Create one to get started!
+        <div className="col-span-full text-center py-12 text-gray-500 bg-gray-900/50 border border-gray-800 border-dashed rounded-lg">
+           <p className="text-lg font-medium text-gray-300 mb-2">No active requests</p>
+           <p className="text-sm">Create a new request to get started!</p>
         </div>
       )}
     </div>

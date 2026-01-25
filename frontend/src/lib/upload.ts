@@ -1,8 +1,8 @@
 
 const RELAY_API = 'http://localhost:8080/api';
 
-// TODO: Set this in .env
-const PUBLIC_R2_DOMAIN = 'https://pub-your-r2-domain.r2.dev'; 
+// Use environment variable or fallback to placeholder (which will break if not set)
+const PUBLIC_R2_DOMAIN = import.meta.env.VITE_R2_PUBLIC_DOMAIN || 'https://pub-your-r2-domain.r2.dev'; 
 
 interface UploadResult {
   url: string; // The public URL to access the file

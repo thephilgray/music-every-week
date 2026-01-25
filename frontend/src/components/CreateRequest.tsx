@@ -41,7 +41,11 @@ export function CreateRequest() {
         artworkUrl = result.url;
       }
 
-      const request: FileRequest = {
+      const requestId = crypto.randomUUID();
+      // GunDB doesn't handle arrays well. We must stringify them or use a set.
+      // For simplicity in this metadata object, we'll stringify.
+      const request: any = {
+        id: requestId, 
         title,
         description: desc,
         deadline,
@@ -49,17 +53,17 @@ export function CreateRequest() {
         artworkUrl,
         ownerPub: pubKey,
         createdAt: Date.now(),
-        pending_emails: emails,
-        participants: {} // Initialize empty
+        pending_emails: JSON.stringify(emails),
+        participants: JSON.stringify({}) 
       };
 
       console.log('Saving to GunDB...', request);
       
-      // Save to global list
-      gun.get('file_requests').set(request);
+      // Save to global list with explicit ID
+      gun.get('file_requests').get(requestId).put(request);
       
       // Also link to user (optional, for "My Requests")
-      user.get('my_requests').set(request);
+      user.get('my_requests').get(requestId).put(request);
 
       alert('Request created successfully!');
       

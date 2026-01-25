@@ -58,7 +58,7 @@ const server = app.listen(port, () => {
 // We use 'radata' file for persistence.
 const gun = Gun({ 
   web: server,
-  file: process.env.GUN_FILE || '/data/radata' 
+  file: process.env.GUN_FILE || 'radata' 
 });
 
 // Basic health check

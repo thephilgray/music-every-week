@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, MessageSquare, Music, UserPlus, Check } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { Skeleton } from '../components/ui/Skeleton';
 import type { Notification } from '../types';
 
 export function Inbox() {
@@ -91,7 +92,11 @@ export function Inbox() {
       </div>
 
       {loading && notifications.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">Loading notifications...</div>
+          <div className="space-y-4">
+              {[1, 2, 3].map(i => (
+                  <Skeleton key={i} className="h-20 w-full rounded-xl" />
+              ))}
+          </div>
       ) : notifications.length === 0 ? (
           <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
               <Bell className="w-12 h-12 text-gray-700 mx-auto mb-4" />

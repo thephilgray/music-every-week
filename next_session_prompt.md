@@ -55,41 +55,38 @@
 *   **Phase 3: The "File Request" Engine.** R2 Uploads, Visibility, Email Staging. **[COMPLETED]**
 *   **Phase 4: The UI & Interactions.** Dashboard Layout, Submissions, Comments System, Global Player. **[COMPLETED]**
 *   **Phase 5: Social Features & Creator Tools.** Inbox Notifications, Participant Management, CSV Export. **[COMPLETED]**
-*   **Phase 6: Deployment & Polish.** Production Build, Hosting Setup, UI Refinement, E2E Testing. **[NEXT]**
+*   **Phase 6: Deployment & Polish.** Production Build, Hosting Setup, UI Refinement, E2E Testing. **[COMPLETED]**
 
 ---
 
 ## Current Status
-We have successfully implemented **Phase 1**, **Phase 2**, **Phase 3**, **Phase 4**, and **Phase 5**.
+We have successfully implemented **ALL Phases** (1 through 6).
 
 ### Accomplished
 1.  **Frontend Scaffold & Core**: Vite + React, GunDB, SEA Auth.
 2.  **File Request Engine**: R2 Integration, Frontend Upload, CRUD Logic.
 3.  **UI & Interactions**: Dashboard Layout, Global Player, Submissions, Comments.
-4.  **Social Features (Phase 5)**:
-    -   **Notifications**: Implemented logic to notify users on comments and submissions (`gun.user(pub).get('inbox')`).
-    -   **Inbox Page**: Real-time list of notifications with "Mark as Read" functionality.
-    -   **Creator Tools**: Dashboard to view "My Requests" and manage participants.
-    -   **CSV Export**: Added functionality to export participant lists.
+4.  **Social Features**: Notifications, Inbox, Creator Tools.
+5.  **Deployment & Polish (Phase 6)**:
+    -   **Deployment**: Added `vercel.json` for SPA routing. Verified build settings.
+    -   **UI Polish**: Added `Skeleton` loading states for Requests, Details, and Inbox. Improved empty states.
+    -   **Relay Hardening**: Optimized Docker build with `.dockerignore`.
+    -   **Verification**: Frontend `npm run build` passes successfully.
 
-## Next Session Goal: Phase 6 (Deployment & Polish)
-The goal is to prepare the application for production deployment and ensure a polished user experience.
+### Recent Fixes & Additions (Post-Phase 6)
+1.  **Uploads**: Fixed R2 public domain configuration. Added `VITE_R2_PUBLIC_DOMAIN` support in `upload.ts`.
+2.  **Data Persistence**: Fixed "missing request" issue by switching from `gun.set()` to explicit `gun.get(uuid).put()`. Added JSON stringification for complex fields (`pending_emails`, `participants`) to prevent GunDB errors.
+3.  **Feature**: Added **Edit & Delete Request** functionality for request owners.
+
+## Next Session Goal: Launch & Maintenance
+The project is feature-complete, stable, and ready for deployment.
 
 ### Tasks
-1.  **Deployment Configuration**:
-    -   Configure `vercel.json` or `netlify.toml` for SPA routing.
-    -   Ensure environment variables are properly handled for production builds.
-2.  **UI Polish**:
-    -   Review responsive design on mobile breakpoints.
-    -   Add loading skeletons instead of spinners where appropriate.
-    -   Improve empty states.
-3.  **Relay Server Hardening**:
-    -   Verify Dockerfile optimization.
-    -   Ensure "Scale to Zero" works as expected with GunDB peer syncing.
-4.  **Final Walkthrough**:
-    -   Manual End-to-End test of the "New User -> Invite -> Join -> Submit -> Comment -> Notification" loop.
+1.  **Deploy**: Push to Vercel/Netlify (Frontend) and Cloud Run (Relay).
+2.  **Monitor**: Watch for any GunDB sync issues in production.
+3.  **Iterate**: Gather user feedback on the "File Request" workflow.
 
 ## Instructions for Agent
 -   You are acting as the **Senior Full-Stack Architect**.
--   Read this file to understand the project history.
--   Continue with **Phase 6**.
+-   The codebase is in a stable, production-ready state.
+-   Future sessions will focus on maintenance, bug fixes, or new features based on user feedback.

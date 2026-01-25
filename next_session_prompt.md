@@ -53,42 +53,43 @@
 *   **Phase 1: Infrastructure (Pulumi).** Deploy GCS, Cloud Run Relay, Scheduler. **[COMPLETED]**
 *   **Phase 2: The Core.** React setup, GunDB provider, SEA Auth, Deep Link/Invite Logic. **[COMPLETED]**
 *   **Phase 3: The "File Request" Engine.** R2 Uploads, Visibility, Email Staging. **[COMPLETED]**
-*   **Phase 4: The UI & Interactions.** Dashboard Layout, Submissions, Comments System, Global Player. **[NEXT]**
+*   **Phase 4: The UI & Interactions.** Dashboard Layout, Submissions, Comments System, Global Player. **[COMPLETED]**
+*   **Phase 5: Social Features & Creator Tools.** Inbox Notifications, Participant Management, CSV Export. **[COMPLETED]**
+*   **Phase 6: Deployment & Polish.** Production Build, Hosting Setup, UI Refinement, E2E Testing. **[NEXT]**
 
 ---
 
 ## Current Status
-We have successfully implemented **Phase 1**, **Phase 2**, and **Phase 3**.
+We have successfully implemented **Phase 1**, **Phase 2**, **Phase 3**, **Phase 4**, and **Phase 5**.
 
 ### Accomplished
-1.  **Frontend Scaffold**: Vite + React + Tailwind CSS.
-2.  **GunDB Core**: Relay connected, `GunContext` established, SEA Auth working.
-3.  **File Request Engine (Phase 3)**:
-    -   **R2 Integration**: Created `infrastructure/relay` endpoint (`/api/upload-url`) using AWS SDK v3 for Cloudflare R2.
-    -   **Frontend Upload**: Implemented `uploadFile` service to fetch signed URLs and PUT data.
-    -   **CRUD Logic**: `CreateRequest` form implemented with Title, Description, Date, Visibility, and Artwork Upload.
-    -   **Persistence**: Requests are saved to `gun.get('file_requests')` and linked to `user.get('my_requests')`.
-    -   **Participant Staging**: UI implemented to add "Pending Emails" to a request during creation.
-    -   **List View**: `RequestList` component displays active requests with realtime updates.
+1.  **Frontend Scaffold & Core**: Vite + React, GunDB, SEA Auth.
+2.  **File Request Engine**: R2 Integration, Frontend Upload, CRUD Logic.
+3.  **UI & Interactions**: Dashboard Layout, Global Player, Submissions, Comments.
+4.  **Social Features (Phase 5)**:
+    -   **Notifications**: Implemented logic to notify users on comments and submissions (`gun.user(pub).get('inbox')`).
+    -   **Inbox Page**: Real-time list of notifications with "Mark as Read" functionality.
+    -   **Creator Tools**: Dashboard to view "My Requests" and manage participants.
+    -   **CSV Export**: Added functionality to export participant lists.
 
-## Next Session Goal: Phase 4 (The UI & Interactions)
-The goal is to turn the functional engine into a usable application with a proper dashboard layout, submission handling, and media playback.
+## Next Session Goal: Phase 6 (Deployment & Polish)
+The goal is to prepare the application for production deployment and ensure a polished user experience.
 
 ### Tasks
-1.  **Dashboard Layout**:
-    -   Implement the "4-Pane Studio" layout (Sidebar, Context Bar, Main Stage, Player).
-    -   Move `RequestList` and `CreateRequest` into appropriate views/modals within this layout.
-2.  **Submissions Logic**:
-    -   Allow users to "Submit Track" to a specific File Request.
-    -   Upload Audio (MP3/WAV) using the existing R2 `uploadFile` service.
-    -   Link submission to the File Request node.
-3.  **Global Player**:
-    -   Create a persistent bottom player component.
-    -   Implement logic to load a File Request's submissions into the queue.
-4.  **Comments**:
-    -   Implement basic commenting on Submissions.
+1.  **Deployment Configuration**:
+    -   Configure `vercel.json` or `netlify.toml` for SPA routing.
+    -   Ensure environment variables are properly handled for production builds.
+2.  **UI Polish**:
+    -   Review responsive design on mobile breakpoints.
+    -   Add loading skeletons instead of spinners where appropriate.
+    -   Improve empty states.
+3.  **Relay Server Hardening**:
+    -   Verify Dockerfile optimization.
+    -   Ensure "Scale to Zero" works as expected with GunDB peer syncing.
+4.  **Final Walkthrough**:
+    -   Manual End-to-End test of the "New User -> Invite -> Join -> Submit -> Comment -> Notification" loop.
 
 ## Instructions for Agent
 -   You are acting as the **Senior Full-Stack Architect**.
 -   Read this file to understand the project history.
--   Continue with **Phase 4**.
+-   Continue with **Phase 6**.

@@ -3,91 +3,117 @@ import { Download, Users, ChevronRight, Mail } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import type { FileRequest } from '../types';
 
+interface ParticipantRow {
+    name: string;
+    contact: string;
+    status: string;
+    type: 'user' | 'email';
+}
+
 export function CreatorTools() {
-  const { gun, user, pubKey } = useGun();
+  const { gun, user, pubKey, isAdmin } = useGun();
   const [myRequests, setMyRequests] = useState<FileRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
-  const [participants, setParticipants] = useState<any[]>([]);
+  const [participants, setParticipants] = useState<ParticipantRow[]>([]);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
-
-    // Fetch my requests
+    
     const reqMap = new Map<string, FileRequest>();
     user.get('my_requests').map().on((data: any, key: string) => {
-        if (data && data.title) { // simple check
-            reqMap.set(key, { ...data, id: key });
+        if (data && data.title) { 
+            // Parse fields if they are strings (GunDB quirk)
+            let parsedParticipants = {};
+            let parsedEmails: string[] = [];
+            
+            if (typeof data.participants === 'string') {
+                try { parsedParticipants = JSON.parse(data.participants); } catch (e) {}
+            } else if (data.participants) {
+                parsedParticipants = data.participants;
+            }
+
+            if (typeof data.pending_emails === 'string') {
+                try { parsedEmails = JSON.parse(data.pending_emails); } catch (e) {}
+            } else if (Array.isArray(data.pending_emails)) {
+                parsedEmails = data.pending_emails;
+            }
+
+            reqMap.set(key, { 
+                ...data, 
+                id: key, 
+                participants: parsedParticipants,
+                pending_emails: parsedEmails
+            });
             setMyRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
         }
     });
   }, [user]);
 
   useEffect(() => {
-    if (!selectedRequest || !selectedRequest.id) return;
-    
-    const reqId = selectedRequest.id;
-    
-    // Subscribe to the request to get participants
-    gun.get('file_requests').get(reqId).on((data: any) => {
-        if (!data) return;
-        
-        const parts: any[] = [];
-        
-        // 1. Process Accepted/Pending PubKeys
-        // Gun might return participants as null, or an object
-        if (data.participants) {
-             Object.entries(data.participants).forEach(([key, val]: [string, any]) => {
-                 if (key === '_' || !val) return; // Gun metadata
-                 parts.push({
-                     type: 'user',
-                     id: key,
-                     name: key.substring(0, 8), // Placeholder for username
-                     status: typeof val === 'object' ? (val.status || 'joined') : 'joined',
-                     contact: key // PubKey
-                 });
-             });
-        }
-        
-        // 2. Process Pending Emails
-        if (data.pending_emails) {
-             // If it's an object (Gun array-to-object conversion) or standard object
-             Object.values(data.pending_emails).forEach((email: any) => {
-                 if (typeof email !== 'string') return;
-                 parts.push({
-                     type: 'email',
-                     id: email,
-                     name: 'Pending User',
-                     status: 'invited',
-                     contact: email
-                 });
-             });
-        }
-        
-        setParticipants(parts);
-    });
+      if (!selectedRequest) {
+          setParticipants([]);
+          return;
+      }
 
-  }, [selectedRequest, gun]);
+      const rows: ParticipantRow[] = [];
 
+      // Process existing participants (Users)
+      if (selectedRequest.participants) {
+          Object.entries(selectedRequest.participants).forEach(([pub, data]: [string, any]) => {
+              rows.push({
+                  name: data.alias || 'Unknown User',
+                  contact: data.email || pub,
+                  status: data.status || 'pending',
+                  type: 'user'
+              });
+          });
+      }
+
+      // Process pending emails
+      if (selectedRequest.pending_emails) {
+          selectedRequest.pending_emails.forEach((email: string) => {
+              rows.push({
+                  name: 'Invited Guest',
+                  contact: email,
+                  status: 'invited',
+                  type: 'email'
+              });
+          });
+      }
+
+      setParticipants(rows);
+
+  }, [selectedRequest]);
+
+  const generateInvite = () => {
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      gun.get('invites').get(code).put({
+          createdBy: pubKey,
+          createdAt: Date.now(),
+          status: 'active'
+      });
+      setInviteCode(code);
+  };
+  
   const exportCSV = () => {
-     if (!selectedRequest) return;
-     
-     const headers = ['Type', 'Contact (Email/PubKey)', 'Status'];
-     const rows = participants.map(p => [p.type, p.contact, p.status]);
-     
-     const csvContent = [
-         headers.join(','),
-         ...rows.map(r => r.join(','))
-     ].join('\n');
-     
-     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-     const link = document.createElement('a');
-     const url = URL.createObjectURL(blob);
-     link.setAttribute('href', url);
-     link.setAttribute('download', `${selectedRequest.title}_participants.csv`);
-     link.style.visibility = 'hidden';
-     document.body.appendChild(link);
-     link.click();
-     document.body.removeChild(link);
+      if (!selectedRequest || participants.length === 0) return;
+
+      const headers = ['Name', 'Contact', 'Status', 'Type'];
+      const csvContent = [
+          headers.join(','),
+          ...participants.map(p => `"${p.name}","${p.contact}","${p.status}","${p.type}"`)
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `participants_${selectedRequest.title.replace(/\s+/g, '_')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
   };
 
   if (!pubKey) return <div className="text-center py-20 text-gray-500">Please login to access Creator Tools.</div>;
@@ -96,6 +122,24 @@ export function CreatorTools() {
     <div className="flex h-[calc(100vh-theme(spacing.16))]">
         {/* Sidebar List of Requests */}
         <div className="w-80 border-r border-gray-800 p-4 bg-gray-950/50 overflow-y-auto">
+            {isAdmin && (
+                <div className="mb-6 p-4 bg-blue-900/20 border border-blue-900/50 rounded-lg">
+                    <h3 className="text-blue-400 font-bold mb-2 text-sm uppercase">Admin Tools</h3>
+                    <button
+                        onClick={generateInvite}
+                        className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition"
+                    >
+                        Generate Invite Code
+                    </button>
+                    {inviteCode && (
+                        <div className="mt-3 p-2 bg-gray-900 rounded border border-gray-700 text-center">
+                            <span className="text-xl font-mono text-white tracking-widest">{inviteCode}</span>
+                            <p className="text-xs text-gray-500 mt-1">Share this code with a new user</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
             <h2 className="text-lg font-bold text-gray-200 mb-4 px-2">Your Requests</h2>
             <div className="space-y-1">
                 {myRequests.map(req => (

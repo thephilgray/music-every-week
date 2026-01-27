@@ -1,4 +1,4 @@
-import { Home, Inbox, Layers, Music } from 'lucide-react';
+import { Home, Inbox, Layers, Music, Users, Archive, User, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 export function Sidebar() {
@@ -7,8 +7,11 @@ export function Sidebar() {
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: Inbox, label: 'Inbox', path: '/inbox' },
+    { icon: Users, label: 'Directory', path: '/directory' },
+    { icon: Archive, label: 'Archive', path: '/archive' },
     { icon: Layers, label: 'Creator Tools', path: '/creator' },
-    // { icon: Settings, label: 'Settings', path: '/settings' },
+    { icon: User, label: 'Profile', path: '/profile' },
+    { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
   return (

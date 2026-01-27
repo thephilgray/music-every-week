@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { Upload, X, Music, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Upload, X, Music, Image as ImageIcon, Loader2, Users } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import type { Submission, Notification } from '../types';
 
 interface SubmitTrackProps {
   requestId: string;
+  participants?: Record<string, { status: 'pending' | 'accepted', alias?: string, email?: string }>;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function SubmitTrack({ requestId, onClose, onSuccess }: SubmitTrackProps) {
+export function SubmitTrack({ requestId, participants, onClose, onSuccess }: SubmitTrackProps) {
   const { gun, user, pubKey } = useGun();
   const [title, setTitle] = useState('');
   const [lyrics, setLyrics] = useState('');
@@ -18,6 +19,16 @@ export function SubmitTrack({ requestId, onClose, onSuccess }: SubmitTrackProps)
   const [artFile, setArtFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+
+  const toggleCollaborator = (pub: string) => {
+    if (collaborators.includes(pub)) {
+      setCollaborators(collaborators.filter(p => p !== pub));
+    } else {
+      setCollaborators([...collaborators, pub]);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +53,11 @@ export function SubmitTrack({ requestId, onClose, onSuccess }: SubmitTrackProps)
 
         // 3. Save to Gun
         const submissionId = crypto.randomUUID();
+        
+        // Convert collaborators array to Record<string, boolean>
+        const collaboratorsMap: Record<string, boolean> = {};
+        collaborators.forEach(c => collaboratorsMap[c] = true);
+
         const submission: Submission = {
             id: submissionId,
             requestId,
@@ -50,15 +66,40 @@ export function SubmitTrack({ requestId, onClose, onSuccess }: SubmitTrackProps)
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderPub: pubKey as string,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            collaborators: collaboratorsMap
         };
 
         // Link submission to the Request
         // We'll store it under file_requests/ID/submissions/SUB_ID
         gun.get('file_requests').get(requestId).get('submissions').get(submissionId).put(submission);
 
-        // Also link to user's submissions
-        user.get('my_submissions').get(submissionId).put(submission);
+        // Also link to user's public profile (Double-Linking)
+        // This is crucial for the "Profile" view to show all works
+        if (pubKey) {
+            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(true);
+            
+            // Still keep private reference if needed, but 'all_users' is the directory now
+            user.get('my_submissions').get(submissionId).put(submission);
+        }
+
+        // Link to collaborators' profiles
+        collaborators.forEach(collabPub => {
+            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(true);
+            
+            // Notify Collaborator
+            const notifId = crypto.randomUUID();
+            const notification: Notification = {
+                id: notifId,
+                type: 'submission',
+                message: `You were added as a collaborator on "${title}"`,
+                link: `/request/${requestId}`,
+                fromPub: pubKey as string,
+                createdAt: Date.now(),
+                read: false
+            };
+            gun.user(collabPub).get('inbox').get(notifId).put(notification);
+        });
 
         // Notify Request Owner
         gun.get('file_requests').get(requestId).once((req: any) => {
@@ -90,7 +131,7 @@ export function SubmitTrack({ requestId, onClose, onSuccess }: SubmitTrackProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button 
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-500 hover:text-white"
@@ -165,6 +206,35 @@ export function SubmitTrack({ requestId, onClose, onSuccess }: SubmitTrackProps)
                     </label>
                 </div>
             </div>
+            
+            {/* Collaborators */}
+            {participants && Object.keys(participants).length > 0 && (
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2">
+                        <Users className="w-4 h-4" /> Collaborators
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                        {Object.entries(participants).map(([pub, data]) => {
+                             if (pub === pubKey) return null; // Don't show self
+                             const isSelected = collaborators.includes(pub);
+                             return (
+                                 <button
+                                    key={pub}
+                                    type="button"
+                                    onClick={() => toggleCollaborator(pub)}
+                                    className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                                        isSelected 
+                                        ? 'bg-blue-600 border-blue-500 text-white' 
+                                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                                    }`}
+                                 >
+                                     {data.alias || pub.substring(0, 6)}
+                                 </button>
+                             );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Lyrics / Notes (Optional)</label>

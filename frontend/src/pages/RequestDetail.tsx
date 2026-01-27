@@ -25,9 +25,21 @@ export function RequestDetail() {
     // Fetch Request Details
     gun.get('file_requests').get(id).on((data: any) => {
         if (data) {
+            let parsedParticipants = {};
+            if (typeof data.participants === 'string') {
+                try {
+                    parsedParticipants = JSON.parse(data.participants);
+                } catch (e) {
+                    console.error("Failed to parse participants", e);
+                }
+            } else if (typeof data.participants === 'object') {
+                parsedParticipants = data.participants;
+            }
+
             setRequest({
                 id: id,
-                ...data
+                ...data,
+                participants: parsedParticipants
             });
         }
     });
@@ -217,6 +229,7 @@ export function RequestDetail() {
       {isSubmitOpen && id && (
           <SubmitTrack 
             requestId={id} 
+            participants={request.participants}
             onClose={() => setIsSubmitOpen(false)}
             onSuccess={() => {
                 // optional: trigger a toast or refresh logic if needed

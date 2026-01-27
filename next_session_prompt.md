@@ -14,70 +14,44 @@
 *   **Relay Server:** Google Cloud Run (Docker). Configured to Scale to Zero.
 *   **Infrastructure:** Pulumi (TypeScript) on GCP.
 
-### 2. Current Status: MVP Complete (Phases 1-6)
-We have successfully built the core application.
+### 2. Current Status: Post-MVP Refinement (Phases 1-6 + Partial 7)
+We have successfully implemented the core application and started architectural refinements.
 *   **Frontend Scaffold:** Vite + React, GunDB, SEA Auth.
 *   **File Engine:** R2 Integration, Direct Uploads, CRUD Logic.
-*   **UI Core:** Dashboard Layout, Global Player, Submissions, Comments.
-*   **Social:** Notifications, Inbox, Basic Creator Tools.
-*   **Infrastructure:** Cloud Run Relay, GCS Persistence, Scheduler.
-*   **Recent Fixes:** R2 public domain support, GunDB `put()` vs `set()` persistence fixes, Edit/Delete Request features.
+*   **UI Core:** "4-Pane Studio" Layout (Sidebar, Context, Stage, Player).
+*   **Identity & Recovery:** Implemented "Trusted Admin" model & Directory.
+    *   **Profile:** `UserProfile` loaded from `all_users` with bio, avatar, etc.
+*   **Connectivity:** "Smart Idle Disconnect" active.
+
+### 3. Recent Accomplishments (Session Jan 26, 2026)
+*   **Data Model:** Enhanced `UserProfile`, `FileRequest` (snapshots), and `Submission` (double-linking).
+*   **Features:** 
+    *   **Import Workflow:** Can import participants from previous requests in `CreateRequest`.
+    *   **Collaborators:** Submissions support multiple artists and link to all profiles.
+    *   **Creator Tools:** Fixed participant listing and implemented CSV Export.
+*   **UI/UX:** Added Sidebar links (Directory, Profile, Archive), Breadcrumbs, and placeholder pages.
 
 ---
 
-## 3. Post-MVP Refinement Plan
-*The MVP is functional, but the following architectural refinements are required to meet the specific "Community App" and "Low Cost" goals.*
+## 4. Remaining Post-MVP Refinement Plan
 
-### A. Identity & Recovery (The "Trusted Admin" Model)
-*   **No Password Resets:** Passwords are mathematical keys.
-*   **Social Recovery:**
-    1.  User creates a *new* account (new key pair).
-    2.  Admin/Host verifies identity manually.
-    3.  **Transfer Tool:** Admin links the Old Public Key nodes to the New Public Key.
-*   **Gatekeeping:**
-    *   **Whitelist/Directory:** `gun.get('all_users')`. Only users in this list can access the dashboard.
-    *   **Invites:** "Magic Link" system (`myapp.com/join?code=...`). Validates against `gun.get('invites')`.
-    *   **Genesis:** `VITE_ADMIN_SECRET` env var allows the first user (Host) to bypass checks and become the first admin.
+### E. Page Implementations (Next Priority)
+*   **Directory Page:** Implement the `all_users` grid view.
+    *   Search/Filter by alias.
+    *   Card view with Avatar and Bio.
+*   **Profile Page:** Implement the user profile view.
+    *   **Header:** Avatar, Bio, Edit Profile (if owner).
+    *   **Tabs:** "Submissions" (Grid of audio cards), "Requests" (List of owned requests).
+*   **Archive Page:** List all past requests (chronological).
 
-### B. Connectivity & Cost Optimization
-*   **The "$5/Year" Strategy:** Aggressive "Scale to Zero" on Cloud Run.
-*   **Smart Idle Disconnect:**
-    *   Frontend tracks activity (mouse/keys).
-    *   If idle > 15 mins AND **Audio is NOT playing**: Close GunDB WebSocket (`gun.opt({ peers: [] })`).
-    *   *Critical:* Audio playback (R2 direct stream) must *never* be interrupted by relay disconnection.
-*   **Cold Start Handling:**
-    *   Google Cloud Scheduler pings relay every 10 mins during active sessions.
-    *   UI: Must show "Connecting to Network..." spinner during wake-up.
-
-### C. Data Model Enhancements
-*   **Directory:** `gun.get('all_users')` acts as the global "Company Directory".
-*   **Profile:** Added `bio`, `avatarUrl`, `email` (for Mailchimp matching), `isAdmin`.
-*   **File Requests (The "Assignments"):**
-    *   **Permissions:** Resource-based (Creator = Owner).
-    *   **Visibility:** `public` (Global Feed) vs `private` (Participants only).
-    *   **Participation ("Distribution Lists"):**
-        *   **Snapshot Model:** Participants are *copied* into the request's specific list at creation.
-        *   **Import Workflow:** "Import from Week 1" -> Filter: "Submitted Only" -> Adds those keys to new request.
-*   **Submissions:**
-    *   **Double-Linking:** Linked to both `Request.submissions` and `UserProfile.submissions`.
-    *   **Collaborations:** `collaborators` map; submission appears on all profiles.
-
-### D. UI/UX Specifications
-*   **The "4-Pane Studio" Layout:**
-    1.  **Global Rail:** Home, Archive, Directory, Profile, Settings.
-    2.  **Context Header:** Breadcrumbs + Action Area.
-    3.  **Main Stage:** Active view.
-    4.  **Global Player (Sticky Footer):** Persists across navigation.
-*   **Global Player Logic:**
-    *   **Smart Queue:** Clicking a song in *any* list (Request or Profile) sets that *entire list* as the queue.
-*   **File Request Component:** Header (Countdown, Roster), Feed (Card-based, Waveforms), Direct Uploads.
-*   **Creator Tools:**
-    *   **Mailchimp Reconciliation:** "Member List" -> CSV Export.
-    *   **Mass Invite:** Generate multi-use codes.
+### F. Polish & Performance
+*   **Optimistic UI:** Ensure immediate feedback for GunDB writes.
+*   **Image Optimization:** Ensure avatars/artwork are sized correctly (maybe use R2 variants if available, or CSS resizing).
+*   **Mobile Responsiveness:** Verify 4-pane layout on mobile (Sidebar likely becomes a drawer/bottom nav).
 
 ---
 
 ## Instructions for Agent
-*   **Context:** You are working on a stable, feature-complete MVP codebase that now requires specific architectural refinements.
-*   **Goal:** Systematically implement the "Post-MVP Refinement Plan" (Section 3).
-*   **Focus:** Prioritize the **Smart Idle Disconnect** and **Invite/Gatekeeping** logic, as these are critical for the "Low Cost" and "Community" goals.
+*   **Context:** You are working on a "Local-First" web app with GunDB.
+*   **Goal:** Complete the UI views for the newly added routes.
+*   **Focus:** Start with **Directory Page** and **Profile Page**. These are critical for the community aspect. Use the `UserProfile` data we just exposed in `GunContext`. The `Profile` page should reuse the `Submission` card logic from `RequestDetail`.

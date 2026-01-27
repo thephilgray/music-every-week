@@ -1,3 +1,13 @@
+export interface UserProfile {
+  pub: string;
+  alias: string;
+  bio?: string;
+  avatarUrl?: string;
+  email?: string;
+  isAdmin?: boolean;
+  submissions?: Record<string, boolean>; // Linked to Submission IDs
+}
+
 export interface FileRequest {
   id?: string;
   title: string;
@@ -7,7 +17,7 @@ export interface FileRequest {
   artworkUrl?: string;
   ownerPub: string;
   createdAt: number;
-  participants?: Record<string, { status: 'pending' | 'accepted' }>;
+  participants?: Record<string, { status: 'pending' | 'accepted', alias?: string, email?: string }>; // Snapshot of participants
   pending_emails?: string[];
 }
 
@@ -19,7 +29,8 @@ export interface Submission {
   lyrics?: string;
   uploaderPub: string;
   createdAt: number;
-  title: string; // The user might want to name their specific submission different from the Request
+  title: string;
+  collaborators?: Record<string, boolean>; // Map of user public keys
 }
 
 export interface Comment {

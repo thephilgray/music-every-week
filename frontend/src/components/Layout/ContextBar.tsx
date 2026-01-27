@@ -1,8 +1,11 @@
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, ChevronRight, Home } from 'lucide-react';
+import { useLocation, Link } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 
 export function ContextBar() {
   const { user, pubKey } = useGun();
+  const location = useLocation();
+  const pathnames = location.pathname.split('/').filter((x) => x);
 
   const handleLogout = () => {
     user.leave();
@@ -12,8 +15,40 @@ export function ContextBar() {
   return (
     <div className="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
-        {/* Dynamic Title / Breadcrumb could go here */}
-        <h2 className="text-gray-100 font-semibold text-lg">Dashboard</h2>
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+            <Link to="/" className="hover:text-white flex items-center gap-1">
+                <Home className="w-4 h-4"/>
+                <span className="sr-only">Home</span>
+            </Link>
+            {pathnames.length === 0 && (
+                <div className="flex items-center gap-2">
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                    <span className="text-white font-medium">Dashboard</span>
+                </div>
+            )}
+            {pathnames.map((name, index) => {
+                const routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
+                const isLast = index === pathnames.length - 1;
+                // Simple capitalization and truncation for IDs
+                let label = name;
+                if (label.length > 24) {
+                    label = label.substring(0, 8) + '...';
+                } else {
+                    label = label.charAt(0).toUpperCase() + label.slice(1);
+                }
+                
+                return (
+                <div key={name} className="flex items-center gap-2">
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                    {isLast ? (
+                        <span className="text-white font-medium">{label}</span>
+                    ) : (
+                        <Link to={routeTo} className="hover:text-white transition-colors">{label}</Link>
+                    )}
+                </div>
+                )
+            })}
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

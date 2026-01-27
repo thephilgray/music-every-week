@@ -2,7 +2,7 @@ import Gun from 'gun/gun';
 import 'gun/sea';
 
 // TODO: Replace with environment variable or actual Cloud Run URL
-const PEERS = [
+export const PEERS = [
   'http://localhost:8080/gun' 
 ];
 

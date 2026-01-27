@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest } from '../types';
@@ -14,6 +14,71 @@ export function CreateRequest() {
   
   const [emailInput, setEmailInput] = useState('');
   const [emails, setEmails] = useState<string[]>([]);
+
+  // Import Logic
+  const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
+  const [selectedImportId, setSelectedImportId] = useState<string>('');
+  const [importedParticipants, setImportedParticipants] = useState<Record<string, { alias?: string, status: 'pending' | 'accepted' }>>({});
+
+  useEffect(() => {
+    // Fetch existing requests for the import dropdown
+    const requests: FileRequest[] = [];
+    gun.get('file_requests').map().once((data: any, id: string) => {
+      if (data && data.title) {
+        requests.push({ ...data, id });
+        // Simple distinct/sort could be added here, but for now just pushing
+        setExistingRequests([...requests]); // Update state (triggers re-render)
+      }
+    });
+  }, [gun]);
+
+  const handleImportSelect = async (requestId: string) => {
+    setSelectedImportId(requestId);
+    setImportedParticipants({}); // Reset
+
+    if (!requestId) return;
+
+    // Fetch submissions for this request to find "Submitted Only" participants
+    // Assuming structure: gun.get('file_requests').get(id).get('submissions').map() -> submissionId
+    // Then get submission -> uploaderPub
+    
+    // NOTE: If the double-linking isn't fully robust yet, we might need to search global submissions.
+    // For now, let's try to follow the double-link path assuming it exists or will exist.
+    // If not, we might need a fallback.
+    
+    // Strategy: Look at 'submissions' table and filter by requestId (inefficient but safe for now if links missing)
+    // Better: Check if file_request has submissions link.
+    
+    const submitters = new Set<string>();
+    const newParticipants: Record<string, { alias?: string, status: 'pending' | 'accepted' }> = {};
+
+    console.log('Importing participants from:', requestId);
+
+    // We will scan global submissions for now to be sure we get them all
+    gun.get('submissions').map().once(async (sub: any) => {
+      if (sub && sub.requestId === requestId && sub.uploaderPub) {
+        if (!submitters.has(sub.uploaderPub)) {
+            submitters.add(sub.uploaderPub);
+            
+            // Try to get alias
+            let alias = 'Unknown';
+            // We can try to fetch from all_users asynchronously
+            gun.get('all_users').get(sub.uploaderPub).once((u: any) => {
+                if (u && u.alias) alias = u.alias;
+                
+                newParticipants[sub.uploaderPub] = {
+                    status: 'accepted', // They are being imported, so maybe 'accepted' or 'pending'? 
+                                        // 'pending' implies they need to accept the NEW assignment.
+                                        // Let's use 'pending' for the new request.
+                    alias: alias
+                };
+                setImportedParticipants({...newParticipants});
+            });
+        }
+      }
+    });
+  };
+
 
   const addEmail = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -42,8 +107,10 @@ export function CreateRequest() {
       }
 
       const requestId = crypto.randomUUID();
-      // GunDB doesn't handle arrays well. We must stringify them or use a set.
-      // For simplicity in this metadata object, we'll stringify.
+      
+      // Merge imported participants
+      const finalParticipants = { ...importedParticipants };
+
       const request: any = {
         id: requestId, 
         title,
@@ -54,7 +121,7 @@ export function CreateRequest() {
         ownerPub: pubKey,
         createdAt: Date.now(),
         pending_emails: JSON.stringify(emails),
-        participants: JSON.stringify({}) 
+        participants: JSON.stringify(finalParticipants) 
       };
 
       console.log('Saving to GunDB...', request);
@@ -73,6 +140,8 @@ export function CreateRequest() {
       setDeadline('');
       setFile(null);
       setEmails([]);
+      setImportedParticipants({});
+      setSelectedImportId('');
     } catch (err) {
       console.error(err);
       alert('Error creating request: ' + (err instanceof Error ? err.message : String(err)));
@@ -142,9 +211,29 @@ export function CreateRequest() {
           />
         </div>
 
+        {/* Import Participants Section */}
+        <div className="border-t border-gray-700 pt-4">
+            <label className="block text-gray-400 text-sm mb-1">Import Participants (from previous week)</label>
+            <select
+                value={selectedImportId}
+                onChange={(e) => handleImportSelect(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none mb-2"
+            >
+                <option value="">-- Select a previous request --</option>
+                {existingRequests.map(req => (
+                    <option key={req.id} value={req.id}>{req.title} ({new Date(req.createdAt).toLocaleDateString()})</option>
+                ))}
+            </select>
+            {Object.keys(importedParticipants).length > 0 && (
+                <div className="text-sm text-green-400 mb-2">
+                    Found {Object.keys(importedParticipants).length} submitters to import.
+                </div>
+            )}
+        </div>
+
         {/* Invite Section */}
         <div className="border-t border-gray-700 pt-4">
-          <label className="block text-gray-400 text-sm mb-1">Invite Participants (Email Staging)</label>
+          <label className="block text-gray-400 text-sm mb-1">Invite New Participants (Email)</label>
           <div className="flex gap-2 mb-2">
             <input 
               type="email" 

@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useGun } from '../contexts/GunContext';
 
 export const Auth: React.FC = () => {
-  const { user } = useGun();
+  const { gun, user } = useGun();
   const [alias, setAlias] = useState('');
   const [pass, setPass] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,16 +14,54 @@ export const Auth: React.FC = () => {
     setError(null);
 
     if (isSignup) {
-      user.create(alias, pass, (ack: any) => {
-        if (ack.err) {
-          setError(ack.err);
-        } else {
+      const adminSecret = import.meta.env.VITE_ADMIN_SECRET;
+
+      const proceedWithSignup = (isAdmin = false) => {
+        user.create(alias, pass, (ack: any) => {
+          if (ack.err) {
+            setError(ack.err);
+            return;
+          }
           // Auto login after signup
           user.auth(alias, pass, (authAck: any) => {
-             if (authAck.err) setError(authAck.err);
+             if (authAck.err) {
+                 setError(authAck.err);
+                 return;
+             }
+             // Add to Directory
+             // @ts-ignore
+             const pub = user.is?.pub;
+             if (pub) {
+                 gun.get('all_users').get(pub).put({
+                     alias,
+                     pub,
+                     joinedAt: Date.now(),
+                     isAdmin
+                 });
+                 
+                 // If invite used, consume it (unless admin/genesis)
+                 if (!isAdmin && inviteCode) {
+                     gun.get('invites').get(inviteCode).put(null); 
+                 }
+             }
           });
-        }
-      });
+        });
+      };
+
+      if (inviteCode && inviteCode === adminSecret) {
+          proceedWithSignup(true);
+      } else if (inviteCode) {
+          gun.get('invites').get(inviteCode).once((data: any) => {
+              if (data) {
+                  proceedWithSignup(false);
+              } else {
+                  setError("Invalid Invite Code");
+              }
+          });
+      } else {
+          setError("Invite Code is required");
+      }
+
     } else {
       user.auth(alias, pass, (ack: any) => {
         if (ack.err) {
@@ -58,6 +97,21 @@ export const Auth: React.FC = () => {
             required
           />
         </div>
+        
+        {isSignup && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Invite Code</label>
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter invite code"
+              required
+            />
+          </div>
+        )}
+
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button
           type="submit"

@@ -6,70 +6,51 @@
 **Goal:** A "Community App" for songwriters that costs ~$5/year to run.
 
 ### 1. The Tech Stack
-*   **Frontend:** React + Vite + Tailwind CSS (Hosted on Vercel/Netlify).
-*   **State/Database:** GunDB (Decentralized Graph DB).
-*   **Auth:** Gun SEA (Key-pair identity).
-*   **Storage (All Media):** Cloudflare R2 (Audio & Images) - Zero Egress Fees.
-*   **Storage (DB Persistence):** Google Cloud Storage (mounted via FUSE).
-*   **Relay Server:** Google Cloud Run (Docker). Configured to Scale to Zero.
-*   **Infrastructure:** Pulumi (TypeScript) on GCP.
+*   **Frontend:** React + Vite + Tailwind CSS.
+*   **State/Database:** GunDB (User-Graph Architecture).
+*   **Storage:** Cloudflare R2 (Authenticated Uploads).
+*   **Relay Server:** Node.js + Gun (with SEA verification).
 
-### 2. Current Status: Post-MVP Refinement (Phases 1-6 + Partial 7)
-We have successfully implemented the core application and started architectural refinements.
-*   **Frontend Scaffold:** Vite + React, GunDB, SEA Auth.
-*   **File Engine:** R2 Integration, Direct Uploads, CRUD Logic.
-*   **UI Core:** "4-Pane Studio" Layout (Sidebar, Context, Stage, Player).
-*   **Identity & Recovery:** Implemented "Trusted Admin" model & Directory.
-    *   **Profile:** `UserProfile` loaded from `all_users` with bio, avatar, etc.
-*   **Connectivity:** "Smart Idle Disconnect" active.
+### 2. Current Status: Polishing & Security
+We have successfully implemented all core features and secured the application logic.
+*   **Core Pages:** Home, Archive, Directory, Profile, Playlists.
+*   **Security:** 
+    *   **Authenticated Uploads:** R2 signed URLs now require Gun SEA signatures (`X-Proof`).
+    *   **Tamper-Proof Data:** Requests, Submissions, and Comments are now stored in **User Graphs** (`user.get('...')`) and linked to the global graph. This ensures only authors can edit their content.
+*   **New Features:**
+    *   **Audio Comments:** Users can record and attach voice notes to comments.
+    *   **Playlists:** Users can create playlists and add tracks from the Request Detail view. "My Playlists" page implemented.
+    *   **Smart Invites:** Public requests auto-accept participants; Private requests send pending invites.
 
-### 3. Recent Accomplishments (Session Jan 26, 2026)
-*   **Data Model:** Enhanced `UserProfile`, `FileRequest` (snapshots), and `Submission` (double-linking).
-*   **Features:** 
-    *   **Import Workflow:** Can import participants from previous requests in `CreateRequest`.
-    *   **Collaborators:** Submissions support multiple artists and link to all profiles.
-    *   **Creator Tools:** Fixed participant listing and implemented CSV Export.
-*   **UI/UX:** Added Sidebar links (Directory, Profile, Archive), Breadcrumbs, and placeholder pages.
+### 3. Recent Accomplishments (Session Jan 26, 2026 - Part 4)
+*   **Logic Refinement:**
+    *   Updated `CreateRequest` and `EditRequest` to handle Public/Private invite statuses automatically.
+*   **Feature Implementation:**
+    *   **Audio Comments:** Implemented `MediaRecorder` in `CommentSection` with R2 upload.
+    *   **Playlists:** Created `AddToPlaylist` modal, `Playlists` page, and updated `RequestDetail`.
+*   **Security Implementation:**
+    *   **Storage:** Implemented `X-Pub`, `X-Proof`, `X-Timestamp` verification in `relay/server.js` and `upload.ts`.
+    *   **Graph Schema:** Refactored `CreateRequest`, `SubmitTrack`, and `CommentSection` to write to User Graph (`user.get(...)`) and link to Global Graph, ensuring data ownership and immutability for others.
 
----
+### 4. Immediate High Priority Tasks (Next Session)
 
-## 4. Remaining Post-MVP Refinement Plan
+### A. Testing & Validation
+1.  **Security Audit:** Verify that a malicious user cannot overwrite the *content* of a request (even if they can overwrite the global link). Test the "User Graph" reference logic.
+2.  **Playlist Polish:**
+    *   Implement "Remove Track" from playlist.
+    *   Add "Play All" button on Request Detail (auto-create ephemeral playlist?).
 
-### E. User Feedback Integration (High Priority)
-*   **Submission Byline:**
-    *   **Goal:** Allow custom artist/project names per submission (e.g., for collaborations or nom de plumes).
-    *   **Implementation:** Add `byline` field to `Submission` schema. UI in `SubmitTrack` (default to profile name). Update Player to display `byline`.
-*   **Advanced Deadlines & Extensions:**
-    *   **Fine-Grain Deadlines:** `FileRequest.deadline` must support specific times (ISO timestamp) in user's timezone.
-    *   **Extensions & Passes:** Host can grant extensions (12h, 24h, 48h) or a "Pass" per participant.
-    *   **Management:** Add dropdown in `Creator Tools > Your Requests` participant rows.
-    *   **Logic:**
-        *   **Extension:** Allow `SubmitTrack` if `now < deadline + extension`.
-        *   **Pass:** Treat user as "participated" during "Import from previous week" workflow.
-*   **Invite Graph:**
-    *   **Goal:** Track the growth network.
-    *   **Implementation:** Store `invitedBy` (pubKey) and `invites` (list of pubKeys) in `UserProfile`.
+### B. UI/UX Polish
+1.  **Audio Player:** The standard `<audio>` element in comments is functional but ugly. Create a custom `MiniPlayer` component (similar to the main Player but smaller).
+2.  **Mobile Experience:** Verify the "Record Audio" workflow on mobile devices (permissions, UI).
 
-### F. Page Implementations
-*   **Directory Page:** Implement the `all_users` grid view.
-    *   Search/Filter by alias.
-    *   Card view with Avatar and Bio.
-*   **Profile Page:** Implement the user profile view.
-    *   **Header:** Avatar, Bio, Edit Profile (if owner).
-    *   **Tabs:** "Submissions" (Grid of audio cards), "Requests" (List of owned requests).
-*   **Archive Page:** List all past requests (chronological).
-
-### G. Polish & Performance
-*   **Optimistic UI:** Ensure immediate feedback for GunDB writes.
-*   **Image Optimization:** Ensure avatars/artwork are sized correctly.
-*   **Mobile Responsiveness:** Verify 4-pane layout on mobile.
-
----
+### C. Deployment Prep
+1.  **Environment Variables:** Audit `.env.example` and ensure all R2/Gun keys are documented.
+2.  **Build Optimization:** Check bundle size (lucide-react imports are good, but check Gun bundle).
 
 ## Instructions for Agent
-*   **Context:** You are working on a "Local-First" web app with GunDB.
-*   **Goal:** Implement the "User Feedback Integration" items and then complete the UI views.
+*   **Context:** The app is feature-complete and secured. We are now in the final "QA & Polish" phase before beta.
 *   **Focus:**
-    1.  **Data Schema Updates:** Add `byline`, `extensions`, and `inviteGraph` fields.
-    2.  **Creator Tools:** Implement the Participant Management row (Extensions/Passes).
-    3.  **Pages:** Build the **Directory** and **Profile** pages using the enhanced data.
+    1.  Verify the new Security Architecture works as expected (Refactoring didn't break reading).
+    2.  Polish the Audio Comment UI.
+    3.  Implement "Remove Track" for playlists.

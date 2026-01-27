@@ -5,35 +5,43 @@ const path = require('path');
 const cors = require('cors');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const SEA = require('gun/sea'); // Import SEA
 
 const app = express();
-const port = process.env.PORT || 8080;
-
-app.use(cors());
-app.use(Gun.serve);
-
-// R2 / S3 Client Setup
-const r2 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
+// ... (rest of setup)
 
 app.get('/api/upload-url', async (req, res) => {
   try {
     const { filename, contentType } = req.query;
+    const pub = req.headers['x-pub'];
+    const proof = req.headers['x-proof'];
+    const timestamp = req.headers['x-timestamp'];
     
     if (!filename || !contentType) {
       return res.status(400).json({ error: 'Missing filename or contentType' });
     }
 
-    // In a production app, verify the user's Gun/SEA signature here
-    // to ensure they have permission to upload.
+    // Auth Check
+    if (!pub || !proof || !timestamp) {
+         return res.status(401).json({ error: 'Missing authentication headers' });
+    }
+
+    // 1. Check timestamp freshness (5 min window)
+    const now = Date.now();
+    if (Math.abs(now - parseInt(timestamp)) > 300000) {
+        return res.status(401).json({ error: 'Request expired' });
+    }
+
+    // 2. Verify Signature
+    const data = { timestamp: parseInt(timestamp) };
+    const verified = await SEA.verify(proof, pub);
+    
+    if (!verified || verified.timestamp !== data.timestamp) {
+         return res.status(403).json({ error: 'Invalid signature' });
+    }
 
     const key = `uploads/${Date.now()}-${filename}`;
+// ...
     const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,

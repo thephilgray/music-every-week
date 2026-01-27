@@ -1,23 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { SubmitTrack } from '../components/SubmitTrack';
 import { CommentSection } from '../components/CommentSection';
+import { AddToPlaylist } from '../components/AddToPlaylist';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EditRequest } from '../components/EditRequest';
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
-  const { gun, pubKey } = useGun();
+  const { gun, pubKey, user } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
+  const [addToPlaylistSubmission, setAddToPlaylistSubmission] = useState<Submission | null>(null);
+  const subscribedSubmissions = useRef(new Set<string>());
+  
+  // Peer Review Logic
+  const [unlockedSubmissionIds, setUnlockedSubmissionIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -51,21 +58,138 @@ export function RequestDetail() {
     gun.get('file_requests').get(id).get('submissions').map().on((data: any, key: string) => {
         if (data) {
             setSubmissions(prev => {
-                const safeData = { ...data, id: key }; // ensure ID is present
+                let parsedWaveform = data.waveform;
+                // Check if waveform is stringified (new format)
+                if (typeof data.waveform === 'string') {
+                    try {
+                        parsedWaveform = JSON.parse(data.waveform);
+                    } catch (e) {
+                        console.error("Failed to parse waveform", e);
+                        parsedWaveform = []; // Fallback
+                    }
+                }
+
+                const safeData = { ...data, id: key, waveform: parsedWaveform }; // ensure ID is present & parsed waveform
                 const exists = prev.find(s => s.id === key);
                 if (exists) {
+                    // Avoid update if identical to prevent re-renders
+                    if (JSON.stringify(exists) === JSON.stringify(safeData)) return prev;
                     return prev.map(s => s.id === key ? safeData : s);
                 }
                 return [...prev, safeData];
             });
+
+            // Count Comments for this submission
+            // Use ref to ensure we only subscribe once per submission ID
+            if (!subscribedSubmissions.current.has(key)) {
+                subscribedSubmissions.current.add(key);
+                
+                const commentsSet = new Set<string>(); // Use Set to avoid dupes
+
+                gun.get('file_requests')
+                .get(id)
+                .get('submissions')
+                .get(key)
+                .get('comments')
+                .map()
+                .on((cData: any, cKey: string) => {
+                    if (cData) { // Just existence check is enough for count
+                        commentsSet.add(cKey);
+                        setCommentCounts(prev => ({ ...prev, [key]: commentsSet.size }));
+                    }
+                });
+            }
         }
     });
     
   }, [id, gun]);
 
+  // Determine user status
+  const isOwner = pubKey && request && request.ownerPub === pubKey;
+  const userSubmission = useMemo(() => submissions.find(s => s.uploaderPub === pubKey), [submissions, pubKey]);
+  const hasSubmitted = !!userSubmission;
+
+  // Deadline Logic
+  const now = Date.now();
+  let deadlineTime = 0;
+  let isPastDeadline = false;
+  let extensionHours = 0;
+
+  if (request && request.deadline) {
+      const deadlineDate = new Date(request.deadline);
+      // If time is not provided in string (old format), default to end of day. 
+      // New format is ISO string, so it has time.
+      if (request.deadline.includes('T')) {
+          deadlineTime = deadlineDate.getTime();
+      } else {
+          deadlineDate.setHours(23, 59, 59, 999);
+          deadlineTime = deadlineDate.getTime();
+      }
+      
+      // Check for extension
+      if (pubKey && request.participants && request.participants[pubKey]) {
+          extensionHours = request.participants[pubKey].extensionHours || 0;
+          deadlineTime += extensionHours * 3600 * 1000;
+      }
+      
+      isPastDeadline = now > deadlineTime;
+  }
+
+  // Unlock Logic: Select 5 random tracks if user has submitted and not yet unlocked
+  useEffect(() => {
+      if (!id || !user || !hasSubmitted || isPastDeadline || isOwner) return;
+
+      // Check if we already have unlocks for this request
+      user.get('unlocked_submissions').get(id).once((data: any) => {
+          let currentIds: string[] = [];
+          if (data) {
+              try {
+                  currentIds = JSON.parse(data);
+              } catch (e) {
+                  // ignore
+              }
+          }
+          
+          if (currentIds.length < 5) {
+              // Try to find more to fill up to 5
+              const needed = 5 - currentIds.length;
+              
+              // Candidates: Not self, and not already unlocked
+              const candidates = submissions
+                  .filter(s => s.uploaderPub !== pubKey && s.id && !currentIds.includes(s.id))
+                  .map(s => s.id!);
+              
+              if (candidates.length > 0) {
+                  // Shuffle candidates
+                  const shuffled = candidates.sort(() => 0.5 - Math.random());
+                  const toAdd = shuffled.slice(0, needed);
+                  
+                  const newList = [...currentIds, ...toAdd];
+                  user.get('unlocked_submissions').get(id).put(JSON.stringify(newList));
+                  setUnlockedSubmissionIds(newList);
+              } else {
+                  // Just set what we have
+                  setUnlockedSubmissionIds(currentIds);
+              }
+          } else {
+              // Already have 5
+              setUnlockedSubmissionIds(currentIds);
+          }
+      });
+  }, [id, user, hasSubmitted, isPastDeadline, isOwner, submissions, pubKey]);
+
+
+  const isLocked = (sub: Submission) => {
+      if (isPastDeadline) return false; // Open after deadline
+      if (isOwner) return false; // Host sees all
+      if (sub.uploaderPub === pubKey) return false; // Own track
+      if (unlockedSubmissionIds.includes(sub.id!)) return false; // Peer review
+      return true; // Locked
+  };
+
   if (!request) {
       return (
-        <div className="max-w-5xl mx-auto pb-20">
+        <div className="max-w-5xl mx-auto pb-20 p-4">
             <div className="mb-6 pt-4">
                 <Skeleton className="h-5 w-32" />
             </div>
@@ -101,17 +225,15 @@ export function RequestDetail() {
       );
   }
 
-  const isOwner = pubKey && request.ownerPub === pubKey;
-
   return (
-    <div className="max-w-5xl mx-auto pb-20">
+    <div className="max-w-5xl mx-auto pb-32 p-4 md:p-8">
       <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
         <ArrowLeft className="w-4 h-4" /> Back to Requests
       </Link>
 
       {/* Header / Banner */}
-      <div className="flex gap-8 mb-10">
-          <div className="w-48 h-48 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700">
+      <div className="flex flex-col md:flex-row gap-8 mb-10">
+          <div className="w-48 h-48 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700 mx-auto md:mx-0">
               {request.artworkUrl ? (
                   <img src={request.artworkUrl} alt="Cover" className="w-full h-full object-cover" />
               ) : (
@@ -119,10 +241,10 @@ export function RequestDetail() {
               )}
           </div>
           
-          <div className="flex-1">
-              <div className="flex items-start justify-between">
+          <div className="flex-1 text-center md:text-left">
+              <div className="flex flex-col md:flex-row items-center md:items-start justify-between">
                 <div className="flex items-center gap-4">
-                    <h1 className="text-4xl font-bold text-white mb-2">{request.title}</h1>
+                    <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">{request.title}</h1>
                     {isOwner && (
                         <button 
                             onClick={() => setIsEditOpen(true)}
@@ -133,7 +255,7 @@ export function RequestDetail() {
                         </button>
                     )}
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border mt-2 md:mt-0 ${
                     request.visibility === 'public' 
                     ? 'bg-green-900/30 border-green-700 text-green-400' 
                     : 'bg-yellow-900/30 border-yellow-700 text-yellow-400'
@@ -144,22 +266,29 @@ export function RequestDetail() {
               
               <p className="text-gray-300 text-lg mb-4">{request.description}</p>
               
-              <div className="flex items-center gap-6 text-sm text-gray-400 mb-6">
+              <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-gray-400 mb-6 justify-center md:justify-start">
                  {request.deadline && (
                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        <span>Due: {new Date(request.deadline).toLocaleDateString()}</span>
+                        <Clock className={`w-4 h-4 ${isPastDeadline ? 'text-red-500' : 'text-gray-400'}`} />
+                        <span className={isPastDeadline ? 'text-red-500' : ''}>
+                            Due: {new Date(request.deadline).toLocaleDateString()} {new Date(request.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {extensionHours > 0 && <span className="text-green-400 ml-2">(+ {extensionHours}h extension)</span>}
+                            {isPastDeadline && <span className="text-red-500 ml-2 font-bold">CLOSED</span>}
+                        </span>
                      </div>
                  )}
                  <div>ID: {id?.substring(0, 8)}...</div>
               </div>
 
               <button 
-                onClick={() => setIsSubmitOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition"
+                onClick={() => {
+                    if (!isPastDeadline) setIsSubmitOpen(true);
+                }}
+                disabled={isPastDeadline}
+                className={`w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed ${isPastDeadline ? 'bg-gray-700 hover:bg-gray-700' : ''}`}
               >
                   <Upload className="w-4 h-4" />
-                  Submit Track
+                  {isPastDeadline ? 'Submission Closed' : 'Submit Track'}
               </button>
           </div>
       </div>
@@ -174,41 +303,66 @@ export function RequestDetail() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-                {submissions.map((sub) => (
-                    <div key={sub.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4 transition group">
+                {submissions.map((sub) => {
+                    const locked = isLocked(sub);
+                    return (
+                    <div key={sub.id} className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group`}>
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0">
-                                {sub.artworkUrl ? (
+                            <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0 relative">
+                                {sub.artworkUrl && !locked ? (
                                     <img src={sub.artworkUrl} className="w-full h-full object-cover rounded" alt="Art" />
                                 ) : (
                                     <FileAudio className="text-gray-600" />
                                 )}
+                                {locked && (
+                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded">
+                                        <Lock className="w-4 h-4 text-gray-400" />
+                                    </div>
+                                )}
                             </div>
                             
                             <div className="flex-1 min-w-0">
-                                <h4 className="text-white font-medium truncate">{sub.title}</h4>
-                                <p className="text-gray-500 text-sm truncate">by {sub.uploaderPub?.substring(0,8)}...</p>
+                                <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
+                                    {locked ? 'Hidden Track' : sub.title}
+                                </h4>
+                                <p className="text-gray-500 text-sm truncate">by {sub.byline || sub.uploaderPub?.substring(0,8)}</p>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
-                                    className={`p-2 rounded-full transition ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'}`}
+                                                        <div className="flex items-center gap-2">
+                                                            <button 
+                                                                onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
+                                                                disabled={locked}
+                                                                className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                            >
+                                                                <MessageSquare className="w-4 h-4" />
+                                                                {commentCounts[sub.id!] > 0 && (
+                                                                    <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
+                                                                )}
+                                                            </button>
+                                                            
+                                                            <button                                      onClick={() => setAddToPlaylistSubmission(sub)}
+                                    disabled={locked}
+                                    className={`p-2 rounded-full transition text-gray-400 hover:text-white ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    title="Add to Playlist"
                                 >
-                                    <MessageSquare className="w-4 h-4" />
+                                    <ListPlus className="w-4 h-4" />
                                 </button>
                                 
                                 <button 
                                     onClick={() => {
+                                        if (locked) return;
                                         if (currentTrack?.id === sub.id && isPlaying) {
                                             pause();
                                         } else {
                                             play(sub, submissions);
                                         }
                                     }}
-                                    className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition ml-2"
+                                    disabled={locked}
+                                    className={`w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition ml-2 ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
-                                    {currentTrack?.id === sub.id && isPlaying ? (
+                                    {locked ? (
+                                        <Lock className="w-3 h-3 text-gray-500" />
+                                    ) : currentTrack?.id === sub.id && isPlaying ? (
                                         <Pause className="w-4 h-4" />
                                     ) : (
                                         <Play className="w-4 h-4 ml-0.5" />
@@ -217,11 +371,11 @@ export function RequestDetail() {
                             </div>
                         </div>
                         
-                        {expandedSubmissionId === sub.id && id && sub.id && (
+                        {expandedSubmissionId === sub.id && id && sub.id && !locked && (
                             <CommentSection requestId={id} submissionId={sub.id} />
                         )}
                     </div>
-                ))}
+                )})}
             </div>
           )}
       </div>
@@ -246,6 +400,13 @@ export function RequestDetail() {
                  // if the listener is robust, but we can trigger a re-fetch if needed.
              }}
           />
+      )}
+
+      {addToPlaylistSubmission && (
+        <AddToPlaylist 
+            submission={addToPlaylistSubmission}
+            onClose={() => setAddToPlaylistSubmission(null)}
+        />
       )}
     </div>
   );

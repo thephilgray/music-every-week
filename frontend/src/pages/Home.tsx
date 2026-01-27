@@ -28,7 +28,7 @@ export function Home() {
         </div>
       )}
 
-      <RequestList />
+      <RequestList filter="active" />
     </div>
   );
 }

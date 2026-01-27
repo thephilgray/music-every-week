@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, Music, UserPlus, Check } from 'lucide-react';
+import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import type { Notification } from '../types';
 
 export function Inbox() {
-  const { user, pubKey } = useGun();
+  const { user, pubKey, gun } = useGun();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,14 +18,21 @@ export function Inbox() {
 
     // Subscribe to inbox
     // We map over the inbox node
-    user.get('inbox').map().on((data: any, key: string) => {
+    gun.get('inboxes').get(pubKey).map().on((data: any, key: string) => {
       // If data is null, it might have been deleted, but usually we just get the node
       if (data && data.type) { 
           const n: Notification = { ...data, id: key };
           notifsMap.set(key, n);
           
-          // Sort by newest first
-          const sorted = Array.from(notifsMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+          // Sort: Priority (Invite > Submission > Comment) then Date (Newest first)
+          const sorted = Array.from(notifsMap.values()).sort((a, b) => {
+              const priority = { invite: 3, submission: 2, comment: 1 };
+              const pA = priority[a.type as keyof typeof priority] || 0;
+              const pB = priority[b.type as keyof typeof priority] || 0;
+              
+              if (pA !== pB) return pB - pA; // Higher priority first
+              return b.createdAt - a.createdAt; // Then newest first
+          });
           setNotifications(sorted);
           setLoading(false);
       }
@@ -38,8 +45,8 @@ export function Inbox() {
   }, [user, pubKey]);
 
   const markAsRead = (n: Notification) => {
-      if (!n.read) {
-          user.get('inbox').get(n.id).get('read').put(true);
+      if (!n.read && pubKey) {
+          gun.get('inboxes').get(pubKey).get(n.id).get('read').put(true);
       }
   };
 
@@ -49,11 +56,33 @@ export function Inbox() {
   };
 
   const markAllRead = () => {
+      if (!pubKey) return;
       notifications.forEach(n => {
           if (!n.read) {
-               user.get('inbox').get(n.id).get('read').put(true);
+               gun.get('inboxes').get(pubKey).get(n.id).get('read').put(true);
           }
       });
+  };
+
+  const handleAccept = async (e: React.MouseEvent, n: Notification) => {
+    e.stopPropagation();
+    if (!n.requestId || !pubKey) return;
+    
+    // Update status to accepted
+    gun.get('file_requests').get(n.requestId).get('participants').get(pubKey).get('status').put('accepted');
+    
+    markAsRead(n);
+    // Optimistic UI update or wait for gun? For Inbox we just mark read.
+  };
+
+  const handleDecline = async (e: React.MouseEvent, n: Notification) => {
+    e.stopPropagation();
+    if (!n.requestId || !pubKey) return;
+    
+    // Remove from participants
+    gun.get('file_requests').get(n.requestId).get('participants').get(pubKey).put(null);
+    
+    markAsRead(n);
   };
 
   const getIcon = (type: string) => {
@@ -127,6 +156,24 @@ export function Inbox() {
                           <p className="text-xs text-gray-600 mt-1">
                               {new Date(n.createdAt).toLocaleDateString()} at {new Date(n.createdAt).toLocaleTimeString()}
                           </p>
+                          
+                          {/* Invite Actions */}
+                          {n.type === 'invite' && !n.read && (
+                              <div className="flex gap-2 mt-3">
+                                  <button 
+                                    onClick={(e) => handleAccept(e, n)}
+                                    className="bg-green-900/50 hover:bg-green-800 text-green-200 text-xs px-3 py-1.5 rounded border border-green-800 flex items-center gap-1 transition-colors"
+                                  >
+                                      <CheckCircle className="w-3 h-3" /> Accept
+                                  </button>
+                                  <button 
+                                    onClick={(e) => handleDecline(e, n)}
+                                    className="bg-red-900/50 hover:bg-red-800 text-red-200 text-xs px-3 py-1.5 rounded border border-red-800 flex items-center gap-1 transition-colors"
+                                  >
+                                      <X className="w-3 h-3" /> Decline
+                                  </button>
+                              </div>
+                          )}
                       </div>
 
                       {!n.read && (

@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import type { FileRequest } from '../types';
 
 interface ParticipantRow {
+    id: string;
     name: string;
     contact: string;
     status: string;
     type: 'user' | 'email';
+    extensionHours?: number;
+    hasPass?: boolean;
 }
 
 export function CreatorTools() {
@@ -21,15 +24,21 @@ export function CreatorTools() {
     if (!user) return;
     
     const reqMap = new Map<string, FileRequest>();
+    // Listen to my_requests
     user.get('my_requests').map().on((data: any, key: string) => {
         if (data && data.title) { 
-            // Parse fields if they are strings (GunDB quirk)
+            // Parse fields if they are strings (GunDB quirk or legacy data)
             let parsedParticipants = {};
             let parsedEmails: string[] = [];
             
             if (typeof data.participants === 'string') {
                 try { parsedParticipants = JSON.parse(data.participants); } catch (e) {}
             } else if (data.participants) {
+                // If it's an object (graph node), we need to load it?
+                // Gun.map() usually loads one level. If participants is a node, data.participants might be a reference.
+                // However, for this list view, we might not need deep data yet.
+                // But for the selected view we do.
+                // Let's store what we have.
                 parsedParticipants = data.participants;
             }
 
@@ -50,30 +59,41 @@ export function CreatorTools() {
     });
   }, [user]);
 
+  // Deep load participants when request selected
   useEffect(() => {
       if (!selectedRequest) {
           setParticipants([]);
           return;
       }
 
+      // If participants is a reference (link), we might need to load it explicitly if not already loaded by map()
+      // But typically we can just iterate the keys if we have the node.
+      
       const rows: ParticipantRow[] = [];
+      const participantsData = selectedRequest.participants || {};
 
       // Process existing participants (Users)
-      if (selectedRequest.participants) {
-          Object.entries(selectedRequest.participants).forEach(([pub, data]: [string, any]) => {
+      Object.entries(participantsData).forEach(([pub, data]: [string, any]) => {
+          // If data is just a reference (string starting with #), we can't read it directly here without loading.
+          // But assuming `map()` or local cache has it, or it was put as an object.
+          if (typeof data === 'object' && data !== null) {
               rows.push({
+                  id: pub,
                   name: data.alias || 'Unknown User',
                   contact: data.email || pub,
                   status: data.status || 'pending',
-                  type: 'user'
+                  type: 'user',
+                  extensionHours: data.extensionHours || 0,
+                  hasPass: data.hasPass || false
               });
-          });
-      }
+          }
+      });
 
       // Process pending emails
       if (selectedRequest.pending_emails) {
           selectedRequest.pending_emails.forEach((email: string) => {
               rows.push({
+                  id: email,
                   name: 'Invited Guest',
                   contact: email,
                   status: 'invited',
@@ -95,14 +115,50 @@ export function CreatorTools() {
       });
       setInviteCode(code);
   };
+
+  const grantExtension = (pub: string, hours: number) => {
+      if (!selectedRequest || !selectedRequest.id) return;
+      
+      // Update global request node
+      // We target the participants node directly.
+      // Note: This only works if participants is a node (object), not a string.
+      // If it's a string (legacy), we can't easily update.
+      if (typeof selectedRequest.participants === 'string') {
+          alert("This request uses an old data format. Cannot grant extensions.");
+          return;
+      }
+
+      gun.get('file_requests').get(selectedRequest.id).get('participants').get(pub).get('extensionHours').put(hours);
+      
+      // Update local state optimistically
+      setParticipants(prev => prev.map(p => 
+          p.id === pub ? { ...p, extensionHours: hours } : p
+      ));
+  };
+
+  const grantPass = (pub: string) => {
+      if (!selectedRequest || !selectedRequest.id) return;
+      if (typeof selectedRequest.participants === 'string') {
+          alert("This request uses an old data format. Cannot grant pass.");
+          return;
+      }
+
+      const newPassStatus = !participants.find(p => p.id === pub)?.hasPass;
+      
+      gun.get('file_requests').get(selectedRequest.id).get('participants').get(pub).get('hasPass').put(newPassStatus);
+
+      setParticipants(prev => prev.map(p => 
+        p.id === pub ? { ...p, hasPass: newPassStatus } : p
+      ));
+  };
   
   const exportCSV = () => {
       if (!selectedRequest || participants.length === 0) return;
 
-      const headers = ['Name', 'Contact', 'Status', 'Type'];
+      const headers = ['Name', 'Contact', 'Status', 'Type', 'Extension (Hours)', 'Has Pass'];
       const csvContent = [
           headers.join(','),
-          ...participants.map(p => `"${p.name}","${p.contact}","${p.status}","${p.type}"`)
+          ...participants.map(p => `"${p.name}","${p.contact}","${p.status}","${p.type}","${p.extensionHours || 0}","${p.hasPass ? 'Yes' : 'No'}"`)
       ].join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -186,6 +242,8 @@ export function CreatorTools() {
                                     <th className="px-6 py-4">Participant</th>
                                     <th className="px-6 py-4">Contact</th>
                                     <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Extensions</th>
+                                    <th className="px-6 py-4">Pass</th>
                                     <th className="px-6 py-4">Type</th>
                                 </tr>
                             </thead>
@@ -206,6 +264,35 @@ export function CreatorTools() {
                                                 {p.status}
                                             </span>
                                         </td>
+                                        <td className="px-6 py-4">
+                                            {p.type === 'user' && (
+                                                <div className="flex items-center gap-1">
+                                                    <select 
+                                                        value={p.extensionHours || 0}
+                                                        onChange={(e) => grantExtension(p.id, Number(e.target.value))}
+                                                        className="bg-gray-800 text-white text-xs border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
+                                                    >
+                                                        <option value={0}>None</option>
+                                                        <option value={12}>+12h</option>
+                                                        <option value={24}>+24h</option>
+                                                        <option value={48}>+48h</option>
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {p.type === 'user' && (
+                                                <button 
+                                                    onClick={() => grantPass(p.id)}
+                                                    className={`p-1 rounded transition ${p.hasPass 
+                                                        ? 'bg-green-900/30 text-green-400 border border-green-900' 
+                                                        : 'text-gray-600 hover:text-gray-400'}`}
+                                                    title="Grant Pass (Mark as participated)"
+                                                >
+                                                    <SkipForward className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 text-gray-500">
                                             {p.type === 'email' ? <Mail className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                                         </td>
@@ -213,7 +300,7 @@ export function CreatorTools() {
                                 ))}
                                 {participants.length === 0 && (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                                             <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
                                             No participants found.
                                         </td>

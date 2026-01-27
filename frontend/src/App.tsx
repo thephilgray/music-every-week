@@ -8,6 +8,8 @@ import { RequestDetail } from './pages/RequestDetail';
 import { CreatorTools } from './pages/CreatorTools';
 import { Directory } from './pages/Directory';
 import { Profile } from './pages/Profile';
+import { Archive } from './pages/Archive';
+import { Playlists } from './pages/Playlists';
 import { IdleMonitor } from './components/IdleMonitor';
 
 function App() {
@@ -53,9 +55,10 @@ function App() {
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/creator" element={<CreatorTools />} />
           <Route path="/directory" element={<Directory />} />
+          <Route path="/playlists" element={<Playlists />} />
           <Route path="/profile" element={<Profile />} />
-          {/* Temporary placeholders */}
-          <Route path="/archive" element={<div className="text-white p-8">Archive Coming Soon</div>} />
+          <Route path="/profile/:pub" element={<Profile />} />
+          <Route path="/archive" element={<Archive />} />
           <Route path="/settings" element={<div className="text-white p-8">Settings Coming Soon</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

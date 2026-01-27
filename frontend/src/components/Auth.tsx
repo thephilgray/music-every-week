@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGun } from '../contexts/GunContext';
 
-export const Auth: React.FC = () => {
+export function Auth() {
   const { gun, user } = useGun();
   const [alias, setAlias] = useState('');
   const [pass, setPass] = useState('');
@@ -14,9 +14,10 @@ export const Auth: React.FC = () => {
     setError(null);
 
     if (isSignup) {
-      const adminSecret = import.meta.env.VITE_ADMIN_SECRET;
+      // @ts-ignore
+      const adminSecret = import.meta.env.VITE_ADMIN_SECRET || 'secret';
 
-      const proceedWithSignup = (isAdmin = false) => {
+      const proceedWithSignup = (isAdmin = false, inviterPub?: string) => {
         user.create(alias, pass, (ack: any) => {
           if (ack.err) {
             setError(ack.err);
@@ -36,8 +37,14 @@ export const Auth: React.FC = () => {
                      alias,
                      pub,
                      joinedAt: Date.now(),
-                     isAdmin
+                     isAdmin,
+                     invitedBy: inviterPub
                  });
+
+                 // Update Inviter's Invite Graph
+                 if (inviterPub) {
+                     gun.get('all_users').get(inviterPub).get('invites').get(pub).put(true);
+                 }
                  
                  // If invite used, consume it (unless admin/genesis)
                  if (!isAdmin && inviteCode) {
@@ -52,10 +59,10 @@ export const Auth: React.FC = () => {
           proceedWithSignup(true);
       } else if (inviteCode) {
           gun.get('invites').get(inviteCode).once((data: any) => {
-              if (data) {
-                  proceedWithSignup(false);
+              if (data && data.status === 'active') {
+                  proceedWithSignup(false, data.createdBy);
               } else {
-                  setError("Invalid Invite Code");
+                  setError("Invalid or Expired Invite Code");
               }
           });
       } else {
@@ -72,62 +79,70 @@ export const Auth: React.FC = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-gray-800 rounded-lg shadow-xl">
+    <div className="max-w-md mx-auto mt-10 p-6 bg-gray-800 rounded-lg shadow-xl border border-gray-700">
       <h2 className="text-2xl font-bold mb-6 text-center text-white">
         {isSignup ? 'Create Account' : 'Login'}
       </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-300">Username (Alias)</label>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Username (Alias)</label>
           <input
             type="text"
             value={alias}
             onChange={(e) => setAlias(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-300">Password</label>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
           <input
             type="password"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
         </div>
         
         {isSignup && (
           <div>
-            <label className="block text-sm font-medium text-gray-300">Invite Code</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Invite Code</label>
             <input
               type="text"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter invite code"
               required
             />
           </div>
         )}
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && (
+            <div className="bg-red-900/50 border border-red-800 text-red-200 p-3 rounded text-sm text-center">
+                {error}
+            </div>
+        )}
+
         <button
           type="submit"
-          className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition"
+          className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition shadow-lg shadow-blue-900/20"
         >
           {isSignup ? 'Sign Up' : 'Log In'}
         </button>
       </form>
-      <div className="mt-4 text-center">
+      <div className="mt-6 text-center pt-4 border-t border-gray-700">
         <button
-          onClick={() => setIsSignup(!isSignup)}
-          className="text-sm text-blue-400 hover:text-blue-300"
+          onClick={() => {
+              setIsSignup(!isSignup);
+              setError(null);
+          }}
+          className="text-sm text-gray-400 hover:text-white transition"
         >
           {isSignup ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
         </button>
       </div>
     </div>
   );
-};
+}

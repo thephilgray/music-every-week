@@ -20,7 +20,7 @@ export function CreateRequest() {
   // Import & Search Logic
   const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
   const [selectedImportId, setSelectedImportId] = useState<string>('');
-  const [importFilter, setImportFilter] = useState<'all' | 'accepted'>('all'); // New Filter
+  const [importFilter, setImportFilter] = useState<'all' | 'accepted' | 'submitted'>('all'); // New Filter
   const [selectedParticipants, setSelectedParticipants] = useState<Record<string, { alias?: string, status: 'pending' | 'accepted' }>>({});
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,25 +107,41 @@ export function CreateRequest() {
                 parts = reqData.participants;
             }
 
-            const newParticipants: Record<string, { alias?: string, status: 'pending' | 'accepted' }> = {};
-            
-            Object.entries(parts).forEach(([pub, data]: [string, any]) => {
-                if (pub === pubKey) return; // Skip self
+            // First fetch submissions to determine who actually participated
+            const submitters = new Set<string>();
+            if (importFilter === 'submitted') {
+                 gun.get('file_requests').get(requestId).get('submissions').map().once((sub: any) => {
+                     if (sub && sub.uploaderPub) submitters.add(sub.uploaderPub);
+                 });
+            }
 
-                // Filter Logic
-                // If filter is 'accepted', we only want those who accepted (status === 'accepted') 
-                // OR those who actually submitted (which implies acceptance usually, but let's check submissions too)
-                if (importFilter === 'accepted' && data.status !== 'accepted') {
-                     return;
-                }
-                
-                newParticipants[pub] = {
-                    status: 'pending', // Reset to pending for the NEW request
-                    alias: data.alias
-                };
-            });
+            // Small delay to ensure submissions are gathered if filtering by submitted
+            // A more robust way would be to promisify the submission fetch, but for Gun sync this is tricky.
+            // However, iterating over the participants list and checking 'hasPass' is instant.
             
-            setSelectedParticipants(prev => ({...prev, ...newParticipants}));
+            setTimeout(() => {
+                const newParticipants: Record<string, { alias?: string, status: 'pending' | 'accepted' }> = {};
+                
+                Object.entries(parts).forEach(([pub, data]: [string, any]) => {
+                    if (pub === pubKey) return; // Skip self
+
+                    // Filter Logic
+                    if (importFilter === 'accepted' && data.status !== 'accepted') return;
+                    
+                    if (importFilter === 'submitted') {
+                        const hasPass = data.hasPass === true;
+                        const hasSubmitted = submitters.has(pub);
+                        if (!hasPass && !hasSubmitted) return;
+                    }
+                    
+                    newParticipants[pub] = {
+                        status: 'pending', // Reset to pending for the NEW request
+                        alias: data.alias
+                    };
+                });
+                
+                setSelectedParticipants(prev => ({...prev, ...newParticipants}));
+            }, importFilter === 'submitted' ? 200 : 0);
         } else {
             // Fallback to scanning submissions if participants list is empty/old format
              const newParticipants: Record<string, { alias?: string, status: 'pending' | 'accepted' }> = {};
@@ -410,6 +426,7 @@ export function CreateRequest() {
                     >
                         <option value="all">All Invited</option>
                         <option value="accepted">Accepted Only</option>
+                        <option value="submitted">Submitted / Pass</option>
                     </select>
                 </div>
             </div>

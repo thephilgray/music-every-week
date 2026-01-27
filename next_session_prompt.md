@@ -21,10 +21,12 @@ We have successfully implemented all core features and secured the application l
     *   **Audio Comments:** Users can record and attach voice notes to comments.
     *   **Playlists:** Users can create playlists and add tracks from the Request Detail view. "My Playlists" page implemented.
     *   **Smart Invites:** Public requests auto-accept participants; Private requests send pending invites.
+    *   **Smart Filter:** Added "Submitted / Pass Only" filter when importing participants from previous requests.
 
 ### 3. Recent Accomplishments (Session Jan 26, 2026 - Part 4)
 *   **Logic Refinement:**
     *   Updated `CreateRequest` and `EditRequest` to handle Public/Private invite statuses automatically.
+    *   Added "Submitted / Pass" filter to `CreateRequest` import logic.
 *   **Feature Implementation:**
     *   **Audio Comments:** Implemented `MediaRecorder` in `CommentSection` with R2 upload.
     *   **Playlists:** Created `AddToPlaylist` modal, `Playlists` page, and updated `RequestDetail`.
@@ -40,9 +42,15 @@ We have successfully implemented all core features and secured the application l
     *   Implement "Remove Track" from playlist.
     *   Add "Play All" button on Request Detail (auto-create ephemeral playlist?).
 
-### B. UI/UX Polish
-1.  **Audio Player:** The standard `<audio>` element in comments is functional but ugly. Create a custom `MiniPlayer` component (similar to the main Player but smaller).
-2.  **Mobile Experience:** Verify the "Record Audio" workflow on mobile devices (permissions, UI).
+### B. UI/UX Polish (User Feedback)
+1.  **Visibility Messaging:** Update "Public" visibility warning in `CreateRequest` to clarify it should only be used for "long running sessions users have signed up for".
+2.  **Layout Fixes:** Increase bottom padding/margin on lists (Submissions, Playlists) as the fixed Player is blocking content.
+3.  **Player Features:**
+    *   **Notes/Lyrics:** Add a way to view track notes/lyrics from the Player and Submission list.
+    *   **Context Navigation:** Add a "Go to Context" link in the Player to navigate back to where the track started (Request, Profile, or Playlist).
+4.  **Audio Player:** 
+    *   **Autoplay Fix:** Debug `usePlayer` to ensure it correctly autoplays to the next track in the queue/context.
+    *   **Custom MiniPlayer:** The standard `<audio>` element in comments is functional but ugly. Create a custom `MiniPlayer` component.
 
 ### C. Deployment Prep
 1.  **Environment Variables:** Audit `.env.example` and ensure all R2/Gun keys are documented.
@@ -51,6 +59,6 @@ We have successfully implemented all core features and secured the application l
 ## Instructions for Agent
 *   **Context:** The app is feature-complete and secured. We are now in the final "QA & Polish" phase before beta.
 *   **Focus:**
-    1.  Verify the new Security Architecture works as expected (Refactoring didn't break reading).
-    2.  Polish the Audio Comment UI.
-    3.  Implement "Remove Track" for playlists.
+    1.  Address User Feedback (Layout, Player Autoplay, Notes/Lyrics, Visibility Messaging).
+    2.  Verify the new Security Architecture works as expected.
+    3.  Polish the Audio Comment UI.

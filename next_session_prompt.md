@@ -3,6 +3,7 @@
 ## Project Overview
 **Role:** Senior Full-Stack Architect specializing in "Local-First" web applications.
 **Project:** Rebuilding "Music Every Week" (MEW) into a serverless, peer-to-peer file-sharing system called MEW2.
+**Goal:** A "Community App" for songwriters that costs ~$5/year to run.
 
 ### 1. The Tech Stack
 *   **Frontend:** React + Vite + Tailwind CSS (Hosted on Vercel/Netlify).
@@ -13,80 +14,70 @@
 *   **Relay Server:** Google Cloud Run (Docker). Configured to Scale to Zero.
 *   **Infrastructure:** Pulumi (TypeScript) on GCP.
 
-### 2. UX/UI Structure
-*   **Layout:** "4-Pane Studio" (Sidebar Nav, Top Context Bar, Main Stage, Sticky Bottom Player).
-*   **Dashboard:**
-    *   *Home:* Feed of Public "File Requests" (Active Assignments).
-    *   *Inbox:* Notifications (Comments, Direct Invites, Mentions).
-    *   *Creator Tools:* "Manage Participants" table with CSV export, Email Staging for new users, and Smart Import.
-
-### 3. Data Schema & Logic
-*   **User Profile:** `gun.get('all_users').get(pub_key)`
-    *   Fields: `displayName`, `email` (Required), `bio`, `avatarUrl`, `isAdmin`.
-*   **File Request (The Playlist Container):**
-    *   *Permissions:* Any user can create a File Request.
-    *   *Fields:* `title`, `description`, `deadline`, `visibility` ('public'/'private'), `artworkUrl` (R2).
-    *   *participants:* Map of `{ pub_key: { status: 'pending'|'accepted' } }`.
-    *   *pending_emails:* Array of emails invited but not yet registered (Staging area).
-*   **Submission (The Track):**
-    *   Fields: `audioUrl`, `artworkUrl`, `lyrics`, `uploadedBy`.
-    *   *comments:* Linked list of comment nodes.
-    *   *Logic:* A File Request acts as a Playlist of these submissions.
-*   **Inbox (Notifications):**
-    *   `gun.user(target_pub).get('inbox')`
-    *   Senders write "Invite" or "Comment Alert" nodes here. Recipient marks `read: true`.
-
-### 4. Key Features
-*   **Democratized Creation:** Any user can create a File Request, upload Artwork/Description, and invite others.
-*   **Deep Link Onboarding (The "Magic Link"):**
-    *   Hosts can generate a link: `mew2.app/request/:id?invite=:code`.
-    *   *Logic:* If a user is logged out/new, this code acts as their "Signup Invite."
-*   **Auto-Join:** Upon signup, the app automatically adds the new user to the specific File Request embedded in the link.
-*   **User-Generated Invites:** Any verified user can generate an Invite Code to onboard a friend.
-*   **Threaded Commenting:** Support for "Slack-style" single-level nesting.
-*   **In-App Notifications:** Real-time "Bell Icon" alerts.
-*   **Smart Participant Import:** Creators can import users from any past request they were part of to quickly spin up a new session.
-*   **Smart Queue:** Global Player loads the File Request context (the Playlist) and auto-advances through submissions.
-*   **Smart Idle Disconnect:** Keeps connection alive if audio is playing.
-
-### 5. Implementation Phases
-*   **Phase 1: Infrastructure (Pulumi).** Deploy GCS, Cloud Run Relay, Scheduler. **[COMPLETED]**
-*   **Phase 2: The Core.** React setup, GunDB provider, SEA Auth, Deep Link/Invite Logic. **[COMPLETED]**
-*   **Phase 3: The "File Request" Engine.** R2 Uploads, Visibility, Email Staging. **[COMPLETED]**
-*   **Phase 4: The UI & Interactions.** Dashboard Layout, Submissions, Comments System, Global Player. **[COMPLETED]**
-*   **Phase 5: Social Features & Creator Tools.** Inbox Notifications, Participant Management, CSV Export. **[COMPLETED]**
-*   **Phase 6: Deployment & Polish.** Production Build, Hosting Setup, UI Refinement, E2E Testing. **[COMPLETED]**
+### 2. Current Status: MVP Complete (Phases 1-6)
+We have successfully built the core application.
+*   **Frontend Scaffold:** Vite + React, GunDB, SEA Auth.
+*   **File Engine:** R2 Integration, Direct Uploads, CRUD Logic.
+*   **UI Core:** Dashboard Layout, Global Player, Submissions, Comments.
+*   **Social:** Notifications, Inbox, Basic Creator Tools.
+*   **Infrastructure:** Cloud Run Relay, GCS Persistence, Scheduler.
+*   **Recent Fixes:** R2 public domain support, GunDB `put()` vs `set()` persistence fixes, Edit/Delete Request features.
 
 ---
 
-## Current Status
-We have successfully implemented **ALL Phases** (1 through 6).
+## 3. Post-MVP Refinement Plan
+*The MVP is functional, but the following architectural refinements are required to meet the specific "Community App" and "Low Cost" goals.*
 
-### Accomplished
-1.  **Frontend Scaffold & Core**: Vite + React, GunDB, SEA Auth.
-2.  **File Request Engine**: R2 Integration, Frontend Upload, CRUD Logic.
-3.  **UI & Interactions**: Dashboard Layout, Global Player, Submissions, Comments.
-4.  **Social Features**: Notifications, Inbox, Creator Tools.
-5.  **Deployment & Polish (Phase 6)**:
-    -   **Deployment**: Added `vercel.json` for SPA routing. Verified build settings.
-    -   **UI Polish**: Added `Skeleton` loading states for Requests, Details, and Inbox. Improved empty states.
-    -   **Relay Hardening**: Optimized Docker build with `.dockerignore`.
-    -   **Verification**: Frontend `npm run build` passes successfully.
+### A. Identity & Recovery (The "Trusted Admin" Model)
+*   **No Password Resets:** Passwords are mathematical keys.
+*   **Social Recovery:**
+    1.  User creates a *new* account (new key pair).
+    2.  Admin/Host verifies identity manually.
+    3.  **Transfer Tool:** Admin links the Old Public Key nodes to the New Public Key.
+*   **Gatekeeping:**
+    *   **Whitelist/Directory:** `gun.get('all_users')`. Only users in this list can access the dashboard.
+    *   **Invites:** "Magic Link" system (`myapp.com/join?code=...`). Validates against `gun.get('invites')`.
+    *   **Genesis:** `VITE_ADMIN_SECRET` env var allows the first user (Host) to bypass checks and become the first admin.
 
-### Recent Fixes & Additions (Post-Phase 6)
-1.  **Uploads**: Fixed R2 public domain configuration. Added `VITE_R2_PUBLIC_DOMAIN` support in `upload.ts`.
-2.  **Data Persistence**: Fixed "missing request" issue by switching from `gun.set()` to explicit `gun.get(uuid).put()`. Added JSON stringification for complex fields (`pending_emails`, `participants`) to prevent GunDB errors.
-3.  **Feature**: Added **Edit & Delete Request** functionality for request owners.
+### B. Connectivity & Cost Optimization
+*   **The "$5/Year" Strategy:** Aggressive "Scale to Zero" on Cloud Run.
+*   **Smart Idle Disconnect:**
+    *   Frontend tracks activity (mouse/keys).
+    *   If idle > 15 mins AND **Audio is NOT playing**: Close GunDB WebSocket (`gun.opt({ peers: [] })`).
+    *   *Critical:* Audio playback (R2 direct stream) must *never* be interrupted by relay disconnection.
+*   **Cold Start Handling:**
+    *   Google Cloud Scheduler pings relay every 10 mins during active sessions.
+    *   UI: Must show "Connecting to Network..." spinner during wake-up.
 
-## Next Session Goal: Launch & Maintenance
-The project is feature-complete, stable, and ready for deployment.
+### C. Data Model Enhancements
+*   **Directory:** `gun.get('all_users')` acts as the global "Company Directory".
+*   **Profile:** Added `bio`, `avatarUrl`, `email` (for Mailchimp matching), `isAdmin`.
+*   **File Requests (The "Assignments"):**
+    *   **Permissions:** Resource-based (Creator = Owner).
+    *   **Visibility:** `public` (Global Feed) vs `private` (Participants only).
+    *   **Participation ("Distribution Lists"):**
+        *   **Snapshot Model:** Participants are *copied* into the request's specific list at creation.
+        *   **Import Workflow:** "Import from Week 1" -> Filter: "Submitted Only" -> Adds those keys to new request.
+*   **Submissions:**
+    *   **Double-Linking:** Linked to both `Request.submissions` and `UserProfile.submissions`.
+    *   **Collaborations:** `collaborators` map; submission appears on all profiles.
 
-### Tasks
-1.  **Deploy**: Push to Vercel/Netlify (Frontend) and Cloud Run (Relay).
-2.  **Monitor**: Watch for any GunDB sync issues in production.
-3.  **Iterate**: Gather user feedback on the "File Request" workflow.
+### D. UI/UX Specifications
+*   **The "4-Pane Studio" Layout:**
+    1.  **Global Rail:** Home, Archive, Directory, Profile, Settings.
+    2.  **Context Header:** Breadcrumbs + Action Area.
+    3.  **Main Stage:** Active view.
+    4.  **Global Player (Sticky Footer):** Persists across navigation.
+*   **Global Player Logic:**
+    *   **Smart Queue:** Clicking a song in *any* list (Request or Profile) sets that *entire list* as the queue.
+*   **File Request Component:** Header (Countdown, Roster), Feed (Card-based, Waveforms), Direct Uploads.
+*   **Creator Tools:**
+    *   **Mailchimp Reconciliation:** "Member List" -> CSV Export.
+    *   **Mass Invite:** Generate multi-use codes.
+
+---
 
 ## Instructions for Agent
--   You are acting as the **Senior Full-Stack Architect**.
--   The codebase is in a stable, production-ready state.
--   Future sessions will focus on maintenance, bug fixes, or new features based on user feedback.
+*   **Context:** You are working on a stable, feature-complete MVP codebase that now requires specific architectural refinements.
+*   **Goal:** Systematically implement the "Post-MVP Refinement Plan" (Section 3).
+*   **Focus:** Prioritize the **Smart Idle Disconnect** and **Invite/Gatekeeping** logic, as these are critical for the "Low Cost" and "Community" goals.

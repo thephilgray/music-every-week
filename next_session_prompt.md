@@ -35,7 +35,22 @@ We have successfully implemented the core application and started architectural 
 
 ## 4. Remaining Post-MVP Refinement Plan
 
-### E. Page Implementations (Next Priority)
+### E. User Feedback Integration (High Priority)
+*   **Submission Byline:**
+    *   **Goal:** Allow custom artist/project names per submission (e.g., for collaborations or nom de plumes).
+    *   **Implementation:** Add `byline` field to `Submission` schema. UI in `SubmitTrack` (default to profile name). Update Player to display `byline`.
+*   **Advanced Deadlines & Extensions:**
+    *   **Fine-Grain Deadlines:** `FileRequest.deadline` must support specific times (ISO timestamp) in user's timezone.
+    *   **Extensions & Passes:** Host can grant extensions (12h, 24h, 48h) or a "Pass" per participant.
+    *   **Management:** Add dropdown in `Creator Tools > Your Requests` participant rows.
+    *   **Logic:**
+        *   **Extension:** Allow `SubmitTrack` if `now < deadline + extension`.
+        *   **Pass:** Treat user as "participated" during "Import from previous week" workflow.
+*   **Invite Graph:**
+    *   **Goal:** Track the growth network.
+    *   **Implementation:** Store `invitedBy` (pubKey) and `invites` (list of pubKeys) in `UserProfile`.
+
+### F. Page Implementations
 *   **Directory Page:** Implement the `all_users` grid view.
     *   Search/Filter by alias.
     *   Card view with Avatar and Bio.
@@ -44,14 +59,17 @@ We have successfully implemented the core application and started architectural 
     *   **Tabs:** "Submissions" (Grid of audio cards), "Requests" (List of owned requests).
 *   **Archive Page:** List all past requests (chronological).
 
-### F. Polish & Performance
+### G. Polish & Performance
 *   **Optimistic UI:** Ensure immediate feedback for GunDB writes.
-*   **Image Optimization:** Ensure avatars/artwork are sized correctly (maybe use R2 variants if available, or CSS resizing).
-*   **Mobile Responsiveness:** Verify 4-pane layout on mobile (Sidebar likely becomes a drawer/bottom nav).
+*   **Image Optimization:** Ensure avatars/artwork are sized correctly.
+*   **Mobile Responsiveness:** Verify 4-pane layout on mobile.
 
 ---
 
 ## Instructions for Agent
 *   **Context:** You are working on a "Local-First" web app with GunDB.
-*   **Goal:** Complete the UI views for the newly added routes.
-*   **Focus:** Start with **Directory Page** and **Profile Page**. These are critical for the community aspect. Use the `UserProfile` data we just exposed in `GunContext`. The `Profile` page should reuse the `Submission` card logic from `RequestDetail`.
+*   **Goal:** Implement the "User Feedback Integration" items and then complete the UI views.
+*   **Focus:**
+    1.  **Data Schema Updates:** Add `byline`, `extensions`, and `inviteGraph` fields.
+    2.  **Creator Tools:** Implement the Participant Management row (Extensions/Passes).
+    3.  **Pages:** Build the **Directory** and **Profile** pages using the enhanced data.

@@ -10,9 +10,25 @@ export function Inbox() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Privacy & Contacts
+  const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
+  const [contacts, setContacts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user || !pubKey) return;
+
+    // 1. Load Privacy Settings
+    user.get('settings').get('privacy').get('acceptUnsolicited').on((data: any) => {
+        setAcceptUnsolicited(data === false ? false : true);
+    });
+
+    // 2. Load Contacts
+    user.get('contacts').map().on((data: any, pub: string) => {
+        if (data) {
+            setContacts(prev => new Set(prev).add(pub));
+        }
+    });
 
     const notifsMap = new Map<string, Notification>();
 
@@ -42,7 +58,16 @@ export function Inbox() {
     const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
 
-  }, [user, pubKey]);
+  }, [user, pubKey, gun]); // Added gun to dependency
+
+  // Filter Notifications based on Privacy
+  const filteredNotifications = notifications.filter(n => {
+      if (n.type === 'invite' && !acceptUnsolicited) {
+          // Only show if sender is a contact
+          return contacts.has(n.fromPub);
+      }
+      return true;
+  });
 
   const markAsRead = (n: Notification) => {
       if (!n.read && pubKey) {
@@ -57,7 +82,7 @@ export function Inbox() {
 
   const markAllRead = () => {
       if (!pubKey) return;
-      notifications.forEach(n => {
+      filteredNotifications.forEach(n => {
           if (!n.read) {
                gun.get('inboxes').get(pubKey).get(n.id).get('read').put(true);
           }
@@ -71,6 +96,11 @@ export function Inbox() {
     // Update status to accepted
     gun.get('file_requests').get(n.requestId).get('participants').get(pubKey).get('status').put('accepted');
     
+    // Add sender to contacts (Implicit connection)
+    if (n.fromPub) {
+        user.get('contacts').get(n.fromPub).put(true);
+    }
+
     markAsRead(n);
     // Optimistic UI update or wait for gun? For Inbox we just mark read.
   };
@@ -109,7 +139,7 @@ export function Inbox() {
               <Bell className="w-6 h-6" />
               Inbox
           </h1>
-          {notifications.some(n => !n.read) && (
+          {filteredNotifications.some(n => !n.read) && (
               <button 
                 onClick={markAllRead}
                 className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
@@ -120,20 +150,20 @@ export function Inbox() {
           )}
       </div>
 
-      {loading && notifications.length === 0 ? (
+      {loading && filteredNotifications.length === 0 ? (
           <div className="space-y-4">
               {[1, 2, 3].map(i => (
                   <Skeleton key={i} className="h-20 w-full rounded-xl" />
               ))}
           </div>
-      ) : notifications.length === 0 ? (
+      ) : filteredNotifications.length === 0 ? (
           <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
               <Bell className="w-12 h-12 text-gray-700 mx-auto mb-4" />
               <p className="text-gray-500">No notifications yet.</p>
           </div>
       ) : (
           <div className="space-y-2">
-              {notifications.map(n => (
+              {filteredNotifications.map(n => (
                   <div 
                     key={n.id}
                     onClick={() => handleNotificationClick(n)}

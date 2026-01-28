@@ -194,6 +194,19 @@ export function RequestDetail() {
       return true; // Locked
   };
 
+  const handlePlayAll = () => {
+      if (!request) return;
+      const visibleSubmissions = submissions.filter(s => !isLocked(s));
+      if (visibleSubmissions.length > 0) {
+          play(visibleSubmissions[0], visibleSubmissions, {
+              type: 'request',
+              id: request.id!,
+              name: request.title,
+              link: `/request/${request.id}`
+          });
+      }
+  };
+
   if (!request) {
       return (
         <div className="max-w-5xl mx-auto pb-20 p-4">
@@ -311,7 +324,17 @@ export function RequestDetail() {
 
       {/* Submissions List */}
       <div className="border-t border-gray-800 pt-8">
-          <h3 className="text-xl font-bold text-gray-200 mb-4">Submissions ({submissions.length})</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-200">Submissions ({submissions.length})</h3>
+            {submissions.some(s => !isLocked(s)) && (
+                <button 
+                    onClick={handlePlayAll}
+                    className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600"
+                >
+                    <Play className="w-3 h-3 fill-current" /> Play All
+                </button>
+            )}
+          </div>
           
           {submissions.length === 0 ? (
             <div className="bg-gray-900/50 rounded-lg p-10 text-center border border-gray-800 border-dashed">

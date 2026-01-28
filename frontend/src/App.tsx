@@ -10,6 +10,7 @@ import { Directory } from './pages/Directory';
 import { Profile } from './pages/Profile';
 import { Archive } from './pages/Archive';
 import { Playlists } from './pages/Playlists';
+import { Settings } from './pages/Settings';
 import { IdleMonitor } from './components/IdleMonitor';
 
 function App() {
@@ -59,7 +60,7 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/:pub" element={<Profile />} />
           <Route path="/archive" element={<Archive />} />
-          <Route path="/settings" element={<div className="text-white p-8">Settings Coming Soon</div>} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

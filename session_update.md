@@ -1,29 +1,25 @@
-# Session Update: Critical User Feedback & UI Polish
+# Session Update: Settings, Invites, and Playlist Polish
 
 ## Completed Tasks
 
-### 1. Layout Padding & Fixed Player Overlap
-- **Refactored `Player` component:** Removed `fixed` positioning. It now sits as a standard flex item at the bottom of the layout flow.
-- **Updated `AppLayout`:** Removed excessive `pb-32` padding from the main content area, as the player no longer overlays content.
-- **Updated `RequestDetail`:** Removed hardcoded bottom padding.
-- **Result:** The player now resides in its own dedicated space at the bottom of the viewport, preventing it from ever obscuring the "Submissions" list or other content.
+### 1. Settings Page Implementation
+- **New Page:** Created `/settings` with three core sections.
+- **Profile:** Users can now edit their Alias, Bio, and Avatar (persisted to GunDB).
+- **Privacy:** Added "Accept Unsolicited Requests" toggle. Updated `Inbox` to filter invites based on this setting (only showing invites if enabled or if sender is a contact).
+- **Data:** Added "Clear Local Data" utility for troubleshooting local-first state issues.
 
-### 2. Edit Request "User" Bug
-- **Fixed GunDB Data Structure:** `EditRequest` now explicitly `JSON.stringify`s the `participants` object before saving.
-- **Why:** This prevents GunDB from converting the object into a graph node reference (which caused the "User" alias display issue on reload) and ensures it remains a consistent JSON string as expected by the parser.
+### 2. Invite System Overhaul
+- **Auto-Join Logic:** Updated `Auth.tsx` to detect `requestId` and `email` from URL/Signup. If a matching pending invite is found, the new user is automatically added to the Request's participants list.
+- **Email Invites in Edit:** Added the ability to invite emails in `EditRequest` (previously only available during creation).
+- **Inbox Logic:** Implemented "Contacts" logic where accepting an invite adds the sender to a local contacts list (used for privacy filtering).
 
-### 3. Profile Linking
-- **Comments:** The author's name in `CommentItem` is now a clickable link to their `/profile/:pub`.
-- **Submissions:** The "by [Name]" line in `RequestDetail` submissions list is now clickable, linking to the uploader's profile.
+### 3. Playlist Polish
+- **Playlist Management:** Added a "View/Edit" modal to `Playlists.tsx`. Users can now view the full tracklist and remove individual tracks from a playlist.
+- **Play All:** Added a "Play All" button to the `RequestDetail` submissions list. It filters out locked tracks and queues all visible submissions for playback.
 
-### 4. Audio Submissions
-- **New Feature:** Added a "Record Audio" tab to the `SubmitTrack` modal.
-- **Implementation:** Integrated `MediaRecorder` logic (similar to audio comments) allowing users to record, preview, and submit voice notes/demos directly from the browser without uploading a file.
-
-## Verification
-- **Build:** `npm run build` passed successfully.
-- **Type Safety:** Verified imports and types for new recording features.
+### 4. Code Quality & Fixes
+- **Build Verification:** Fixed TypeScript errors in `RequestDetail` (null checks) and `Settings` (unused imports). `npm run build` passes.
 
 ## Next Steps (Ready for Next Session)
-- **B. Invite System Overhaul:** Implement Email Invites Flow and Deep Linking logic.
-- **C. Testing:** Security audit and Playlist polish.
+- **Security Audit:** Verify ACLs and prevent content overwrite by malicious peers.
+- **Deployment Prep:** Finalize environment variables and optimize build size.

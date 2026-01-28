@@ -24,10 +24,29 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
   // Participant Management Logic
   const [selectedParticipants, setSelectedParticipants] = useState<Record<string, any>>(request.participants || {});
+  
+  // Email Invites State
+  const [emailInput, setEmailInput] = useState('');
+  const [pendingEmails, setPendingEmails] = useState<string[]>([]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
 
   useEffect(() => {
+      // Parse pending emails
+      if (request.pending_emails) {
+          try {
+              const emails = typeof request.pending_emails === 'string' 
+                  ? JSON.parse(request.pending_emails) 
+                  : request.pending_emails;
+              if (Array.isArray(emails)) {
+                  setPendingEmails(emails);
+              }
+          } catch (e) {
+              console.error("Failed to parse pending emails", e);
+          }
+      }
+
       // Fetch aliases for existing participants if missing
       Object.keys(selectedParticipants).forEach(pub => {
           if (!selectedParticipants[pub].alias) {
@@ -77,11 +96,21 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   };
 
   const removeParticipant = (pub: string) => {
-     // Optional: If we want to allow removing participants. 
-     // For now, let's allow it as it updates the state before saving.
      const newParts = { ...selectedParticipants };
      delete newParts[pub];
      setSelectedParticipants(newParts);
+  };
+
+  const addEmail = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (emailInput && !pendingEmails.includes(emailInput)) {
+      setPendingEmails([...pendingEmails, emailInput]);
+      setEmailInput('');
+    }
+  };
+
+  const removeEmail = (email: string) => {
+    setPendingEmails(pendingEmails.filter(e => e !== email));
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -113,7 +142,8 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         deadline,
         visibility,
         artworkUrl,
-        participants: JSON.stringify(finalParticipants) as any
+        participants: JSON.stringify(finalParticipants) as any,
+        pending_emails: JSON.stringify(pendingEmails) as any
       };
 
       await gun.get('file_requests').get(request.id).put(updates);
@@ -260,14 +290,40 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                  )}
                </div>
 
+               {/* 3. Email Invites */}
+               <div className="mb-3">
+                 <label className="block text-gray-500 text-xs mb-1">Invite by Email</label>
+                 <div className="flex gap-2 mb-2">
+                   <input 
+                     type="email" 
+                     value={emailInput}
+                     onChange={e => setEmailInput(e.target.value)}
+                     className="flex-1 bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                     placeholder="friend@example.com"
+                   />
+                   <button 
+                     onClick={addEmail}
+                     className="bg-gray-700 hover:bg-gray-600 px-4 rounded text-white text-sm font-semibold"
+                   >
+                     Add
+                   </button>
+                 </div>
+               </div>
+
                {/* Selected List */}
-               {Object.keys(selectedParticipants).length > 0 && (
+               {(Object.keys(selectedParticipants).length > 0 || pendingEmails.length > 0) && (
                   <div className="flex flex-wrap gap-2">
                      {Object.entries(selectedParticipants).map(([pub, p]: [string, any]) => (
                         <span key={pub} className="bg-indigo-900/50 text-indigo-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-indigo-500/30">
                           <span title={pub}>{p.alias || 'User'}</span>
                           <button type="button" onClick={() => removeParticipant(pub)} className="hover:text-white font-bold px-1">×</button>
                         </span>
+                     ))}
+                     {pendingEmails.map(email => (
+                       <span key={email} className="bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-blue-500/30">
+                         {email}
+                         <button type="button" onClick={() => removeEmail(email)} className="hover:text-white font-bold px-1">×</button>
+                       </span>
                      ))}
                   </div>
                )}

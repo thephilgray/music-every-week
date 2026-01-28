@@ -1,13 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
 
 export function Auth() {
   const { gun, user } = useGun();
   const [alias, setAlias] = useState('');
+  const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Parse URL for invite code and request ID
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('inviteCode');
+    if (code) {
+        setInviteCode(code);
+        setIsSignup(true);
+    }
+  }, []);
+
+  const checkPendingInvites = (pub: string, userEmail: string) => {
+      // Check if we are landing on a request page
+      const match = window.location.pathname.match(/\/request\/([^/]+)/);
+      if (match && match[1]) {
+          const requestId = match[1];
+          gun.get('file_requests').get(requestId).once((req: any) => {
+              if (req && req.pending_emails) {
+                  let pending: string[] = [];
+                  try {
+                      pending = JSON.parse(req.pending_emails);
+                  } catch (e) {}
+
+                  if (pending.includes(userEmail)) {
+                      console.log("Auto-joining request:", requestId);
+                      // Add to participants with accepted status
+                      // We write to the Request's participants node (assuming open write or owner will process)
+                      // Actually, if participants is a node, we can write our own entry.
+                      gun.get('file_requests').get(requestId).get('participants').get(pub).put({
+                          alias,
+                          status: 'accepted',
+                          email: userEmail,
+                          joinedAt: Date.now()
+                      });
+                  }
+              }
+          });
+      }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +76,7 @@ export function Auth() {
                  gun.get('all_users').get(pub).put({
                      alias,
                      pub,
+                     email, // Save email to profile
                      joinedAt: Date.now(),
                      isAdmin,
                      invitedBy: inviterPub
@@ -50,6 +91,9 @@ export function Auth() {
                  if (!isAdmin && inviteCode) {
                      gun.get('invites').get(inviteCode).put(null); 
                  }
+
+                 // Check for Auto-Join
+                 if (email) checkPendingInvites(pub, email);
              }
           });
         });
@@ -94,6 +138,21 @@ export function Auth() {
             required
           />
         </div>
+        
+        {isSignup && (
+            <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Email (for invites)</label>
+                <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="you@example.com"
+                    required
+                />
+            </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
           <input

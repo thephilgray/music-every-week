@@ -25,7 +25,11 @@
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
-### A. Deployment & QA
+### A. Critical Bug Fixes (New Priority)
+1.  **Login Flash:** Fix the flash of login screen on refresh. The Auth loading state needs to handle the session recall more gracefully before rendering the unauthenticated view.
+2.  **Profile Submissions:** Fix submissions not appearing on the User Profile page. Investigate the `~User/submissions` index and the graph traversal logic in `Profile.tsx`.
+
+### B. Deployment & QA
 1.  **Deploy Relay:** Deploy the relay server to the target environment (e.g. Railway/Fly.io) and verify `radata` persistence volume.
 2.  **Deploy Frontend:** Deploy to Vercel/Netlify.
 3.  **End-to-End Test:**
@@ -35,13 +39,9 @@
     *   Invitee uploads track.
     *   Verify playback and data persistence after refresh.
 
-### B. Mobile Polish & UI Tweaks
+### C. Mobile Polish & UI Tweaks
 1.  **Responsiveness:** Check `RequestDetail` and `CreatorTools` on mobile width.
 2.  **Navigation:** Ensure Admin/Seed tools are accessible (or hidden) appropriately on small screens.
-
-### C. Bug Hunting
-1.  **Monitor Logs:** Watch for GunDB sync errors or SEA verification failures during QA.
-2.  **Fix:** Address any issues found.
 
 ## Instructions for Agent
 *   **Focus:** Deployment support and Mobile Polish.

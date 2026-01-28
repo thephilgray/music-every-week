@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { User as UserIcon } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { MiniPlayer } from './ui/MiniPlayer';
@@ -35,7 +36,9 @@ export function CommentItem({ comment }: CommentItemProps) {
          <div>
              <div className="flex items-baseline gap-2">
                 <span className="text-xs font-bold text-gray-300">
-                    {authorAlias || <span className="font-mono text-blue-400">{comment.authorPub.substring(0, 8)}</span>}
+                    <Link to={`/profile/${comment.authorPub}`} className="hover:text-white hover:underline">
+                        {authorAlias || <span className="font-mono text-blue-400">{comment.authorPub.substring(0, 8)}</span>}
+                    </Link>
                 </span>
                 <span className="text-xs text-gray-600">{new Date(comment.createdAt).toLocaleTimeString()}</span>
              </div>

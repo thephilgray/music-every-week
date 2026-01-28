@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Search } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Search, Mic, Square, Trash2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
+import { MiniPlayer } from './ui/MiniPlayer';
 import type { Notification, UserProfile } from '../types';
 
 interface SubmitTrackProps {
@@ -23,6 +24,14 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
   const [error, setError] = useState<string | null>(null);
   
   const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [knownAliases, setKnownAliases] = useState<Record<string, string>>({}); // Store aliases for UI display
+  
+  // Audio Recording
+  const [audioType, setAudioType] = useState<'upload' | 'record'>('upload');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedPreview, setRecordedPreview] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   
   // Collaborator Search Logic
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,16 +73,74 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
     });
   };
 
-  const toggleCollaborator = (pub: string) => {
+  const toggleCollaborator = (userOrPub: string | UserProfile) => {
+    let pub = '';
+    let alias = '';
+
+    if (typeof userOrPub === 'string') {
+        pub = userOrPub;
+    } else {
+        pub = userOrPub.pub;
+        alias = userOrPub.alias;
+    }
+
     if (collaborators.includes(pub)) {
       setCollaborators(collaborators.filter(p => p !== pub));
     } else {
       setCollaborators([...collaborators, pub]);
+      if (alias) {
+          setKnownAliases(prev => ({ ...prev, [pub]: alias }));
+      }
     }
     // Clear search
     setSearchTerm('');
     setSearchResults([]);
     setIsSearching(false);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const file = new File([audioBlob], 'recorded-track.webm', { type: 'audio/webm' });
+        setAudioFile(file);
+        
+        const url = URL.createObjectURL(audioBlob);
+        setRecordedPreview(url);
+        
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      alert('Could not access microphone.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+    }
+  };
+
+  const cancelRecording = () => {
+      setAudioFile(null);
+      setRecordedPreview(null);
+      setIsRecording(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -245,26 +312,94 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                 />
             </div>
 
-            {/* Audio Upload */}
+            {/* Audio Section */}
             <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Audio File (MP3/WAV)</label>
-                <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                    audioFile ? 'border-green-600 bg-green-900/10' : 'border-gray-700 hover:border-gray-600'
-                }`}>
-                    <input 
-                        type="file" 
-                        accept="audio/*"
-                        onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
-                        className="hidden"
-                        id="audio-upload"
-                    />
-                    <label htmlFor="audio-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                        <Music className={`w-8 h-8 ${audioFile ? 'text-green-500' : 'text-gray-500'}`} />
-                        <span className="text-sm text-gray-300">
-                            {audioFile ? audioFile.name : 'Click to select audio file'}
-                        </span>
-                    </label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Audio Source</label>
+                <div className="flex gap-4 mb-3 border-b border-gray-800 pb-2">
+                    <button
+                        type="button"
+                        onClick={() => { setAudioType('upload'); setAudioFile(null); }}
+                        className={`text-sm pb-1 ${audioType === 'upload' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}`}
+                    >
+                        Upload File
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setAudioType('record'); setAudioFile(null); }}
+                        className={`text-sm pb-1 ${audioType === 'record' ? 'text-white border-b-2 border-blue-500' : 'text-gray-400'}`}
+                    >
+                        Record Audio
+                    </button>
                 </div>
+
+                {audioType === 'upload' ? (
+                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                        audioFile ? 'border-green-600 bg-green-900/10' : 'border-gray-700 hover:border-gray-600'
+                    }`}>
+                        <input 
+                            type="file" 
+                            accept="audio/*"
+                            onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
+                            className="hidden"
+                            id="audio-upload"
+                        />
+                        <label htmlFor="audio-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                            <Music className={`w-8 h-8 ${audioFile ? 'text-green-500' : 'text-gray-500'}`} />
+                            <span className="text-sm text-gray-300">
+                                {audioFile ? audioFile.name : 'Click to select audio file'}
+                            </span>
+                        </label>
+                    </div>
+                ) : (
+                    <div className="border border-gray-700 rounded-lg p-4 bg-gray-900/50">
+                        {(!audioFile && !isRecording) && (
+                            <div className="text-center py-4">
+                                <button
+                                    type="button"
+                                    onClick={startRecording}
+                                    className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center mx-auto mb-2 transition"
+                                >
+                                    <Mic className="w-8 h-8 text-white" />
+                                </button>
+                                <p className="text-sm text-gray-400">Click to start recording</p>
+                            </div>
+                        )}
+
+                        {isRecording && (
+                            <div className="text-center py-4">
+                                <div className="animate-pulse text-red-500 font-bold mb-4 flex items-center justify-center gap-2">
+                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                    Recording...
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={stopRecording}
+                                    className="w-16 h-16 rounded-full bg-gray-800 border-2 border-red-500 flex items-center justify-center mx-auto mb-2 hover:bg-gray-700 transition"
+                                >
+                                    <Square className="w-6 h-6 text-red-500 fill-current" />
+                                </button>
+                                <p className="text-sm text-gray-400">Click to stop</p>
+                            </div>
+                        )}
+
+                        {audioFile && !isRecording && (
+                            <div className="flex flex-col gap-3">
+                                <div className="bg-gray-800 p-2 rounded border border-gray-700">
+                                    <MiniPlayer src={recordedPreview!} />
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={cancelRecording}
+                                        className="text-red-400 hover:text-red-300 text-sm flex items-center gap-1"
+                                    >
+                                        <Trash2 className="w-4 h-4" /> Discard & Record Again
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Artwork Upload */}
@@ -318,7 +453,7 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                              {searchResults.map(user => (
                                <div 
                                  key={user.pub}
-                                 onClick={() => toggleCollaborator(user.pub)}
+                                 onClick={() => toggleCollaborator(user)}
                                  className="p-2 hover:bg-gray-700 cursor-pointer text-white text-sm flex justify-between items-center"
                                >
                                  <span>{user.alias}</span>
@@ -339,9 +474,9 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                              <button
                                 key={pub}
                                 type="button"
-                                onClick={() => toggleCollaborator(pub)}
+                                onClick={() => toggleCollaborator({ pub, alias: data.alias || '' } as any)} 
                                 className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                                    isSelected 
+                                    isSelected  
                                     ? 'bg-blue-600 border-blue-500 text-white' 
                                     : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
                                 }`}
@@ -362,9 +497,7 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                                 onClick={() => toggleCollaborator(pub)}
                                 className="px-3 py-1 rounded-full text-xs font-medium border bg-blue-600 border-blue-500 text-white"
                              >
-                                 {/* We might not have alias easily available here unless we fetched it, 
-                                     but for now let's show pub or try to find it in searchResults if still there */}
-                                 {searchResults.find(u => u.pub === pub)?.alias || pub.substring(0, 6)}
+                                 {knownAliases[pub] || searchResults.find(u => u.pub === pub)?.alias || pub.substring(0, 6)}
                              </button>
                         );
                     })}

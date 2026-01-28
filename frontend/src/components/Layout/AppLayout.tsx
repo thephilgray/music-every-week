@@ -31,7 +31,7 @@ export function AppLayout() {
         <ContextBar onToggleSidebar={() => setSidebarOpen(true)} />
         
         {/* Scrollable Stage */}
-        <main className="flex-1 overflow-y-auto bg-black p-4 md:p-8 pb-32 relative w-full">
+        <main className="flex-1 overflow-y-auto bg-black p-4 md:p-8 relative w-full">
           <Outlet />
         </main>
         

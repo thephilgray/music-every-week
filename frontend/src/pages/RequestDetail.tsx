@@ -233,7 +233,7 @@ export function RequestDetail() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto pb-32 p-4 md:p-8">
+    <div className="max-w-5xl mx-auto p-4 md:p-8">
       <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
         <ArrowLeft className="w-4 h-4" /> Back to Requests
       </Link>
@@ -341,7 +341,11 @@ export function RequestDetail() {
                                 <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
                                     {locked ? 'Hidden Track' : sub.title}
                                 </h4>
-                                <p className="text-gray-500 text-sm truncate">by {sub.byline || sub.uploaderPub?.substring(0,8)}</p>
+                                <div className="text-gray-500 text-sm truncate">
+                                    by <Link to={`/profile/${sub.uploaderPub}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
+                                        {sub.byline || sub.uploaderPub?.substring(0,8)}
+                                    </Link>
+                                </div>
                             </div>
 
                                                         <div className="flex items-center gap-2">

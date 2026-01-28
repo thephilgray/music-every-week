@@ -11,46 +11,35 @@
 *   **Storage:** Cloudflare R2 (Authenticated Uploads).
 *   **Relay Server:** Node.js + Gun (with SEA verification).
 
-### 2. Current Status: Polishing & Security
-We have successfully implemented all core features and secured the application logic.
-*   **Core Pages:** Home, Archive, Directory, Profile, Playlists.
-*   **Security:** 
-    *   **Authenticated Uploads:** R2 signed URLs now require Gun SEA signatures (`X-Proof`).
-    *   **Tamper-Proof Data:** Requests, Submissions, and Comments are now stored in **User Graphs** (`user.get('...')`) and linked to the global graph. This ensures only authors can edit their content.
-*   **New Features:**
-    *   **Audio Comments:** Users can record and attach voice notes to comments.
-    *   **Playlists:** Users can create playlists and add tracks from the Request Detail view. "My Playlists" page implemented.
-    *   **Smart Invites:** Public requests auto-accept participants; Private requests send pending invites.
-    *   **Smart Filter:** Added "Submitted / Pass Only" filter when importing participants from previous requests.
+### 2. Current Status: QA & Polish
+We have successfully implemented core features, secured the application, and addressed critical UI/UX feedback.
+*   **Core Pages:** Home, Archive, Directory, Profile, Playlists, Request Detail.
+*   **Features:** Authenticated Uploads, Audio Comments, Audio Submissions (Upload + Record), Smart Invites, Playlists.
 
-### 3. Recent Accomplishments (Session Jan 27, 2026 - UI/UX Polish)
-*   **Player Experience:**
-    *   **Autoplay Fixed:** Resolved issue where player wouldn't advance to next track (state closure bug).
-    *   **Context Awareness:** Player now shows "Playing from: Request/Playlist" with a link.
-    *   **Notes/Lyrics:** Added "Notes" button to Player to view track lyrics/description.
-    *   **MiniPlayer:** Created custom `MiniPlayer` component for audio comments, replacing native `<audio>`.
-*   **UI Improvements:**
-    *   **Layout:** Fixed overlap issue where bottom content was hidden behind the fixed Player.
-    *   **Messaging:** Updated public visibility warning in `CreateRequest`.
-    *   **Sharing:** Added "Copy Link" button to `RequestDetail`.
-    *   **Edit Request:** Attempted fix for participant alias display (still persistent).
+### 3. Recent Accomplishments (Session Jan 27, 2026 - Critical Fixes & Features)
+*   **Critical Bugs & Layout:**
+    *   **Player Layout:** Resolved overlap issues by refactoring Player from `fixed` to flexbox layout.
+    *   **Relay Server:** Fixed startup crash (undefined `port`).
+    *   **Edit Request:** Fixed "User" alias bug by stringifying participants data in GunDB.
+    *   **Collaborators:** Fixed issue where adding a collaborator showed "ID" instead of "Alias".
+*   **Feature Enhancements:**
+    *   **Audio Recording:** Added "Record Audio" tab to `SubmitTrack` for direct browser recording.
+    *   **Profile Linking:** Made names clickable in Comments and Submissions to navigate to user profiles.
+    *   **Player Controls:** Implemented functional Volume slider and Mute button.
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
-### A. Critical User Feedback (Bugs & UX)
-1.  **Layout Padding:** The fixed player overlap issue persists on the **Submissions** list (likely `RequestDetail` page) and potentially others. Needs a more robust global solution or specific page fixes.
-2.  **Edit Request "User" Bug:** The "Manage Participants" list in `EditRequest` still shows "User" instead of the alias, even after saving and reopening.
-3.  **Profile Linking:**
-    *   **Comments:** Link the author's name to their Profile.
-    *   **Submissions:** Make the byline clickable to toggle/show submitter and collaborator profile links.
-4.  **Audio Submissions:** Add "Record Audio" feature to `SubmitTrack` (similar to Audio Comments) for phone/browser-direct submissions.
-5.  **Settings Page:** Currently empty. Implement basic settings (Profile Edit, "Accept Unsolicited Requests" toggle).
+### A. Settings & User Polish
+1.  **Settings Page:** Currently empty. Implement:
+    *   **Profile Edit:** Change Alias, Bio, Avatar.
+    *   **Privacy:** Toggle "Accept Unsolicited Requests" (if false, only show invites from known peers).
+    *   **Data Management:** "Clear Local Data" (troubleshooting).
 
 ### B. Invite System Overhaul (Logic Clarification)
 1.  **Email Invites Flow:** 
-    *   **Creation:** When adding an email to a request (Create/Edit), it creates a "placeholder" slot.
-    *   **Claiming:** When a user signs up with that email + an Invite Code (from the deep link), they should automatically inherit the invite/placeholder.
-    *   **Deep Link:** The "Copy Link" URL should include an `?inviteCode=` param (or use the Request ID) that auto-populates the code field on the Signup page.
+    *   **Creation:** When adding an email to a request (Create/Edit), create a "placeholder" slot.
+    *   **Claiming:** When a user signs up with that email + Invite Code, auto-inherit the invite.
+    *   **Deep Link:** The "Copy Link" URL should include `?inviteCode=` or `?reqId=` to auto-populate signup.
 2.  **Post-Creation Invites:** Add ability to invite emails in `EditRequest` (currently only in Create).
 
 ### C. Testing & Validation
@@ -64,8 +53,8 @@ We have successfully implemented all core features and secured the application l
 2.  **Build Optimization:** Check bundle size (lucide-react imports are good, but check Gun bundle).
 
 ## Instructions for Agent
-*   **Context:** The app is feature-complete and secured. We are now in the final "QA & Polish" phase before beta.
+*   **Context:** The app is feature-complete. We are cleaning up the last few logic flows (Invites) and UI screens (Settings) before Beta.
 *   **Focus:**
-    1.  Address **Critical User Feedback** (Layout, Edit Bug, Audio Submissions, Profile Links).
-    2.  Implement the **Email Invite Claim System** and Deep Linking.
-    3.  Build out the **Settings Page**.
+    1.  Implement the **Settings Page** (easy win).
+    2.  Tackle the **Invite System Overhaul** (complex logic).
+    3.  Finalize **Playlist** features.

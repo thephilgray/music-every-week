@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, SkipBack, SkipForward, Volume2, Pause, Music, FileText, X, ExternalLink } from 'lucide-react';
+import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, X, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePlayer } from '../../contexts/PlayerContext';
 
@@ -30,12 +30,12 @@ const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number
 };
 
 export function Player() {
-  const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, context } = usePlayer();
+  const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, context, volume, muted, setVolume, toggleMute } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(false);
 
   if (!currentTrack) {
      return (
-        <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-center text-gray-500 text-sm z-50 fixed bottom-0 w-full">
+        <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-center text-gray-500 text-sm w-full flex-none">
             Select a track to start playing
         </div>
       );
@@ -70,7 +70,7 @@ export function Player() {
         </div>
       )}
 
-      <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-between z-50 fixed bottom-0 w-full">
+      <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-between w-full flex-none">
       {/* Track Info */}
       <div className="w-1/3 flex items-center gap-4">
         <div className="w-14 h-14 bg-gray-800 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
@@ -151,8 +151,21 @@ export function Player() {
 
       {/* Volume / Extras */}
       <div className="w-1/3 flex justify-end items-center gap-4">
-          <Volume2 className="text-gray-400 w-5 h-5" />
-          <div className="w-24 h-1 bg-gray-800 rounded-full hidden md:block"></div>
+          <button onClick={toggleMute} className="text-gray-400 hover:text-white">
+              {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+          </button>
+          <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={muted ? 0 : volume}
+              onChange={(e) => {
+                  setVolume(parseFloat(e.target.value));
+                  if (muted && parseFloat(e.target.value) > 0) toggleMute(); // Unmute if dragging slider
+              }}
+              className="w-24 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full hidden md:block"
+          />
       </div>
     </div>
     </>

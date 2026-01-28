@@ -113,7 +113,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         deadline,
         visibility,
         artworkUrl,
-        participants: finalParticipants
+        participants: JSON.stringify(finalParticipants) as any
       };
 
       await gun.get('file_requests').get(request.id).put(updates);

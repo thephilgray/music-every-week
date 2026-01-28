@@ -14,6 +14,10 @@ interface PlayerContextType {
   seek: (time: number) => void;
   currentTime: number;
   duration: number;
+  volume: number;
+  muted: boolean;
+  setVolume: (vol: number) => void;
+  toggleMute: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -25,6 +29,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [context, setContext] = useState<PlayerContextType['context']>();
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<Submission[]>(queue);
@@ -37,6 +43,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // Initialize Audio Element
   useEffect(() => {
     audioRef.current = new Audio();
+    audioRef.current.volume = volume;
+    audioRef.current.muted = muted;
     
     const audio = audioRef.current;
 
@@ -100,6 +108,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isPlaying, currentTrack]);
 
+  // Handle Volume/Mute changes
+  useEffect(() => {
+      if (audioRef.current) {
+          audioRef.current.volume = volume;
+          audioRef.current.muted = muted;
+      }
+  }, [volume, muted]);
+
   const play = (track: Submission, newQueue?: Submission[], newContext?: PlayerContextType['context']) => {
     if (newQueue) {
         setQueue(newQueue);
@@ -113,6 +129,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const pause = () => setIsPlaying(false);
   const resume = () => setIsPlaying(true);
+  const toggleMute = () => setMuted(prev => !prev);
 
   const next = () => {
       if (!currentTrack || queue.length === 0) return;
@@ -156,7 +173,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         prev,
         seek,
         currentTime,
-        duration
+        duration,
+        volume,
+        muted,
+        setVolume,
+        toggleMute
     }}>
       {children}
     </PlayerContext.Provider>

@@ -57,8 +57,9 @@ app.get('/api/upload-url', async (req, res) => {
   }
 });
 
-const server = app.listen(port, () => {
-  console.log(`MEW2 Relay listening on port ${port}`);
+const PORT = process.env.PORT || 8765;
+const server = app.listen(PORT, () => {
+  console.log(`MEW2 Relay listening on port ${PORT}`);
 });
 
 // Configure Gun

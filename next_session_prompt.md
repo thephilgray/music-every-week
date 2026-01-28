@@ -33,30 +33,39 @@ We have successfully implemented all core features and secured the application l
     *   **Layout:** Fixed overlap issue where bottom content was hidden behind the fixed Player.
     *   **Messaging:** Updated public visibility warning in `CreateRequest`.
     *   **Sharing:** Added "Copy Link" button to `RequestDetail`.
-    *   **Edit Request:** Fixed issue where participants showed as "User" instead of their Alias.
+    *   **Edit Request:** Attempted fix for participant alias display (still persistent).
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
-### A. Testing & Validation
+### A. Critical User Feedback (Bugs & UX)
+1.  **Layout Padding:** The fixed player overlap issue persists on the **Submissions** list (likely `RequestDetail` page) and potentially others. Needs a more robust global solution or specific page fixes.
+2.  **Edit Request "User" Bug:** The "Manage Participants" list in `EditRequest` still shows "User" instead of the alias, even after saving and reopening.
+3.  **Profile Linking:**
+    *   **Comments:** Link the author's name to their Profile.
+    *   **Submissions:** Make the byline clickable to toggle/show submitter and collaborator profile links.
+4.  **Audio Submissions:** Add "Record Audio" feature to `SubmitTrack` (similar to Audio Comments) for phone/browser-direct submissions.
+5.  **Settings Page:** Currently empty. Implement basic settings (Profile Edit, "Accept Unsolicited Requests" toggle).
+
+### B. Invite System Overhaul (Logic Clarification)
+1.  **Email Invites Flow:** 
+    *   **Creation:** When adding an email to a request (Create/Edit), it creates a "placeholder" slot.
+    *   **Claiming:** When a user signs up with that email + an Invite Code (from the deep link), they should automatically inherit the invite/placeholder.
+    *   **Deep Link:** The "Copy Link" URL should include an `?inviteCode=` param (or use the Request ID) that auto-populates the code field on the Signup page.
+2.  **Post-Creation Invites:** Add ability to invite emails in `EditRequest` (currently only in Create).
+
+### C. Testing & Validation
 1.  **Security Audit:** Verify that a malicious user cannot overwrite the *content* of a request (even if they can overwrite the global link). Test the "User Graph" reference logic.
 2.  **Playlist Polish:**
     *   Implement "Remove Track" from playlist.
     *   Add "Play All" button on Request Detail (auto-create ephemeral playlist?).
 
-### B. Deployment Prep
+### D. Deployment Prep
 1.  **Environment Variables:** Audit `.env.example` and ensure all R2/Gun keys are documented.
 2.  **Build Optimization:** Check bundle size (lucide-react imports are good, but check Gun bundle).
-
-### C. New Feature: Ad-hoc Request Pool
-1.  **Goal:** Allow users to request feedback without selecting specific people, lowering the barrier to entry.
-2.  **Mechanism:**
-    *   **Opt-in:** Users can toggle "Accept Unsolicited Requests" in their settings.
-    *   **Matching:** In `CreateRequest`, add an option to "Invite Random Peers" (e.g., "Request Feedback from Community"). This selects $N$ random users from the opt-in pool.
-    *   **Flow:** Selected users receive a standard invite notification and must Accept/Decline.
 
 ## Instructions for Agent
 *   **Context:** The app is feature-complete and secured. We are now in the final "QA & Polish" phase before beta.
 *   **Focus:**
-    1.  Deployment Preparation (Env Vars, Build).
-    2.  Verify the new Security Architecture works as expected.
-    3.  Implement Ad-hoc Request Pool.
+    1.  Address **Critical User Feedback** (Layout, Edit Bug, Audio Submissions, Profile Links).
+    2.  Implement the **Email Invite Claim System** and Deep Linking.
+    3.  Build out the **Settings Page**.

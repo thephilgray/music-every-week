@@ -14,12 +14,13 @@
 ### 2. Current Status: Ready for Beta
 *   **Access Modes:** Implemented "Direct Add" vs "Invite Only".
 *   **Security:** ACL hardening complete (User-Graph acceptance).
+*   **Visibility:** Strict filtering implemented in `RequestList`. Uninvited users see nothing. "Invite Only" requires acceptance.
 *   **Persistence:** Relay configured for local persistence.
 *   **Admin Tools:** Seed data generator available.
 
 ### 3. Recent Accomplishments (Session Jan 27, 2026 - Access Modes & Prep)
 *   **Refactor:** Switched from `visibility` to `accessMode`.
-*   **Security:** Moved participation status to user graph.
+*   **Fix:** Updated `RequestList` to strictly enforce visibility rules (User must be Owner or Participant).
 *   **Docs:** Created comprehensive README and Env setup guides.
 
 ### 4. Immediate High Priority Tasks (Next Session)

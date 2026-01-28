@@ -9,9 +9,23 @@ interface RequestListProps {
 }
 
 export function RequestList({ filter = 'all' }: RequestListProps) {
-  const { gun, pubKey } = useGun();
+  const { gun, pubKey, user } = useGun();
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myParticipation, setMyParticipation] = useState<Record<string, string>>({});
+
+  // 1. Load User Participation Status
+  useEffect(() => {
+      if (!user || !pubKey) return;
+      
+      const participationMap: Record<string, string> = {};
+      user.get('participation').map().on((status: any, reqId: string) => {
+          if (status) {
+              participationMap[reqId] = status;
+              setMyParticipation({...participationMap});
+          }
+      });
+  }, [user, pubKey]);
 
   useEffect(() => {
     // Subscribe to all file_requests
@@ -29,21 +43,29 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
          participants: typeof data.participants === 'string' ? JSON.parse(data.participants) : data.participants
        };
        
-       // Privacy Logic
-       // accessMode 'invite' is restricted (formerly private). 'direct' is visible to all (formerly public).
-       if (newRequest.accessMode === 'invite') {
-           // If not logged in, hide invite-only requests
-           if (!pubKey) return;
-           
-           // Check if owner
-           const isOwner = newRequest.ownerPub === pubKey;
-           
-           // Check if participant
-           const participants = newRequest.participants || {};
-           const isParticipant = participants[pubKey];
-           
-           if (!isOwner && !isParticipant) return;
+       // --- STRICT PRIVACY LOGIC ---
+       if (!pubKey) return; // Must be logged in to see anything (per "If I wasn't invited... shouldn't see it")
+
+       const isOwner = newRequest.ownerPub === pubKey;
+       const participants = newRequest.participants || {};
+       const isInvited = participants[pubKey];
+
+       // Rule 1: If not Owner AND not Invited, HIDE.
+       if (!isOwner && !isInvited) return;
+
+       // Rule 2: If Invited, check Access Mode & Status
+       if (!isOwner && isInvited) {
+           if (newRequest.accessMode === 'invite') {
+               // Must be ACCEPTED to show in feed.
+               // Check local participation status (User Graph) OR legacy participant list status
+               const localStatus = myParticipation[key];
+               const listStatus = isInvited.status;
+               
+               if (localStatus !== 'accepted' && listStatus !== 'accepted') return;
+           }
+           // 'direct' mode is auto-accepted/visible immediately if invited.
        }
+       // -----------------------------
 
        // Filter Logic
        const GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -58,6 +80,7 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
        }
 
        requestsMap.set(key, newRequest);
+       
        // Sort by Deadline (Active: soonest first, Archived: newest first)
        const sorted = Array.from(requestsMap.values()).sort((a, b) => {
            const dateA = a.deadline ? new Date(a.deadline).getTime() : 0;
@@ -74,7 +97,7 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
     
     const timer = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(timer);
-  }, [gun, filter, pubKey]);
+  }, [gun, filter, pubKey, myParticipation]); // Re-run when participation changes
 
   if (loading && requests.length === 0) {
     return (

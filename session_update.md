@@ -12,11 +12,12 @@
 *   **Type Safety:** Fixed TypeScript errors.
 
 ### 3. Infrastructure Correction
-*   **Verification:** Confirmed the project uses **Pulumi on GCP** (Cloud Run + GCS FUSE) for the backend, not Railway.
+*   **Verification:** Confirmed the project uses **Pulumi on GCP** (Cloud Run + GCS FUSE) for the backend.
 *   **Docs:** Rewrote `DEPLOYMENT.md` to reflect the correct Infrastructure-as-Code workflow.
+*   **Status:** **Backend Deployed Successfully.**
+    *   Relay URL: `https://mew2-relay-service-a65bc79-6xaixpnemq-uw.a.run.app`
+    *   Health Check: Passed.
 
 ## Next Steps
-*   **Execute Deployment:**
-    1.  `cd infrastructure` -> `pulumi up` (Deploys Relay + DB).
-    2.  Deploy `frontend` to Vercel (Connects to Relay URL).
+*   **Deploy Frontend:** Deploy `frontend` to Vercel with `VITE_RELAY_URL`.
 *   **QA:** Perform the End-to-End smoke test on the live URLs, specifically testing the "Scale-to-Zero" persistence.

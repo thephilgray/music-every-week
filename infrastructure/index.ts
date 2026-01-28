@@ -20,6 +20,11 @@ const iamService = new gcp.projects.Service("iam-service", {
     service: "iam.googleapis.com",
     disableOnDestroy: false,
 });
+// Required for region listing and some networking features
+const computeService = new gcp.projects.Service("compute-service", {
+    service: "compute.googleapis.com",
+    disableOnDestroy: false,
+});
 
 // 2. GCS Bucket for Persistence
 // This bucket acts as the filesystem for GunDB.

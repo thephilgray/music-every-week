@@ -16,4 +16,7 @@ pub
 !.env.example
 
 # GunDB
-radata/*.private.md
+radata/*
+*.private.md
+
+infrastructure/relay/radata/

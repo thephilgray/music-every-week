@@ -11,42 +11,37 @@
 *   **Storage:** Cloudflare R2 (Authenticated Uploads).
 *   **Relay Server:** Node.js + Gun (with SEA verification).
 
-### 2. Current Status: Polished & Secure-ish
-The app handles uploads, playback, and editing. We have implemented basic integrity checks to detect spoofing. The UI is branded as "MEOW".
+### 2. Current Status: Ready for Beta
+*   **Access Modes:** Implemented "Direct Add" vs "Invite Only".
+*   **Security:** ACL hardening complete (User-Graph acceptance).
+*   **Persistence:** Relay configured for local persistence.
+*   **Admin Tools:** Seed data generator available.
 
-### 3. Recent Accomplishments (Session Jan 27, 2026 - Polish & Security)
-*   **Privacy:** Private requests are now truly private in the list view.
-*   **Features:** Users can edit their submissions. Profiles now have Location and Links.
-*   **Security:** Added "Unverified Source" warnings for spoofed requests and auto-filtering for spoofed submissions.
+### 3. Recent Accomplishments (Session Jan 27, 2026 - Access Modes & Prep)
+*   **Refactor:** Switched from `visibility` to `accessMode`.
+*   **Security:** Moved participation status to user graph.
+*   **Docs:** Created comprehensive README and Env setup guides.
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
-### A. Logic Refactor: Request Access Modes (New Priority)
-1.  **Rename & Clarify Visibility:**
-    *   *Context:* The user clarified that the current "Public/Private" distinction is confusing. The intent is about *how* users join.
-    *   *Goal:* Rename `visibility` (e.g., to `accessMode`).
-    *   *Options:*
-        *   **"Direct Add" (formerly Public):** Invited users are automatically added as `accepted`. They get a notification but don't need to click "Accept". It appears in their feed immediately.
-        *   **"Invite Only" (formerly Private):** Invited users are `pending` and must explicitly "Accept" in the Inbox before it appears in their feed.
-    *   *Actions:* Update `CreateRequest` (UI/Logic), `Inbox` (hide buttons for Direct Add), and `types.ts`. Remove "Public/Private" badges from `RequestCard`, `RequestDetail`, and `Profile` views.
+### A. Deployment & QA
+1.  **Deploy Relay:** Deploy the relay server to the target environment (e.g. Railway/Fly.io) and verify `radata` persistence volume.
+2.  **Deploy Frontend:** Deploy to Vercel/Netlify.
+3.  **End-to-End Test:**
+    *   Create 2 users (Creator, Invitee).
+    *   Creator makes "Invite Only" request.
+    *   Invitee accepts via Inbox.
+    *   Invitee uploads track.
+    *   Verify playback and data persistence after refresh.
 
-### B. ACL & Data Model Hardening (Critical)
-1.  **Refactor Invite Acceptance:**
-    *   *Current Issue:* Users currently write to `file_requests/ID/participants/ME`. This is insecure if the node is open, or impossible if locked.
-    *   *Fix:* Change logic so Invitees write to `~Invitee/participation/requestId = 'accepted'`.
-    *   *Update:* Update `Inbox.tsx` (to write to user graph) and `RequestDetail.tsx` (to read status from participant's graph).
+### B. Mobile Polish & UI Tweaks
+1.  **Responsiveness:** Check `RequestDetail` and `CreatorTools` on mobile width.
+2.  **Navigation:** Ensure Admin/Seed tools are accessible (or hidden) appropriately on small screens.
 
-### C. Deployment Prep
-1.  **Environment Variables:** Audit `.env.example` and ensure all R2/Gun keys are documented.
-2.  **Build Optimization:** Check bundle size (lucide-react imports are good, but check Gun bundle).
-3.  **Relay Server:** Final check on relay server stability (ensure it persists data correctly).
-
-### D. Beta Launch Checklist
-1.  **Readme Update:** Update README with "How to Run" and "Architecture" overview.
-2.  **Seed Data:** Create a script or manual process to seed the "Directory" with a few initial users/requests for testing.
+### C. Bug Hunting
+1.  **Monitor Logs:** Watch for GunDB sync errors or SEA verification failures during QA.
+2.  **Fix:** Address any issues found.
 
 ## Instructions for Agent
-*   **Focus:**
-    1.  Start with **Task A (Logic Refactor)** and **Task B (ACL Hardening)**. These are the last major logic refactors before launch.
-    2.  Proceed to **Deployment** and **Documentation**.
---- End of content ---
+*   **Focus:** Deployment support and Mobile Polish.
+*   **Goal:** Get the app running live and looking good on phones.

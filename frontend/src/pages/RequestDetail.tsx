@@ -25,6 +25,17 @@ export function RequestDetail() {
   const subscribedSubmissions = useRef(new Set<string>());
   const [copied, setCopied] = useState(false);
 
+  // Access Mode Logic
+  const [myParticipationStatus, setMyParticipationStatus] = useState<'pending' | 'accepted' | 'declined' | null>(null);
+
+  useEffect(() => {
+     if (user && id) {
+         user.get('participation').get(id).on((data: any) => {
+             setMyParticipationStatus(data);
+         });
+     }
+  }, [user, id]);
+
   // Peer Review Logic
   const [unlockedSubmissionIds, setUnlockedSubmissionIds] = useState<string[]>([]);
 
@@ -140,6 +151,19 @@ export function RequestDetail() {
   const isOwner = pubKey && request && request.ownerPub === pubKey;
   const userSubmission = useMemo(() => submissions.find(s => s.uploaderPub === pubKey), [submissions, pubKey]);
   const hasSubmitted = !!userSubmission;
+
+  const isParticipant = useMemo(() => {
+      if (!request || !pubKey) return false;
+      if (request.ownerPub === pubKey) return true;
+      
+      const inList = request.participants && request.participants[pubKey];
+      if (!inList) return false; // Must be invited/in list
+
+      if (request.accessMode === 'direct') return true;
+      
+      // Invite mode: must have accepted locally OR be marked accepted in list (legacy/fallback)
+      return myParticipationStatus === 'accepted' || inList.status === 'accepted';
+  }, [request, pubKey, myParticipationStatus]);
 
   // Deadline Logic
   const now = Date.now();
@@ -315,13 +339,6 @@ export function RequestDetail() {
                         <span>Unverified Source: Signer does not match Owner</span>
                     </div>
                 )}
-                <span className={`px-3 py-1 rounded-full text-xs font-medium border mt-2 md:mt-0 ${
-                    request.visibility === 'public' 
-                    ? 'bg-green-900/30 border-green-700 text-green-400' 
-                    : 'bg-yellow-900/30 border-yellow-700 text-yellow-400'
-                }`}>
-                    {request.visibility}
-                </span>
               </div>
               
               <p className="text-gray-300 text-lg mb-4">{request.description}</p>
@@ -340,6 +357,7 @@ export function RequestDetail() {
                  <div>ID: {id?.substring(0, 8)}...</div>
               </div>
 
+              {(isParticipant || hasSubmitted || isOwner) && (
               <button 
                 onClick={() => {
                     if (!isPastDeadline) setIsSubmitOpen(true);
@@ -350,6 +368,7 @@ export function RequestDetail() {
                   {isPastDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission' : 'Submit Track')}
                   {hasSubmitted ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
               </button>
+              )}
           </div>
       </div>
 

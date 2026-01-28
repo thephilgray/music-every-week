@@ -1,9 +1,10 @@
 import Gun from 'gun/gun';
 import 'gun/sea';
 
-// TODO: Replace with environment variable or actual Cloud Run URL
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'http://localhost:8080';
+
 export const PEERS = [
-  'http://localhost:8080/gun' 
+  `${RELAY_URL}/gun` 
 ];
 
 const gun = Gun({

@@ -18,7 +18,7 @@ export interface FileRequest {
   title: string;
   description: string;
   deadline: string;
-  visibility: 'public' | 'private';
+  accessMode: 'direct' | 'invite';
   artworkUrl?: string;
   ownerPub: string;
   createdAt: number;

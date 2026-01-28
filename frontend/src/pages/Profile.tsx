@@ -291,11 +291,6 @@ export function Profile() {
                                 <h3 className="text-white font-bold group-hover:text-blue-400 transition">{req.title}</h3>
                                 <p className="text-gray-500 text-sm line-clamp-1">{req.description}</p>
                             </div>
-                            <div className="text-right">
-                                <span className={`px-2 py-0.5 rounded text-xs border ${req.visibility === 'public' ? 'bg-green-900/20 text-green-400 border-green-900' : 'bg-yellow-900/20 text-yellow-400 border-yellow-900'}`}>
-                                    {req.visibility}
-                                </span>
-                            </div>
                         </div>
                     </Link>
                 ))}

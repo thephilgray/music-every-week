@@ -1,7 +1,8 @@
 
 import SEA from 'gun/sea';
 
-const RELAY_API = 'http://localhost:8080/api';
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'http://localhost:8080';
+const RELAY_API = `${RELAY_URL}/api`;
 
 // Use environment variable or fallback to placeholder (which will break if not set)
 const PUBLIC_R2_DOMAIN = import.meta.env.VITE_R2_PUBLIC_DOMAIN || 'https://pub-your-r2-domain.r2.dev'; 

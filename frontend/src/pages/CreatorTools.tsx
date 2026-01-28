@@ -116,6 +116,45 @@ export function CreatorTools() {
       setInviteCode(code);
   };
 
+  const generateSeedData = async () => {
+      if (!confirm("Generate seed data? This will add fake users and requests.")) return;
+      
+      const FAKE_USERS = [
+          { alias: 'Alice Songwriter', bio: 'Lofi producer from NY', location: 'New York, USA' },
+          { alias: 'Bob Beats', bio: 'Techno enthusiast', location: 'Berlin, DE' },
+          { alias: 'Charlie Chords', bio: 'Acoustic vibes', location: 'London, UK' },
+      ];
+
+      FAKE_USERS.forEach((u, i) => {
+          const fakePub = `fake_pub_${Math.random().toString(36).substring(7)}`;
+          gun.get('all_users').get(fakePub).put({
+              ...u,
+              pub: fakePub,
+              joinedAt: Date.now() - (i * 86400000)
+          });
+          
+          // Create a request for each
+          const reqId = `fake_req_${Math.random().toString(36).substring(7)}`;
+          const deadline = new Date();
+          deadline.setDate(deadline.getDate() + 7);
+          
+          const req = {
+              id: reqId,
+              title: `${u.alias}'s Challenge`,
+              description: `A weekly challenge hosted by ${u.alias}.`,
+              deadline: deadline.toISOString(),
+              accessMode: 'direct', // Make it visible
+              ownerPub: fakePub,
+              createdAt: Date.now(),
+              participants: {}
+          };
+          
+          gun.get('file_requests').get(reqId).put(req);
+      });
+      
+      alert("Seed data generated!");
+  };
+
   const grantExtension = (pub: string, hours: number) => {
       if (!selectedRequest || !selectedRequest.id) return;
       
@@ -186,6 +225,12 @@ export function CreatorTools() {
                         className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition"
                     >
                         Generate Invite Code
+                    </button>
+                    <button
+                        onClick={generateSeedData}
+                        className="w-full mt-2 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm font-medium transition"
+                    >
+                        Seed Directory (Dev)
                     </button>
                     {inviteCode && (
                         <div className="mt-3 p-2 bg-gray-900 rounded border border-gray-700 text-center">

@@ -45,9 +45,6 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
               No Artwork
             </div>
           )}
-          <div className="absolute top-2 right-2 px-2 py-1 bg-black/70 backdrop-blur rounded text-xs font-mono text-gray-300 capitalize">
-            {request.visibility}
-          </div>
           {isClosed && (
             <div className="absolute bottom-2 right-2 px-2 py-1 bg-red-900/90 text-red-200 rounded text-xs font-bold border border-red-700">
               CLOSED

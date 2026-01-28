@@ -17,7 +17,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [title, setTitle] = useState(request.title);
   const [desc, setDesc] = useState(request.description);
   const [deadline, setDeadline] = useState(request.deadline);
-  const [visibility, setVisibility] = useState(request.visibility);
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite'>(request.accessMode || 'invite');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -89,7 +89,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const addParticipant = (user: UserProfile) => {
     setSelectedParticipants(prev => ({
       ...prev,
-      [user.pub]: { alias: user.alias, status: visibility === 'public' ? 'accepted' : 'pending' }
+      [user.pub]: { alias: user.alias, status: accessMode === 'direct' ? 'accepted' : 'pending' }
     }));
     setSearchTerm('');
     setSearchResults([]);
@@ -125,10 +125,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         artworkUrl = result.url;
       }
 
-      // Enforce status based on visibility
+      // Enforce status based on accessMode
       const finalParticipants = { ...selectedParticipants };
-      if (visibility === 'public') {
-          // Auto-accept everyone if public
+      if (accessMode === 'direct') {
+          // Auto-accept everyone if direct
           Object.keys(finalParticipants).forEach(pub => {
               if (finalParticipants[pub].status === 'pending') {
                   finalParticipants[pub].status = 'accepted';
@@ -140,7 +140,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         title,
         description: desc,
         deadline,
-        visibility,
+        accessMode,
         artworkUrl,
         participants: JSON.stringify(finalParticipants) as any,
         pending_emails: JSON.stringify(pendingEmails) as any
@@ -156,7 +156,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
           if (partPub === pubKey) return;
           
           const notifId = crypto.randomUUID();
-          const message = visibility === 'public' 
+          const message = accessMode === 'direct' 
               ? `You were added to "${title}"`
               : `You've been invited to contribute to "${title}"`;
 
@@ -246,14 +246,14 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     />
                 </div>
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1">Visibility</label>
+                    <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
                     <select 
-                        value={visibility}
-                        onChange={(e: any) => setVisibility(e.target.value)}
+                        value={accessMode}
+                        onChange={(e: any) => setAccessMode(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                     >
-                        <option value="public">Public</option>
-                        <option value="private">Private</option>
+                        <option value="direct">Direct Add (Auto-Accept)</option>
+                        <option value="invite">Invite Only</option>
                     </select>
                 </div>
             </div>

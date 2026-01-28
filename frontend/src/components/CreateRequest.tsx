@@ -10,7 +10,7 @@ export function CreateRequest() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [visibility, setVisibility] = useState<'public' | 'private'>('private');
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite'>('invite');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   
@@ -225,9 +225,9 @@ export function CreateRequest() {
       // Merge imported participants
       const finalParticipants = { ...selectedParticipants };
 
-      // Enforce status based on visibility
+      // Enforce status based on accessMode
       Object.keys(finalParticipants).forEach(pub => {
-          finalParticipants[pub].status = visibility === 'public' ? 'accepted' : 'pending';
+          finalParticipants[pub].status = accessMode === 'direct' ? 'accepted' : 'pending';
       });
 
       const request: any = {
@@ -235,7 +235,7 @@ export function CreateRequest() {
         title,
         description: desc,
         deadline,
-        visibility,
+        accessMode,
         artworkUrl,
         ownerPub: pubKey,
         createdAt: Date.now(),
@@ -260,7 +260,7 @@ export function CreateRequest() {
         if (partPub === pubKey) return; // Don't notify self
         
         const notifId = crypto.randomUUID();
-        const message = visibility === 'public' 
+        const message = accessMode === 'direct' 
             ? `You were added to "${title}"`
             : `You've been invited to contribute to "${title}"`;
 
@@ -369,18 +369,18 @@ export function CreateRequest() {
             />
           </div>
           <div>
-             <label className="block text-gray-400 text-sm mb-1">Visibility</label>
+             <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
              <select 
-               value={visibility}
-               onChange={(e: any) => setVisibility(e.target.value)}
+               value={accessMode}
+               onChange={(e: any) => setAccessMode(e.target.value)}
                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
              >
-               <option value="public">Public</option>
-               <option value="private">Private</option>
+               <option value="invite">Invite Only (Participants must accept)</option>
+               <option value="direct">Direct Add (Participants auto-accepted)</option>
              </select>
-             {visibility === 'public' && (
+             {accessMode === 'direct' && (
                 <p className="text-yellow-500 text-xs mt-1">
-                    Warning: Public requests are visible to everyone on the platform. This should only be used for long running sessions users have signed up for.
+                    Note: Participants will be added immediately and will see this request in their feed without needing to accept an invite.
                 </p>
              )}
           </div>

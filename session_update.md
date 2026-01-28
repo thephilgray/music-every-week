@@ -1,20 +1,24 @@
-# Session Update: Privacy, Editing, & Branding
+# Session Update: Access Modes, ACL Hardening & Deployment Prep
 
 ## Completed Tasks
 
-### 1. Critical Logic & Privacy
-- **Request Visibility:** Fixed `Home.tsx` to correctly filter "private" requests. They are now invisible unless the user is the owner or an invited participant (verified via `pubKey` check).
-- **Edit Submission:** Implemented full "Edit" functionality for submissions. Users can now update their title, lyrics, and replace audio/artwork files. The UI adapts to "Edit Mode" when an existing submission is present.
+### 1. Logic Refactor: Access Modes
+- **Renamed Visibility:** Replaced `visibility` ('public'/'private') with `accessMode` ('direct'/'invite') across the entire codebase (`types.ts`, `CreateRequest`, `EditRequest`, `RequestDetail`, etc.).
+- **Direct Add:** "Direct Add" requests now automatically accept invited participants.
+- **Invite Only:** "Invite Only" requests require explicit acceptance.
+- **Privacy Enforcement:** Updated `RequestList` to strictly filter "Invite Only" requests to participants, while "Direct Add" remains visible to the community (similar to Public).
 
-### 2. UI & Branding Polish
-- **Rebranding:** Renamed app title to "MEOW" and replaced the text logo in the sidebar with the official `mewlogo.png`.
-- **Profile Enhancements:** Added `Location` and `External Links` fields to the User Profile schema. Updated `Settings` (edit), `Profile` (view/edit), and `types.ts` to support these new fields.
+### 2. ACL & Security Hardening
+- **User-Graph Acceptance:** Refactored `Inbox` and `RequestDetail` to write acceptance status to the *User's Graph* (`~User/participation`) instead of the shared Request node. This prevents unauthorized modification of participant lists by non-owners.
+- **Submission Security:** "Submit Track" button is now strictly guarded by participation status (or ownership/previous submission).
 
-### 3. Security Audit (Integrity Checks)
-- **Request Integrity:** Implemented cryptographic verification in `RequestDetail`. If a request's content signer does not match the declared `ownerPub`, a "Unverified Source" warning badge is displayed.
-- **Submission Integrity:** Added logic to ignore spoofed submissions where the data signer does not match the `uploaderPub`. This prevents malicious users from impersonating others in the submission list.
+### 3. Deployment Prep
+- **Environment Variables:** Standardized `VITE_RELAY_URL` and `VITE_R2_PUBLIC_DOMAIN`. Updated `.env.example` files.
+- **Relay Config:** Verified Relay Server uses `radata` for local persistence.
+- **Documentation:** Created root `README.md` with architecture and setup guide.
+- **Seed Data:** Added a "Seed Directory" tool in `CreatorTools` (Admin only) to generate fake users and requests for testing.
 
 ## Next Steps
-- **ACL Hardening:** Refactor the "Invite Acceptance" flow to write to the User's graph (`~User/responses`) instead of the public Request node, to prevent unauthorized status updates.
-- **Deployment:** Finalize environment variables and deploy to production.
-- **Beta Launch:** Create seed data and documentation.
+- **Deployment:** Deploy Relay and Frontend to production environment.
+- **Manual QA:** Perform a full "Invite Cycle" test on deployed instance.
+- **Mobile Polish:** Ensure new UI elements (Access Mode select, Admin tools) work well on mobile.

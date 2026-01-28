@@ -30,8 +30,9 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
        };
        
        // Privacy Logic
-       if (newRequest.visibility === 'private') {
-           // If not logged in, hide private requests
+       // accessMode 'invite' is restricted (formerly private). 'direct' is visible to all (formerly public).
+       if (newRequest.accessMode === 'invite') {
+           // If not logged in, hide invite-only requests
            if (!pubKey) return;
            
            // Check if owner

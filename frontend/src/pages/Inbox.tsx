@@ -93,8 +93,8 @@ export function Inbox() {
     e.stopPropagation();
     if (!n.requestId || !pubKey) return;
     
-    // Update status to accepted
-    gun.get('file_requests').get(n.requestId).get('participants').get(pubKey).get('status').put('accepted');
+    // Update status to accepted in User Graph
+    user.get('participation').get(n.requestId).put('accepted');
     
     // Add sender to contacts (Implicit connection)
     if (n.fromPub) {
@@ -109,8 +109,8 @@ export function Inbox() {
     e.stopPropagation();
     if (!n.requestId || !pubKey) return;
     
-    // Remove from participants
-    gun.get('file_requests').get(n.requestId).get('participants').get(pubKey).put(null);
+    // Update status to declined in User Graph
+    user.get('participation').get(n.requestId).put('declined');
     
     markAsRead(n);
   };

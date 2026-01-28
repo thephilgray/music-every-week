@@ -5,10 +5,26 @@ const path = require('path');
 const cors = require('cors');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const SEA = require('gun/sea'); // Import SEA
+const SEA = require('gun/sea');
 
 const app = express();
-// ... (rest of setup)
+
+// Enable CORS for all routes
+app.use(cors({
+    origin: '*', // For development, allow all. In prod, lock this down.
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-pub', 'x-proof', 'x-timestamp']
+}));
+
+// Initialize R2 Client
+const r2 = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
 
 app.get('/api/upload-url', async (req, res) => {
   try {
@@ -41,7 +57,7 @@ app.get('/api/upload-url', async (req, res) => {
     }
 
     const key = `uploads/${Date.now()}-${filename}`;
-// ...
+    
     const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
@@ -63,8 +79,6 @@ const server = app.listen(PORT, () => {
 });
 
 // Configure Gun
-// If GCS is mounted at /data, we want Gun to write there.
-// We use 'radata' file for persistence.
 const gun = Gun({ 
   web: server,
   file: process.env.GUN_FILE || 'radata' 

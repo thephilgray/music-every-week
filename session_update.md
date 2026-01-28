@@ -6,6 +6,8 @@
     *   Updated `App.tsx` to display a loading spinner (`Loader2`) while authentication is being checked.
 2.  **Fixed Profile Submissions:**
     *   Updated `Profile.tsx` to correctly look up submissions in the user's graph.
+    *   **Fixed Crash:** Updated `Profile.tsx` to parse `waveform` JSON string, preventing player crash.
+    *   **Hardened Player:** Updated `Player.tsx` with defensive checks for waveform data.
 3.  **Mobile Polish:**
     *   Refactored `CreatorTools.tsx` to use a Master-Detail layout pattern.
     *   Verified `RequestDetail.tsx` responsiveness.

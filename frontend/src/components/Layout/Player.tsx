@@ -4,6 +4,9 @@ import { Link } from 'react-router-dom';
 import { usePlayer } from '../../contexts/PlayerContext';
 
 const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number, onSeek: (p: number) => void }) => {
+  // Defensive check: ensure data is an array
+  const bars = Array.isArray(data) ? data : [];
+  
   return (
     <div 
       className="flex items-center gap-0.5 h-8 w-full cursor-pointer group"
@@ -14,8 +17,8 @@ const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number
         onSeek(Math.min(Math.max(p, 0), 1));
       }}
     >
-      {data.map((val, i) => {
-        const barProgress = i / data.length;
+      {bars.map((val, i) => {
+        const barProgress = i / bars.length;
         const isPlayed = barProgress < progress;
         return (
           <div 

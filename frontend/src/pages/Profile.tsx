@@ -67,7 +67,17 @@ export function Profile() {
                      setSubmissions(prev => {
                         const exists = prev.find(s => s.id === subId);
                         if (exists) return prev;
-                        return [...prev, { ...subData, id: subId }];
+                        
+                        let parsedWaveform = subData.waveform;
+                        if (typeof subData.waveform === 'string') {
+                            try {
+                                parsedWaveform = JSON.parse(subData.waveform);
+                            } catch (e) {
+                                parsedWaveform = [];
+                            }
+                        }
+                        
+                        return [...prev, { ...subData, id: subId, waveform: parsedWaveform }];
                     });
                 }
             });

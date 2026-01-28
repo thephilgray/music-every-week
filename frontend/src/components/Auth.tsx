@@ -114,9 +114,36 @@ export function Auth() {
       }
 
     } else {
+      // Clear any stale session data before auth
+      sessionStorage.clear();
+      
       user.auth(alias, pass, (ack: any) => {
         if (ack.err) {
           setError(ack.err);
+        } else {
+           console.log("Auth Ack:", ack);
+           
+           // Force injection if Gun failed to set it but Ack has it
+           // @ts-ignore
+           if ((!user.is || !user.is.priv) && ack.sea && ack.sea.priv) {
+               console.warn("Manually injecting keys from Ack into user.is");
+               // @ts-ignore
+               user.is = { ...user.is, ...ack.sea };
+               // @ts-ignore
+               user._.is = user.is; // Gun internal reference
+           }
+
+           // Verify Private Key Decryption
+           // @ts-ignore
+           if (!user.is || !user.is.priv) {
+               console.error("Login 'success' but private key missing. User state:", user.is, "Ack:", ack);
+               setError("Login failed: Password correct but could not decrypt private key. Try clearing local data in Settings or creating a new account if the password was lost.");
+               user.leave();
+           } else {
+               // Success path
+               console.log("Login successful with full key pair.");
+               // Optional: Update last login or similar, but for now just let the state update trigger the UI
+           }
         }
       });
     }
@@ -191,7 +218,28 @@ export function Auth() {
           {isSignup ? 'Sign Up' : 'Log In'}
         </button>
       </form>
-      <div className="mt-6 text-center pt-4 border-t border-gray-700">
+      
+      <div className="mt-4 pt-4 border-t border-gray-700 text-center">
+          <button 
+            type="button"
+            onClick={async () => {
+                if (confirm("This will delete ALL local data (IndexedDB, LocalStorage) to fix corruption. Continue?")) {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    const dbs = await window.indexedDB.databases();
+                    for (const db of dbs) {
+                        if (db.name) window.indexedDB.deleteDatabase(db.name);
+                    }
+                    window.location.reload();
+                }
+            }}
+            className="text-xs text-red-500 hover:text-red-400 underline"
+          >
+              Troubleshoot: Hard Reset / Clear Data
+          </button>
+      </div>
+
+      <div className="mt-2 text-center">
         <button
           onClick={() => {
               setIsSignup(!isSignup);

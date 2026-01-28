@@ -12,10 +12,11 @@
 *   **Relay Server:** Node.js + Gun (with SEA verification).
 
 ### 2. Current Status: Feature Complete & Stable
-We have resolved the critical blocking bugs (Uploads/CORS) and added the requested UI polish (Minimize Player). The app is fully functional and ready for final security verification and deployment.
+We have resolved all critical blocking bugs (Uploads/CORS/Auth) and added the requested UI polish (Minimize Player). The app is fully functional and ready for final security verification and deployment.
 
 ### 3. Recent Accomplishments (Session Jan 27, 2026 - Critical Fixes)
-*   **Critical Fix:** Resolved `Access-Control-Allow-Origin` and `S3Client` initialization errors in the Relay Server. Uploads and Recording submissions now work.
+*   **Auth & Uploads:** Implemented robust session recovery to fix "missing private key" errors.
+*   **Relay Server:** Fixed CORS and R2 configuration.
 *   **UI Feature:** Implemented "Minimize Player" mode.
 
 ### 4. Immediate High Priority Tasks (Next Session)

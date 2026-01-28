@@ -91,7 +91,18 @@ export function Sidebar({ onClose }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-gray-800">
-        <div className="text-xs text-gray-500 font-mono">
+        <button 
+            onClick={() => {
+                if (window.confirm("Log out?")) {
+                    user.leave();
+                    window.location.reload();
+                }
+            }}
+            className="w-full text-left px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-900/10 rounded transition mb-2 text-sm font-medium"
+        >
+            Log Out
+        </button>
+        <div className="text-xs text-gray-500 font-mono px-4">
           v2.0.0-alpha
         </div>
       </div>

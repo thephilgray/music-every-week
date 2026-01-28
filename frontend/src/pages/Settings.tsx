@@ -9,6 +9,8 @@ export function Settings() {
   // Profile State
   const [alias, setAlias] = useState('');
   const [bio, setBio] = useState('');
+  const [location, setLocation] = useState('');
+  const [links, setLinks] = useState<{label: string, url: string}[]>([]);
   const [avatar, setAvatar] = useState<File | null>(null);
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -25,6 +27,8 @@ export function Settings() {
     if (userProfile) {
       setAlias(userProfile.alias || '');
       setBio(userProfile.bio || '');
+      setLocation(userProfile.location || '');
+      setLinks(userProfile.links || []);
       setCurrentAvatarUrl(userProfile.avatarUrl || '');
     }
 
@@ -52,6 +56,8 @@ export function Settings() {
       const updates: any = {
         alias,
         bio,
+        location,
+        links,
         avatarUrl: avatarUrl || ''
       };
 
@@ -70,6 +76,20 @@ export function Settings() {
     } finally {
       setIsSavingProfile(false);
     }
+  };
+
+  const handleAddLink = () => {
+      setLinks([...links, { label: '', url: '' }]);
+  };
+
+  const handleRemoveLink = (index: number) => {
+      setLinks(links.filter((_, i) => i !== index));
+  };
+
+  const handleLinkChange = (index: number, field: 'label' | 'url', value: string) => {
+      const newLinks = [...links];
+      newLinks[index] = { ...newLinks[index], [field]: value };
+      setLinks(newLinks);
   };
 
   const handleTogglePrivacy = () => {
@@ -166,6 +186,53 @@ export function Settings() {
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition h-24"
                         placeholder="Tell us about yourself..."
                     />
+                </div>
+                
+                <div>
+                    <label className="block text-sm text-gray-400 mb-1">Location</label>
+                    <input 
+                        type="text" 
+                        value={location}
+                        onChange={e => setLocation(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
+                        placeholder="e.g. Nashville, TN"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm text-gray-400 mb-2">External Links</label>
+                    <div className="space-y-3">
+                        {links.map((link, i) => (
+                            <div key={i} className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    value={link.label}
+                                    onChange={e => handleLinkChange(i, 'label', e.target.value)}
+                                    className="w-1/3 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
+                                    placeholder="Label (e.g. Website)"
+                                />
+                                <input 
+                                    type="text" 
+                                    value={link.url}
+                                    onChange={e => handleLinkChange(i, 'url', e.target.value)}
+                                    className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
+                                    placeholder="URL (https://...)"
+                                />
+                                <button 
+                                    onClick={() => handleRemoveLink(i)}
+                                    className="p-3 text-red-500 hover:bg-red-900/20 rounded-lg transition"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            </div>
+                        ))}
+                        <button 
+                            onClick={handleAddLink}
+                            className="text-sm text-blue-400 hover:text-blue-300 font-medium"
+                        >
+                            + Add Link
+                        </button>
+                    </div>
                 </div>
             </div>
 

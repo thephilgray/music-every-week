@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X } from 'lucide-react';
+import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { uploadFile } from '../lib/upload';
@@ -25,6 +25,8 @@ export function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [editAlias, setEditAlias] = useState('');
   const [editBio, setEditBio] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editLinks, setEditLinks] = useState<{label: string, url: string}[]>([]);
   const [editAvatar, setEditAvatar] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -48,6 +50,8 @@ export function Profile() {
             if (isEditing === false) { // Don't overwrite if editing
                 setEditAlias(data.alias || '');
                 setEditBio(data.bio || '');
+                setEditLocation(data.location || '');
+                setEditLinks(data.links || []);
             }
             setLoading(false);
         }
@@ -97,6 +101,8 @@ export function Profile() {
           const updates: any = {
               alias: editAlias,
               bio: editBio,
+              location: editLocation,
+              links: editLinks,
               avatarUrl: avatarUrl || ''
           };
           
@@ -114,6 +120,20 @@ export function Profile() {
       } finally {
           setIsSaving(false);
       }
+  };
+  
+  const handleAddLink = () => {
+      setEditLinks([...editLinks, { label: '', url: '' }]);
+  };
+
+  const handleRemoveLink = (index: number) => {
+      setEditLinks(editLinks.filter((_, i) => i !== index));
+  };
+
+  const handleLinkChange = (index: number, field: 'label' | 'url', value: string) => {
+      const newLinks = [...editLinks];
+      newLinks[index] = { ...newLinks[index], [field]: value };
+      setEditLinks(newLinks);
   };
 
   if (loading && !profile) {
@@ -151,7 +171,32 @@ export function Profile() {
                             </button>
                         )}
                     </div>
-                    <p className="text-gray-400 max-w-xl mx-auto md:mx-0 mb-4">{profile.bio || "No bio yet."}</p>
+                    
+                    {profile.location && (
+                        <div className="flex items-center justify-center md:justify-start gap-2 text-gray-400 mb-2">
+                            <MapPin className="w-4 h-4" />
+                            <span>{profile.location}</span>
+                        </div>
+                    )}
+
+                    <p className="text-gray-400 max-w-xl mx-auto md:mx-0 mb-4 whitespace-pre-wrap">{profile.bio || "No bio yet."}</p>
+                    
+                    {profile.links && profile.links.length > 0 && (
+                        <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-6">
+                            {profile.links.map((link, i) => (
+                                <a 
+                                    key={i} 
+                                    href={link.url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-blue-400 px-3 py-1.5 rounded-full transition"
+                                >
+                                    <LinkIcon className="w-3 h-3" />
+                                    {link.label}
+                                </a>
+                            ))}
+                        </div>
+                    )}
                     
                     <div className="flex items-center justify-center md:justify-start gap-6 text-sm text-gray-500">
                         <div className="flex flex-col items-center md:items-start">
@@ -260,7 +305,7 @@ export function Profile() {
         {/* Edit Modal */}
         {isEditing && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold text-white">Edit Profile</h2>
                         <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
@@ -302,6 +347,53 @@ export function Profile() {
                                 onChange={e => setEditBio(e.target.value)}
                                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24"
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Location</label>
+                            <input 
+                                type="text" 
+                                value={editLocation}
+                                onChange={e => setEditLocation(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                                placeholder="e.g. New York, NY"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-2">External Links</label>
+                            <div className="space-y-3">
+                                {editLinks.map((link, i) => (
+                                    <div key={i} className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            value={link.label}
+                                            onChange={e => handleLinkChange(i, 'label', e.target.value)}
+                                            className="w-1/3 bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm focus:border-blue-500 outline-none"
+                                            placeholder="Label"
+                                        />
+                                        <input 
+                                            type="text" 
+                                            value={link.url}
+                                            onChange={e => handleLinkChange(i, 'url', e.target.value)}
+                                            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm focus:border-blue-500 outline-none"
+                                            placeholder="URL"
+                                        />
+                                        <button 
+                                            onClick={() => handleRemoveLink(i)}
+                                            className="p-2 text-red-500 hover:bg-red-900/20 rounded-lg transition"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                                <button 
+                                    onClick={handleAddLink}
+                                    className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                                >
+                                    + Add Link
+                                </button>
+                            </div>
                         </div>
                         
                         <button 

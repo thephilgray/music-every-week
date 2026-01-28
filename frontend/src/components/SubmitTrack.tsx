@@ -4,16 +4,17 @@ import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
-import type { Notification, UserProfile } from '../types';
+import type { Notification, UserProfile, Submission } from '../types';
 
 interface SubmitTrackProps {
   requestId: string;
   participants?: Record<string, { status: 'pending' | 'accepted', alias?: string, email?: string }>;
+  existingSubmission?: Submission;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function SubmitTrack({ requestId, participants, onClose, onSuccess }: SubmitTrackProps) {
+export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess }: SubmitTrackProps) {
   const { gun, user, pubKey, userProfile } = useGun();
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
@@ -38,16 +39,22 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Load last byline preference
+  // Load data (Edit Mode or Defaults)
   useEffect(() => {
-    if (!user) return;
-    user.get('preferences').get('lastByline').once((data: any) => {
-        if (data && typeof data === 'string') {
-            setByline(data);
-        }
-        // Else leave empty
-    });
-  }, [user]);
+    if (existingSubmission) {
+        setTitle(existingSubmission.title);
+        setByline(existingSubmission.byline || '');
+        setLyrics(existingSubmission.lyrics || '');
+        setCollaborators(Object.keys(existingSubmission.collaborators || {}));
+    } else {
+        if (!user) return;
+        user.get('preferences').get('lastByline').once((data: any) => {
+            if (data && typeof data === 'string') {
+                setByline(data);
+            }
+        });
+    }
+  }, [existingSubmission, user]);
 
   const searchUsers = (term: string) => {
     setSearchTerm(term);
@@ -145,7 +152,7 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!audioFile || !title) {
+    if ((!audioFile && !existingSubmission) || !title) {
         setError("Title and Audio file are required.");
         return;
     }
@@ -154,26 +161,41 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
     setError(null);
 
     try {
-        // 0. Generate Waveform (Client-side)
-        let waveform: number[] = [];
-        try {
-            waveform = await generateWaveform(audioFile);
-        } catch (e) {
-            console.warn("Waveform generation failed", e);
+        let audioUrlStr = existingSubmission?.audioUrl || '';
+        let waveformStr = '';
+        
+        // Handle Waveform string/array mismatch from existing data
+        if (existingSubmission?.waveform) {
+            waveformStr = typeof existingSubmission.waveform === 'string' 
+                ? existingSubmission.waveform 
+                : JSON.stringify(existingSubmission.waveform);
         }
 
-        // 1. Upload Audio
-        const { url: audioUrlStr } = await uploadFile(audioFile, (user as any).is); 
-        
-        // 2. Upload Art (Optional)
-        let artworkUrlStr = '';
+        // 1. Handle Audio (New Upload or Keep Existing)
+        if (audioFile) {
+            // Generate Waveform
+            try {
+                const wf = await generateWaveform(audioFile);
+                waveformStr = JSON.stringify(wf);
+            } catch (e) {
+                console.warn("Waveform generation failed", e);
+                waveformStr = '[]';
+            }
+
+            // Upload
+            const { url } = await uploadFile(audioFile, (user as any).is);
+            audioUrlStr = url;
+        }
+
+        // 2. Handle Art (New Upload or Keep Existing)
+        let artworkUrlStr = existingSubmission?.artworkUrl || '';
         if (artFile) {
             const { url } = await uploadFile(artFile, (user as any).is);
             artworkUrlStr = url;
         }
 
         // 3. Save to Gun
-        const submissionId = crypto.randomUUID();
+        const submissionId = existingSubmission?.id || crypto.randomUUID();
         
         // Convert collaborators array to Record<string, boolean>
         const collaboratorsMap: Record<string, boolean> = {};
@@ -187,9 +209,6 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
             user.get('preferences').get('lastByline').put(byline.trim());
         }
 
-        // FIX: Stringify waveform to prevent GunDB validation errors with arrays
-        const waveformStr = JSON.stringify(waveform);
-
         const submission: any = { // Using 'any' briefly to allow waveform string vs number[] mismatch if strict typed
             id: submissionId,
             requestId,
@@ -199,7 +218,7 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderPub: pubKey as string,
-            createdAt: Date.now(),
+            createdAt: existingSubmission?.createdAt || Date.now(),
             collaborators: collaboratorsMap,
             waveform: waveformStr // Saved as string
         };
@@ -278,8 +297,10 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
         </button>
 
         <div className="p-6 border-b border-gray-800">
-            <h2 className="text-xl font-bold text-white">Submit Track</h2>
-            <p className="text-sm text-gray-400">Upload your contribution to this request.</p>
+            <h2 className="text-xl font-bold text-white">{existingSubmission ? 'Edit Submission' : 'Submit Track'}</h2>
+            <p className="text-sm text-gray-400">
+                {existingSubmission ? 'Update your contribution details.' : 'Upload your contribution to this request.'}
+            </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -332,6 +353,16 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                     </button>
                 </div>
 
+                {existingSubmission && !audioFile && !isRecording && (
+                    <div className="bg-gray-800 p-3 rounded mb-4 border border-gray-700 flex items-center justify-between">
+                         <div className="flex items-center gap-2">
+                             <Music className="w-5 h-5 text-blue-400" />
+                             <span className="text-sm text-gray-300">Using existing audio</span>
+                         </div>
+                         <div className="text-xs text-gray-500">Select new to replace</div>
+                    </div>
+                )}
+
                 {audioType === 'upload' ? (
                     <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
                         audioFile ? 'border-green-600 bg-green-900/10' : 'border-gray-700 hover:border-gray-600'
@@ -346,7 +377,7 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                         <label htmlFor="audio-upload" className="cursor-pointer flex flex-col items-center gap-2">
                             <Music className={`w-8 h-8 ${audioFile ? 'text-green-500' : 'text-gray-500'}`} />
                             <span className="text-sm text-gray-300">
-                                {audioFile ? audioFile.name : 'Click to select audio file'}
+                                {audioFile ? audioFile.name : (existingSubmission ? 'Click to replace audio file' : 'Click to select audio file')}
                             </span>
                         </label>
                     </div>
@@ -418,7 +449,7 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                     <label htmlFor="art-upload" className="cursor-pointer flex flex-col items-center gap-2">
                         <ImageIcon className={`w-6 h-6 ${artFile ? 'text-green-500' : 'text-gray-500'}`} />
                         <span className="text-xs text-gray-300">
-                            {artFile ? artFile.name : 'Select image'}
+                            {artFile ? artFile.name : (existingSubmission?.artworkUrl ? 'Change current image' : 'Select image')}
                         </span>
                     </label>
                 </div>
@@ -531,12 +562,12 @@ export function SubmitTrack({ requestId, participants, onClose, onSuccess }: Sub
                     {isUploading ? (
                         <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Uploading...
+                            {existingSubmission ? 'Updating...' : 'Uploading...'}
                         </>
                     ) : (
                         <>
                             <Upload className="w-4 h-4" />
-                            Submit Track
+                            {existingSubmission ? 'Update Submission' : 'Submit Track'}
                         </>
                     )}
                 </button>

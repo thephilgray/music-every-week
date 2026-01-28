@@ -9,7 +9,7 @@ interface RequestListProps {
 }
 
 export function RequestList({ filter = 'all' }: RequestListProps) {
-  const { gun } = useGun();
+  const { gun, pubKey } = useGun();
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,6 +29,21 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
          participants: typeof data.participants === 'string' ? JSON.parse(data.participants) : data.participants
        };
        
+       // Privacy Logic
+       if (newRequest.visibility === 'private') {
+           // If not logged in, hide private requests
+           if (!pubKey) return;
+           
+           // Check if owner
+           const isOwner = newRequest.ownerPub === pubKey;
+           
+           // Check if participant
+           const participants = newRequest.participants || {};
+           const isParticipant = participants[pubKey];
+           
+           if (!isOwner && !isParticipant) return;
+       }
+
        // Filter Logic
        const GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000; // 7 days
        const deadlineTime = newRequest.deadline ? new Date(newRequest.deadline).getTime() : Infinity;
@@ -58,7 +73,7 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
     
     const timer = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(timer);
-  }, [gun, filter]);
+  }, [gun, filter, pubKey]);
 
   if (loading && requests.length === 0) {
     return (

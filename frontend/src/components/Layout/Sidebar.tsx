@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Home, Inbox, Layers, Music, Users, Archive, User, Settings, X, ListMusic } from 'lucide-react';
+import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 
@@ -49,10 +49,9 @@ export function Sidebar({ onClose }: SidebarProps) {
   return (
     <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
       <div className="p-6 flex justify-between items-center">
-        <div className="flex items-center gap-2 text-blue-500 font-bold text-2xl">
-          <Music className="w-8 h-8" />
-          <span>MEW2</span>
-        </div>
+        <Link to="/" className="flex items-center gap-2">
+          <img src="/mewlogo.png" alt="MEOW" className="h-12 w-auto" />
+        </Link>
         {/* Mobile Close Button */}
         <button 
           onClick={onClose}

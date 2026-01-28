@@ -4,6 +4,8 @@ export interface UserProfile {
   bio?: string;
   avatarUrl?: string;
   email?: string;
+  location?: string;
+  links?: { label: string; url: string }[];
   isAdmin?: boolean;
   submissions?: Record<string, boolean>; // Linked to Submission IDs
   invitedBy?: string; // Pub key of inviter

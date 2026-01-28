@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { SubmitTrack } from '../components/SubmitTrack';
@@ -15,6 +15,7 @@ export function RequestDetail() {
   const { gun, pubKey, user } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
+  const [isVerified, setIsVerified] = useState(true); // Security Check
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -39,6 +40,20 @@ export function RequestDetail() {
     // Fetch Request Details
     gun.get('file_requests').get(id).on((data: any) => {
         if (data) {
+            // Security Verification
+            // Check if the node is signed by the claimed owner
+            // User nodes have soul like `~PUBKEY...`
+            const soul = data._ && data._['#'];
+            if (soul && typeof soul === 'string' && soul.startsWith('~')) {
+                const signerPub = soul.split('~')[1].split('.')[0];
+                if (data.ownerPub && signerPub !== data.ownerPub) {
+                    console.warn("Security Alert: Request signer does not match ownerPub. Possible spoofing.");
+                    setIsVerified(false);
+                } else {
+                    setIsVerified(true);
+                }
+            }
+
             let parsedParticipants = {};
             if (typeof data.participants === 'string') {
                 try {
@@ -64,6 +79,16 @@ export function RequestDetail() {
     
     gun.get('file_requests').get(id).get('submissions').map().on((data: any, key: string) => {
         if (data) {
+            // Security Check for Submissions
+            const soul = data._ && data._['#'];
+            if (soul && typeof soul === 'string' && soul.startsWith('~')) {
+                 const signerPub = soul.split('~')[1].split('.')[0];
+                 if (data.uploaderPub && signerPub !== data.uploaderPub) {
+                     console.warn(`Ignored spoofed submission ${key}: signer ${signerPub} != uploader ${data.uploaderPub}`);
+                     return; // Ignore spoofed submission
+                 }
+            }
+
             setSubmissions(prev => {
                 let parsedWaveform = data.waveform;
                 // Check if waveform is stringified (new format)
@@ -284,6 +309,12 @@ export function RequestDetail() {
                         )}
                     </div>
                 </div>
+                {!isVerified && (
+                    <div className="mt-2 bg-red-900/30 border border-red-800 text-red-300 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 max-w-max">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Unverified Source: Signer does not match Owner</span>
+                    </div>
+                )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium border mt-2 md:mt-0 ${
                     request.visibility === 'public' 
                     ? 'bg-green-900/30 border-green-700 text-green-400' 
@@ -316,8 +347,8 @@ export function RequestDetail() {
                 disabled={isPastDeadline}
                 className={`w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed ${isPastDeadline ? 'bg-gray-700 hover:bg-gray-700' : ''}`}
               >
-                  <Upload className="w-4 h-4" />
-                  {isPastDeadline ? 'Submission Closed' : 'Submit Track'}
+                  {isPastDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission' : 'Submit Track')}
+                  {hasSubmitted ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
               </button>
           </div>
       </div>
@@ -344,6 +375,8 @@ export function RequestDetail() {
             <div className="grid grid-cols-1 gap-4">
                 {submissions.map((sub) => {
                     const locked = isLocked(sub);
+                    const isMySubmission = sub.uploaderPub === pubKey;
+                    
                     return (
                     <div key={sub.id} className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group`}>
                         <div className="flex items-center gap-4">
@@ -368,22 +401,34 @@ export function RequestDetail() {
                                     by <Link to={`/profile/${sub.uploaderPub}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
                                         {sub.byline || sub.uploaderPub?.substring(0,8)}
                                     </Link>
+                                    {isMySubmission && <span className="ml-2 text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
                                 </div>
                             </div>
 
-                                                        <div className="flex items-center gap-2">
-                                                            <button 
-                                                                onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
-                                                                disabled={locked}
-                                                                className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                            >
-                                                                <MessageSquare className="w-4 h-4" />
-                                                                {commentCounts[sub.id!] > 0 && (
-                                                                    <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
-                                                                )}
-                                                            </button>
-                                                            
-                                                            <button                                      onClick={() => setAddToPlaylistSubmission(sub)}
+                            <div className="flex items-center gap-2">
+                                {isMySubmission && !isPastDeadline && (
+                                    <button 
+                                        onClick={() => setIsSubmitOpen(true)}
+                                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
+                                        title="Edit Submission"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                    </button>
+                                )}
+                                
+                                <button 
+                                    onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
+                                    disabled={locked}
+                                    className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    <MessageSquare className="w-4 h-4" />
+                                    {commentCounts[sub.id!] > 0 && (
+                                        <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
+                                    )}
+                                </button>
+                                
+                                <button                                      
+                                    onClick={() => setAddToPlaylistSubmission(sub)}
                                     disabled={locked}
                                     className={`p-2 rounded-full transition text-gray-400 hover:text-white ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     title="Add to Playlist"
@@ -432,6 +477,7 @@ export function RequestDetail() {
           <SubmitTrack 
             requestId={id} 
             participants={request.participants}
+            existingSubmission={userSubmission}
             onClose={() => setIsSubmitOpen(false)}
             onSuccess={() => {
                 // optional: trigger a toast or refresh logic if needed

@@ -1,23 +1,20 @@
-# Session Update: Critical Fixes & Player Polish
+# Session Update: Privacy, Editing, & Branding
 
 ## Completed Tasks
 
-### 1. Critical Bug Fix: Uploads & Auth Persistence
-- **Issue:** Users experienced "Authentication error: Session is read-only (missing private key)" during uploads. This was caused by GunDB occasionally failing to populate `user.is.priv` in memory or corrupted local state.
-- **Fix:**
-    - **Frontend (`upload.ts`):** Implemented an "Aggressive Session Recovery" mechanism. If the private key is missing in memory, it iterates through all `sessionStorage` items to find a matching session with a valid key pair.
-    - **Sidebar:** Added a "Log Out" button to help users reset their session.
-    - **Login:** Added a "Hard Reset" troubleshooting tool to clear all local data.
-- **Relay Server:** Fixed CORS and R2 client initialization (verified working).
+### 1. Critical Logic & Privacy
+- **Request Visibility:** Fixed `Home.tsx` to correctly filter "private" requests. They are now invisible unless the user is the owner or an invited participant (verified via `pubKey` check).
+- **Edit Submission:** Implemented full "Edit" functionality for submissions. Users can now update their title, lyrics, and replace audio/artwork files. The UI adapts to "Edit Mode" when an existing submission is present.
 
-### 2. Feature: Minimize Player
-- **UI Update:** Added a minimization toggle (Chevron Up/Down) to the Player component.
-- **Functionality:** Users can now shrink the player to a compact bar (`h-16`) to save screen space.
+### 2. UI & Branding Polish
+- **Rebranding:** Renamed app title to "MEOW" and replaced the text logo in the sidebar with the official `mewlogo.png`.
+- **Profile Enhancements:** Added `Location` and `External Links` fields to the User Profile schema. Updated `Settings` (edit), `Profile` (view/edit), and `types.ts` to support these new fields.
 
-## Verification
-- **Frontend Build:** `npm run build` passed successfully.
-- **Submission Flow:** Validated that file uploads and recordings now work, even if the in-memory session state is imperfect.
+### 3. Security Audit (Integrity Checks)
+- **Request Integrity:** Implemented cryptographic verification in `RequestDetail`. If a request's content signer does not match the declared `ownerPub`, a "Unverified Source" warning badge is displayed.
+- **Submission Integrity:** Added logic to ignore spoofed submissions where the data signer does not match the `uploaderPub`. This prevents malicious users from impersonating others in the submission list.
 
-## Next Steps (Ready for Next Session)
-- **Security Audit:** Verify permissions and overwrite protection.
-- **Deployment Prep:** Finalize environment variables and optimize build size.
+## Next Steps
+- **ACL Hardening:** Refactor the "Invite Acceptance" flow to write to the User's graph (`~User/responses`) instead of the public Request node, to prevent unauthorized status updates.
+- **Deployment:** Finalize environment variables and deploy to production.
+- **Beta Launch:** Create seed data and documentation.

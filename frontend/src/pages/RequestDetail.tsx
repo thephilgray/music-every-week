@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { SubmitTrack } from '../components/SubmitTrack';
@@ -22,9 +22,16 @@ export function RequestDetail() {
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [addToPlaylistSubmission, setAddToPlaylistSubmission] = useState<Submission | null>(null);
   const subscribedSubmissions = useRef(new Set<string>());
-  
+  const [copied, setCopied] = useState(false);
+
   // Peer Review Logic
   const [unlockedSubmissionIds, setUnlockedSubmissionIds] = useState<string[]>([]);
+
+  const copyLink = () => {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -245,15 +252,24 @@ export function RequestDetail() {
               <div className="flex flex-col md:flex-row items-center md:items-start justify-between">
                 <div className="flex items-center gap-4">
                     <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">{request.title}</h1>
-                    {isOwner && (
+                    <div className="flex items-center gap-1 mt-1">
                         <button 
-                            onClick={() => setIsEditOpen(true)}
+                            onClick={copyLink}
                             className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
-                            title="Edit Request"
+                            title="Copy Link"
                         >
-                            <Edit className="w-5 h-5" />
+                            {copied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
                         </button>
-                    )}
+                        {isOwner && (
+                            <button 
+                                onClick={() => setIsEditOpen(true)}
+                                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
+                                title="Edit Request"
+                            >
+                                <Edit className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium border mt-2 md:mt-0 ${
                     request.visibility === 'public' 
@@ -354,7 +370,12 @@ export function RequestDetail() {
                                         if (currentTrack?.id === sub.id && isPlaying) {
                                             pause();
                                         } else {
-                                            play(sub, submissions);
+                                            play(sub, submissions, {
+                                                type: 'request',
+                                                id: request.id!,
+                                                name: request.title,
+                                                link: `/request/${request.id}`
+                                            });
                                         }
                                     }}
                                     disabled={locked}

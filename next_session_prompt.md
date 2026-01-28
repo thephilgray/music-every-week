@@ -23,16 +23,17 @@ We have successfully implemented all core features and secured the application l
     *   **Smart Invites:** Public requests auto-accept participants; Private requests send pending invites.
     *   **Smart Filter:** Added "Submitted / Pass Only" filter when importing participants from previous requests.
 
-### 3. Recent Accomplishments (Session Jan 26, 2026 - Part 4)
-*   **Logic Refinement:**
-    *   Updated `CreateRequest` and `EditRequest` to handle Public/Private invite statuses automatically.
-    *   Added "Submitted / Pass" filter to `CreateRequest` import logic.
-*   **Feature Implementation:**
-    *   **Audio Comments:** Implemented `MediaRecorder` in `CommentSection` with R2 upload.
-    *   **Playlists:** Created `AddToPlaylist` modal, `Playlists` page, and updated `RequestDetail`.
-*   **Security Implementation:**
-    *   **Storage:** Implemented `X-Pub`, `X-Proof`, `X-Timestamp` verification in `relay/server.js` and `upload.ts`.
-    *   **Graph Schema:** Refactored `CreateRequest`, `SubmitTrack`, and `CommentSection` to write to User Graph (`user.get(...)`) and link to Global Graph, ensuring data ownership and immutability for others.
+### 3. Recent Accomplishments (Session Jan 27, 2026 - UI/UX Polish)
+*   **Player Experience:**
+    *   **Autoplay Fixed:** Resolved issue where player wouldn't advance to next track (state closure bug).
+    *   **Context Awareness:** Player now shows "Playing from: Request/Playlist" with a link.
+    *   **Notes/Lyrics:** Added "Notes" button to Player to view track lyrics/description.
+    *   **MiniPlayer:** Created custom `MiniPlayer` component for audio comments, replacing native `<audio>`.
+*   **UI Improvements:**
+    *   **Layout:** Fixed overlap issue where bottom content was hidden behind the fixed Player.
+    *   **Messaging:** Updated public visibility warning in `CreateRequest`.
+    *   **Sharing:** Added "Copy Link" button to `RequestDetail`.
+    *   **Edit Request:** Fixed issue where participants showed as "User" instead of their Alias.
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
@@ -42,23 +43,20 @@ We have successfully implemented all core features and secured the application l
     *   Implement "Remove Track" from playlist.
     *   Add "Play All" button on Request Detail (auto-create ephemeral playlist?).
 
-### B. UI/UX Polish (User Feedback)
-1.  **Visibility Messaging:** Update "Public" visibility warning in `CreateRequest` to clarify it should only be used for "long running sessions users have signed up for".
-2.  **Layout Fixes:** Increase bottom padding/margin on lists (Submissions, Playlists) as the fixed Player is blocking content.
-3.  **Player Features:**
-    *   **Notes/Lyrics:** Add a way to view track notes/lyrics from the Player and Submission list.
-    *   **Context Navigation:** Add a "Go to Context" link in the Player to navigate back to where the track started (Request, Profile, or Playlist).
-4.  **Audio Player:** 
-    *   **Autoplay Fix:** Debug `usePlayer` to ensure it correctly autoplays to the next track in the queue/context.
-    *   **Custom MiniPlayer:** The standard `<audio>` element in comments is functional but ugly. Create a custom `MiniPlayer` component.
-
-### C. Deployment Prep
+### B. Deployment Prep
 1.  **Environment Variables:** Audit `.env.example` and ensure all R2/Gun keys are documented.
 2.  **Build Optimization:** Check bundle size (lucide-react imports are good, but check Gun bundle).
+
+### C. New Feature: Ad-hoc Request Pool
+1.  **Goal:** Allow users to request feedback without selecting specific people, lowering the barrier to entry.
+2.  **Mechanism:**
+    *   **Opt-in:** Users can toggle "Accept Unsolicited Requests" in their settings.
+    *   **Matching:** In `CreateRequest`, add an option to "Invite Random Peers" (e.g., "Request Feedback from Community"). This selects $N$ random users from the opt-in pool.
+    *   **Flow:** Selected users receive a standard invite notification and must Accept/Decline.
 
 ## Instructions for Agent
 *   **Context:** The app is feature-complete and secured. We are now in the final "QA & Polish" phase before beta.
 *   **Focus:**
-    1.  Address User Feedback (Layout, Player Autoplay, Notes/Lyrics, Visibility Messaging).
+    1.  Deployment Preparation (Env Vars, Build).
     2.  Verify the new Security Architecture works as expected.
-    3.  Polish the Audio Comment UI.
+    3.  Implement Ad-hoc Request Pool.

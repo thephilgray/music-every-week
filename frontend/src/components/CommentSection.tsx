@@ -3,6 +3,7 @@ import { Send, Mic, Square, Trash2, Loader2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import { CommentItem } from './CommentItem';
+import { MiniPlayer } from './ui/MiniPlayer';
 import type { Comment, Notification } from '../types';
 
 interface CommentSectionProps {
@@ -214,11 +215,13 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
                        </div>
                    ) : (
                        <div className="flex items-center gap-2 w-full">
-                           <audio controls src={previewUrl!} className="h-6 flex-1" />
+                           <div className="flex-1">
+                                <MiniPlayer src={previewUrl!} />
+                           </div>
                            <button 
                              type="button" 
                              onClick={cancelRecording}
-                             className="text-gray-400 hover:text-red-400"
+                             className="text-gray-400 hover:text-red-400 p-2"
                            >
                              <Trash2 className="w-4 h-4" />
                            </button>

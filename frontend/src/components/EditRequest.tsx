@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
@@ -26,6 +26,24 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [selectedParticipants, setSelectedParticipants] = useState<Record<string, any>>(request.participants || {});
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+
+  useEffect(() => {
+      // Fetch aliases for existing participants if missing
+      Object.keys(selectedParticipants).forEach(pub => {
+          if (!selectedParticipants[pub].alias) {
+              gun.get('all_users').get(pub).once((u: any) => {
+                  if (u && u.alias) {
+                      setSelectedParticipants(prev => {
+                          if (prev[pub] && !prev[pub].alias) {
+                              return { ...prev, [pub]: { ...prev[pub], alias: u.alias } };
+                          }
+                          return prev;
+                      });
+                  }
+              });
+          }
+      });
+  }, []);
 
   const searchUsers = (term: string) => {
     setSearchTerm(term);

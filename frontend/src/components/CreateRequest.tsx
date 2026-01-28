@@ -380,7 +380,7 @@ export function CreateRequest() {
              </select>
              {visibility === 'public' && (
                 <p className="text-yellow-500 text-xs mt-1">
-                    Warning: Public requests are visible to everyone on the platform. Use sparingly.
+                    Warning: Public requests are visible to everyone on the platform. This should only be used for long running sessions users have signed up for.
                 </p>
              )}
           </div>

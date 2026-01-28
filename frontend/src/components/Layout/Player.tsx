@@ -1,5 +1,6 @@
-import React from 'react';
-import { Play, SkipBack, SkipForward, Volume2, Pause, Music } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, SkipBack, SkipForward, Volume2, Pause, Music, FileText, X, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { usePlayer } from '../../contexts/PlayerContext';
 
 const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number, onSeek: (p: number) => void }) => {
@@ -29,22 +30,10 @@ const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number
 };
 
 export function Player() {
-  const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek } = usePlayer();
+  const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, context } = usePlayer();
+  const [showLyrics, setShowLyrics] = useState(false);
 
   if (!currentTrack) {
-      return null; // Don't render empty bar at bottom if nothing playing? Or render placeholder?
-                   // The original code rendered a placeholder. Let's keep it but make it hidden or minimal if preferred.
-                   // User asked for specific changes, but didn't say to remove the placeholder.
-                   // I'll keep the original placeholder behavior but return null if nothing to match typical persistent players, 
-                   // OR keep the placeholder.
-      /* Original:
-      return (
-        <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-center text-gray-500 text-sm">
-            Select a track to start playing
-        </div>
-      );
-      */
-     // Let's stick to the previous return for consistency.
      return (
         <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-center text-gray-500 text-sm z-50 fixed bottom-0 w-full">
             Select a track to start playing
@@ -64,21 +53,58 @@ export function Player() {
   };
 
   return (
-    <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-between z-50 fixed bottom-0 w-full">
+    <>
+      {showLyrics && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowLyrics(false)}>
+           <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+               <div className="flex justify-between items-center mb-4">
+                   <h3 className="text-xl font-bold text-white">Track Notes / Lyrics</h3>
+                   <button onClick={() => setShowLyrics(false)} className="text-gray-400 hover:text-white">
+                       <X className="w-5 h-5" />
+                   </button>
+               </div>
+               <div className="flex-1 overflow-y-auto bg-gray-950 p-4 rounded text-gray-300 whitespace-pre-wrap font-mono text-sm">
+                   {currentTrack.lyrics || "No notes or lyrics available for this track."}
+               </div>
+           </div>
+        </div>
+      )}
+
+      <div className="h-24 bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-between z-50 fixed bottom-0 w-full">
       {/* Track Info */}
       <div className="w-1/3 flex items-center gap-4">
-        <div className="w-14 h-14 bg-gray-800 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="w-14 h-14 bg-gray-800 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
              {currentTrack.artworkUrl ? (
                  <img src={currentTrack.artworkUrl} alt={currentTrack.title} className="w-full h-full object-cover" />
              ) : (
                  <Music className="text-gray-600" />
              )}
+             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                 <button onClick={() => setShowLyrics(true)} title="View Notes/Lyrics">
+                     <FileText className="w-6 h-6 text-white" />
+                 </button>
+             </div>
         </div>
         <div className="min-w-0">
-           <div className="text-white font-medium truncate">{currentTrack.title}</div>
+           <div className="text-white font-medium truncate flex items-center gap-2">
+               {currentTrack.title}
+               {currentTrack.lyrics && (
+                   <button onClick={() => setShowLyrics(true)} className="text-gray-500 hover:text-blue-400" title="View Notes">
+                       <FileText className="w-3 h-3" />
+                   </button>
+               )}
+           </div>
            <div className="text-gray-500 text-xs truncate">
              {currentTrack.byline || (currentTrack.uploaderPub ? `${currentTrack.uploaderPub.substring(0, 8)}...` : 'Unknown')}
            </div>
+           {context && (
+               <div className="text-xs text-blue-500 truncate mt-0.5 flex items-center gap-1">
+                   <span>Playing from:</span>
+                   <Link to={context.link} className="hover:underline flex items-center gap-0.5">
+                       {context.name} <ExternalLink className="w-2 h-2" />
+                   </Link>
+               </div>
+           )}
         </div>
       </div>
 
@@ -129,5 +155,6 @@ export function Player() {
           <div className="w-24 h-1 bg-gray-800 rounded-full hidden md:block"></div>
       </div>
     </div>
+    </>
   );
 }

@@ -5,7 +5,8 @@ interface PlayerContextType {
   currentTrack: Submission | null;
   isPlaying: boolean;
   queue: Submission[];
-  play: (track: Submission, newQueue?: Submission[]) => void;
+  context?: { type: 'request' | 'playlist' | 'profile', id: string, name: string, link: string };
+  play: (track: Submission, newQueue?: Submission[], context?: { type: 'request' | 'playlist' | 'profile', id: string, name: string, link: string }) => void;
   pause: () => void;
   resume: () => void;
   next: () => void;
@@ -23,8 +24,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [context, setContext] = useState<PlayerContextType['context']>();
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const queueRef = useRef<Submission[]>(queue);
+  const currentTrackRef = useRef<Submission | null>(currentTrack);
+
+  // Keep refs in sync
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
   // Initialize Audio Element
   useEffect(() => {
@@ -33,8 +41,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
 
     const handleEnded = () => {
+        const q = queueRef.current;
+        const c = currentTrackRef.current;
+        
+        if (c && q.length > 0) {
+             const currentIndex = q.findIndex(t => t.id === c.id);
+             if (currentIndex < q.length - 1) {
+                 setCurrentTrack(q[currentIndex + 1]);
+                 return;
+             }
+        }
         setIsPlaying(false);
-        next(); // Auto-advance
     };
 
     const handleTimeUpdate = () => {
@@ -83,9 +100,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isPlaying, currentTrack]);
 
-  const play = (track: Submission, newQueue?: Submission[]) => {
+  const play = (track: Submission, newQueue?: Submission[], newContext?: PlayerContextType['context']) => {
     if (newQueue) {
         setQueue(newQueue);
+    }
+    if (newContext) {
+        setContext(newContext);
     }
     setCurrentTrack(track);
     setIsPlaying(true);
@@ -128,6 +148,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         currentTrack, 
         isPlaying, 
         queue, 
+        context,
         play, 
         pause, 
         resume, 

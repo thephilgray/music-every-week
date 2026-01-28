@@ -64,7 +64,12 @@ export function Playlists() {
       const validTracks = results.filter(t => t !== null) as Submission[];
       
       if (validTracks.length > 0) {
-          play(validTracks[0], validTracks);
+          play(validTracks[0], validTracks, {
+              type: 'playlist',
+              id: playlist.id,
+              name: playlist.title,
+              link: '/playlists'
+          });
       } else {
           alert('Could not load tracks (they might have been deleted).');
       }

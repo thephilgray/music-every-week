@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User as UserIcon } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { MiniPlayer } from './ui/MiniPlayer';
 import type { Comment } from '../types';
 
 interface CommentItemProps {
@@ -38,9 +39,9 @@ export function CommentItem({ comment }: CommentItemProps) {
                 </span>
                 <span className="text-xs text-gray-600">{new Date(comment.createdAt).toLocaleTimeString()}</span>
              </div>
-             {comment.text && <p className="text-sm text-gray-300">{comment.text}</p>}
+             {comment.text && <p className="text-sm text-gray-300 whitespace-pre-wrap">{comment.text}</p>}
              {comment.audioUrl && (
-                <audio controls src={comment.audioUrl} className="mt-1 h-8 w-48" />
+                <MiniPlayer src={comment.audioUrl} />
              )}
          </div>
      </div>

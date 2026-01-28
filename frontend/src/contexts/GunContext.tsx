@@ -14,6 +14,7 @@ interface GunContextType {
   disconnect: () => void;
   reconnect: () => void;
   isConnected: boolean;
+  isAuthLoading: boolean;
 }
 
 const GunContext = createContext<GunContextType>({
@@ -27,6 +28,7 @@ const GunContext = createContext<GunContextType>({
   disconnect: () => {},
   reconnect: () => {},
   isConnected: true,
+  isAuthLoading: true,
 });
 
 export const useGun = () => useContext(GunContext);
@@ -38,6 +40,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthorized, setIsAuthorized] = useState<boolean | undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const disconnect = () => {
     console.log('Disconnecting Gun peers...');
@@ -91,6 +94,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     gun.on('auth', async (ack) => {
       console.log('Authentication confirmed:', ack);
       setIsLoggedIn(true);
+      setIsAuthLoading(false);
       // @ts-ignore
       const pub = gunUser.is?.pub;
       setPubKey(pub);
@@ -101,15 +105,23 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // @ts-ignore
     if (gunUser.is) {
       setIsLoggedIn(true);
+      setIsAuthLoading(false);
       // @ts-ignore
       const pub = gunUser.is.pub;
       setPubKey(pub);
       if (pub) checkAuthorization(pub);
+    } else {
+      // If not immediately logged in, give it a moment to recall from session storage
+      // If 'auth' doesn't fire within a short window, assume strictly logged out.
+      const timer = setTimeout(() => {
+         setIsAuthLoading(false);
+      }, 500); 
+      return () => clearTimeout(timer);
     }
   }, []);
 
   return (
-    <GunContext.Provider value={{ gun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected }}>
+    <GunContext.Provider value={{ gun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading }}>
       {children}
     </GunContext.Provider>
   );

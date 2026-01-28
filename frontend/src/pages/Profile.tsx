@@ -62,7 +62,7 @@ export function Profile() {
         if (data) {
             const subId = key;
             
-            gun.get('submissions').get(subId).once((subData: any) => {
+            gun.user(targetPub).get('submissions').get(subId).once((subData: any) => {
                 if (subData && subData.title) {
                      setSubmissions(prev => {
                         const exists = prev.find(s => s.id === subId);

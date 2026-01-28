@@ -11,38 +11,34 @@
 *   **Storage:** Cloudflare R2 (Authenticated Uploads).
 *   **Relay Server:** Node.js + Gun (with SEA verification).
 
-### 2. Current Status: Ready for Beta
+### 2. Current Status: Ready for Deployment
 *   **Access Modes:** Implemented "Direct Add" vs "Invite Only".
-*   **Security:** ACL hardening complete (User-Graph acceptance).
-*   **Visibility:** Strict filtering implemented in `RequestList`. Uninvited users see nothing. "Invite Only" requires acceptance.
-*   **Persistence:** Relay configured for local persistence.
-*   **Admin Tools:** Seed data generator available.
+*   **Security:** ACL hardening complete.
+*   **UX/UI:** Mobile responsiveness improved (CreatorTools, RequestDetail).
+*   **Bug Fixes:** Login flash and Profile Submissions fixed.
 
-### 3. Recent Accomplishments (Session Jan 27, 2026 - Access Modes & Prep)
-*   **Refactor:** Switched from `visibility` to `accessMode`.
-*   **Fix:** Updated `RequestList` to strictly enforce visibility rules (User must be Owner or Participant).
-*   **Docs:** Created comprehensive README and Env setup guides.
+### 3. Recent Accomplishments (Session Jan 27, 2026 - Polish & Fixes)
+*   **Fixed:** Login screen flash on refresh (Auth loading state).
+*   **Fixed:** Profile submissions not loading (Graph traversal path).
+*   **Polished:** `CreatorTools` is now responsive with Master-Detail view on mobile.
+*   **Polished:** `RequestDetail` layout verified for mobile.
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
-### A. Critical Bug Fixes (New Priority)
-1.  **Login Flash:** Fix the flash of login screen on refresh. The Auth loading state needs to handle the session recall more gracefully before rendering the unauthenticated view.
-2.  **Profile Submissions:** Fix submissions not appearing on the User Profile page. Investigate the `~User/submissions` index and the graph traversal logic in `Profile.tsx`.
-
-### B. Deployment & QA
+### A. Deployment & QA (Primary Focus)
 1.  **Deploy Relay:** Deploy the relay server to the target environment (e.g. Railway/Fly.io) and verify `radata` persistence volume.
 2.  **Deploy Frontend:** Deploy to Vercel/Netlify.
 3.  **End-to-End Test:**
-    *   Create 2 users (Creator, Invitee).
+    *   Create 2 users (Creator, Invitee) on the live site.
     *   Creator makes "Invite Only" request.
     *   Invitee accepts via Inbox.
     *   Invitee uploads track.
     *   Verify playback and data persistence after refresh.
 
-### C. Mobile Polish & UI Tweaks
-1.  **Responsiveness:** Check `RequestDetail` and `CreatorTools` on mobile width.
-2.  **Navigation:** Ensure Admin/Seed tools are accessible (or hidden) appropriately on small screens.
+### B. Future Features (Post-Launch)
+1.  **Push Notifications:** Investigate service workers for notifications.
+2.  **Audio Processing:** Client-side normalization or format conversion.
 
 ## Instructions for Agent
-*   **Focus:** Deployment support and Mobile Polish.
-*   **Goal:** Get the app running live and looking good on phones.
+*   **Focus:** Deployment validation and smoke testing.
+*   **Goal:** Confirm the system works in a real-world multi-user environment.

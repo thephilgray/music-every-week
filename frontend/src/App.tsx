@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useGun } from './contexts/GunContext';
 import { Auth } from './components/Auth';
 import { AppLayout } from './components/Layout/AppLayout';
@@ -14,7 +15,15 @@ import { Settings } from './pages/Settings';
 import { IdleMonitor } from './components/IdleMonitor';
 
 function App() {
-  const { isLoggedIn, isAuthorized, user } = useGun();
+  const { isLoggedIn, isAuthorized, user, isAuthLoading } = useGun();
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-900 text-white">
+        <Loader2 className="animate-spin h-12 w-12 text-blue-500" />
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <Auth />;

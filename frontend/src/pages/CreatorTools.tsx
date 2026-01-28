@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import type { FileRequest } from '../types';
 
@@ -214,9 +214,9 @@ export function CreatorTools() {
   if (!pubKey) return <div className="text-center py-20 text-gray-500">Please login to access Creator Tools.</div>;
 
   return (
-    <div className="flex h-[calc(100vh-theme(spacing.16))]">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-theme(spacing.16))]">
         {/* Sidebar List of Requests */}
-        <div className="w-80 border-r border-gray-800 p-4 bg-gray-950/50 overflow-y-auto">
+        <div className={`w-full md:w-80 border-r border-gray-800 p-4 bg-gray-950/50 overflow-y-auto ${selectedRequest ? 'hidden md:block' : 'block'}`}>
             {isAdmin && (
                 <div className="mb-6 p-4 bg-blue-900/20 border border-blue-900/50 rounded-lg">
                     <h3 className="text-blue-400 font-bold mb-2 text-sm uppercase">Admin Tools</h3>
@@ -263,9 +263,16 @@ export function CreatorTools() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-8 bg-gray-900/10 overflow-y-auto">
+        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest ? 'block' : 'hidden md:block'}`}>
             {selectedRequest ? (
                 <div>
+                    <button 
+                        onClick={() => setSelectedRequest(null)}
+                        className="md:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
+                    >
+                        <ArrowLeft className="w-4 h-4" /> Back to List
+                    </button>
+
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h1 className="text-2xl font-bold text-white">{selectedRequest.title}</h1>
@@ -276,12 +283,12 @@ export function CreatorTools() {
                             className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-700 transition"
                         >
                             <Download className="w-4 h-4" />
-                            Export CSV
+                            <span className="hidden sm:inline">Export CSV</span>
                         </button>
                     </div>
 
-                    <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden">
-                        <table className="w-full text-left">
+                    <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden overflow-x-auto">
+                        <table className="w-full text-left whitespace-nowrap">
                             <thead className="bg-gray-900 text-gray-400 text-xs uppercase font-medium">
                                 <tr>
                                     <th className="px-6 py-4">Participant</th>

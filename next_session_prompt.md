@@ -11,34 +11,30 @@
 *   **Storage:** Cloudflare R2 (Authenticated Uploads).
 *   **Relay Server:** Node.js + Gun (with SEA verification).
 
-### 2. Current Status: Ready for Deployment
-*   **Access Modes:** Implemented "Direct Add" vs "Invite Only".
-*   **Security:** ACL hardening complete.
-*   **UX/UI:** Mobile responsiveness improved (CreatorTools, RequestDetail).
-*   **Bug Fixes:** Login flash and Profile Submissions fixed.
+### 2. Current Status: Deployment Ready
+*   **Configuration:** Dockerfiles and `docker-compose.yml` created.
+*   **Documentation:** `DEPLOYMENT.md` guide available.
+*   **Code:** Bug fixes (Login, Profile) and UI Polish complete.
 
-### 3. Recent Accomplishments (Session Jan 27, 2026 - Polish & Fixes)
-*   **Fixed:** Login screen flash on refresh (Auth loading state).
-*   **Fixed:** Profile submissions not loading (Graph traversal path).
-*   **Polished:** `CreatorTools` is now responsive with Master-Detail view on mobile.
-*   **Polished:** `RequestDetail` layout verified for mobile.
+### 3. Recent Accomplishments (Session Jan 27, 2026 - Deployment Prep)
+*   **Deployment:** Created `DEPLOYMENT.md` and Docker configs.
+*   **Relay:** Hardened Dockerfile with volume and permission handling.
+*   **Frontend:** Added Dockerfile for nginx serving.
 
 ### 4. Immediate High Priority Tasks (Next Session)
 
-### A. Deployment & QA (Primary Focus)
-1.  **Deploy Relay:** Deploy the relay server to the target environment (e.g. Railway/Fly.io) and verify `radata` persistence volume.
-2.  **Deploy Frontend:** Deploy to Vercel/Netlify.
-3.  **End-to-End Test:**
+### A. Deployment Execution
+1.  **Follow Guide:** User to execute steps in `DEPLOYMENT.md` for Railway and Vercel.
+2.  **Verify Relay:** Check `/health` endpoint on deployed Relay.
+
+### B. Live QA (Smoke Test)
+1.  **End-to-End Test:**
     *   Create 2 users (Creator, Invitee) on the live site.
     *   Creator makes "Invite Only" request.
     *   Invitee accepts via Inbox.
     *   Invitee uploads track.
     *   Verify playback and data persistence after refresh.
 
-### B. Future Features (Post-Launch)
-1.  **Push Notifications:** Investigate service workers for notifications.
-2.  **Audio Processing:** Client-side normalization or format conversion.
-
 ## Instructions for Agent
-*   **Focus:** Deployment validation and smoke testing.
+*   **Focus:** Assisting user with any deployment errors and running the QA checklist.
 *   **Goal:** Confirm the system works in a real-world multi-user environment.

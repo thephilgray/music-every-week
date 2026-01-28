@@ -1,0 +1,25 @@
+services:
+  relay:
+    build: 
+      context: ./infrastructure/relay
+    ports:
+      - "8765:8080"
+    environment:
+      - PORT=8080
+      - GUN_FILE=/data/radata
+      # Add R2 Credentials here for local testing with real storage
+      # - R2_ACCOUNT_ID=...
+    volumes:
+      - relay_data:/data
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_RELAY_URL=http://localhost:8765
+
+volumes:
+  relay_data:

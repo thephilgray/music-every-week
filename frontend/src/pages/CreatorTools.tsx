@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
+import { EditRequest } from '../components/EditRequest';
 import type { FileRequest } from '../types';
 
 interface ParticipantRow {
@@ -19,6 +21,8 @@ export function CreatorTools() {
   const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
 
   useEffect(() => {
     if (!user) return;
@@ -59,25 +63,112 @@ export function CreatorTools() {
     });
   }, [user]);
 
-  // Deep load participants when request selected
+  // 1. Fetch Request Data
+  useEffect(() => {
+      if (!selectedRequest || !selectedRequest.id) return;
+
+      const reqId = selectedRequest.id;
+      const reqNode = gun.get('file_requests').get(reqId);
+
+      // Subscribe to Root
+      reqNode.on((data: any) => {
+          if (!data) return;
+          
+          setSelectedRequest(prev => {
+              if (!prev || prev.id !== reqId) return prev;
+
+              let parsedEmails: string[] = [];
+              if (typeof data.pending_emails === 'string') {
+                  try { parsedEmails = JSON.parse(data.pending_emails); } catch (e) {}
+              } else if (Array.isArray(data.pending_emails)) {
+                  parsedEmails = data.pending_emails;
+              }
+
+              // CRITICAL FIX: Do not overwrite detailed participants with a Gun reference from the root node
+              let participantsUpdate = {};
+              if (typeof data.participants === 'string') {
+                  // Legacy string format - we MUST use this if present
+                  try { participantsUpdate = { participants: JSON.parse(data.participants) }; } catch (e) {}
+              } else if (data.participants && typeof data.participants === 'object' && !('#' in data.participants)) {
+                  // It's a real object (not a reference), so we can use it (rare in Gun for sub-nodes)
+                  // But usually, we rely on the specific .get('participants') subscription.
+                  // To be safe, if we already have detailed participants, we might skip this unless it looks "better".
+                  // For now, if it's NOT a reference, we treat it as valid data.
+                  // However, often 'root' updates sends the reference. 
+                  // If data.participants has keys other than '_', it might be data.
+              } else {
+                  // It is likely a reference (has '#') or empty or null.
+                  // We explicitly DO NOT include 'participants' in this update to avoid overwriting 
+                  // the state maintained by the specific participants subscription.
+                  // So participantsUpdate remains {}.
+              }
+
+              // If participantsUpdate is empty, we don't want to accidentally spread 'undefined' or empty object 
+              // over our existing valid participants.
+              // So we construct the update object carefully.
+              
+              const update: any = { ...data, pending_emails: parsedEmails };
+              
+              // Only apply participants update if we actually parsed something valid (legacy string)
+              if (Object.keys(participantsUpdate).length > 0) {
+                  update.participants = (participantsUpdate as any).participants;
+              } else {
+                  // Remove participants from 'data' to prevent overwriting with the raw reference/undefined
+                  delete update.participants;
+              }
+
+              return { ...prev, ...update };
+          });
+      });
+
+      // Subscribe to Participants Node
+      reqNode.get('participants').on((parts: any) => {
+          if (parts && typeof parts === 'object') {
+              const cleanParts: any = {};
+              Object.keys(parts).forEach(k => {
+                  if (k !== '_' && parts[k]) cleanParts[k] = parts[k];
+              });
+
+              setSelectedRequest(prev => {
+                  if (!prev || prev.id !== reqId) return prev;
+                  
+                  const prevParts = prev.participants;
+                  // Check if previous participants was a Gun reference (has '#')
+                  const isPrevRef = prevParts && typeof prevParts === 'object' && '#' in prevParts;
+                  const newHasData = Object.keys(cleanParts).length > 0;
+                  const prevHasData = prevParts && Object.keys(prevParts).length > 0;
+
+                  // Defensive Merge Strategy:
+                  // If we receive an empty update, but we already have valid data (that isn't just a reference),
+                  // assume it's a transient glitch or race condition and ignore it.
+                  if (!newHasData && prevHasData && !isPrevRef) {
+                      return prev;
+                  }
+                  
+                  return { ...prev, participants: cleanParts };
+              });
+          }
+      });
+  }, [selectedRequest?.id, gun]);
+
+  // 2. Process Data into Rows
   useEffect(() => {
       if (!selectedRequest) {
           setParticipants([]);
           return;
       }
 
-      // If participants is a reference (link), we might need to load it explicitly if not already loaded by map()
-      // But typically we can just iterate the keys if we have the node.
+      const rows = new Map<string, ParticipantRow>();
       
-      const rows: ParticipantRow[] = [];
-      const participantsData = selectedRequest.participants || {};
+      const updateParticipants = () => {
+          setParticipants(Array.from(rows.values()));
+      };
 
-      // Process existing participants (Users)
+      // Process Participants
+      const participantsData = selectedRequest.participants || {};
       Object.entries(participantsData).forEach(([pub, data]: [string, any]) => {
-          // If data is just a reference (string starting with #), we can't read it directly here without loading.
-          // But assuming `map()` or local cache has it, or it was put as an object.
           if (typeof data === 'object' && data !== null) {
-              rows.push({
+              rows.set(pub, {
                   id: pub,
                   name: data.alias || 'Unknown User',
                   contact: data.email || pub,
@@ -89,22 +180,85 @@ export function CreatorTools() {
           }
       });
 
-      // Process pending emails
+      // Process Pending Emails
       if (selectedRequest.pending_emails) {
           selectedRequest.pending_emails.forEach((email: string) => {
-              rows.push({
-                  id: email,
-                  name: 'Invited Guest',
-                  contact: email,
-                  status: 'invited',
-                  type: 'email'
-              });
+              if (!rows.has(email)) {
+                  rows.set(email, {
+                      id: email,
+                      name: email,
+                      contact: email,
+                      status: 'invited',
+                      type: 'email'
+                  });
+              }
           });
       }
 
-      setParticipants(rows);
+      updateParticipants();
 
-  }, [selectedRequest]);
+      // Fetch Submissions to update status
+      gun.get('file_requests').get(selectedRequest.id!).get('submissions').map().on((sub: any) => {
+          if (!sub || !sub.uploaderPub) return;
+          const pub = sub.uploaderPub;
+          
+          if (!rows.has(pub)) {
+              rows.set(pub, {
+                  id: pub,
+                  name: 'Loading...',
+                  contact: pub,
+                  status: 'submitted',
+                  type: 'user',
+                  extensionHours: 0,
+                  hasPass: false
+              });
+              gun.get('all_users').get(pub).once((u: any) => {
+                  if (u && u.alias) {
+                      const p = rows.get(pub);
+                      if (p) {
+                          rows.set(pub, { ...p, name: u.alias });
+                          updateParticipants();
+                      }
+                  }
+              });
+              updateParticipants();
+          } else {
+             const p = rows.get(pub);
+             if (p && p.status !== 'submitted') {
+                 rows.set(pub, { ...p, status: 'submitted' });
+                 updateParticipants();
+             }
+          }
+      });
+
+      // Fetch Profiles
+      rows.forEach((row, pub) => {
+          if (row.type === 'user') {
+              gun.get('all_users').get(pub).once((u: any) => {
+                  if (u) {
+                       let changed = false;
+                       let newName = row.name;
+                       let newContact = row.contact;
+
+                       if (u.alias && (row.name !== u.alias || row.name === 'Loading...')) {
+                           newName = u.alias;
+                           changed = true;
+                       }
+                       if (u.email && (row.contact === pub || !row.contact)) {
+                           newContact = u.email;
+                           changed = true;
+                       }
+
+                       if (changed) {
+                           rows.set(pub, { ...row, name: newName, contact: newContact });
+                           updateParticipants();
+                       }
+                  }
+              });
+          }
+      });
+
+  }, [selectedRequest, gun]);
 
   const generateInvite = () => {
       const code = Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -177,14 +331,23 @@ export function CreatorTools() {
 
   const grantPass = (pub: string) => {
       if (!selectedRequest || !selectedRequest.id) return;
-      if (typeof selectedRequest.participants === 'string') {
-          alert("This request uses an old data format. Cannot grant pass.");
-          return;
-      }
-
-      const newPassStatus = !participants.find(p => p.id === pub)?.hasPass;
       
-      gun.get('file_requests').get(selectedRequest.id).get('participants').get(pub).get('hasPass').put(newPassStatus);
+      const newPassStatus = !participants.find(p => p.id === pub)?.hasPass;
+
+      // Handle Legacy String Format Safely
+      if (typeof selectedRequest.participants === 'string' || (selectedRequest as any)._participantsWasString) {
+           // We need to fetch the current parsed object from our state (which is parsed), update it, and write it back as a string
+           // Actually, selectedRequest.participants in state IS the parsed object if we did it right in useEffect.
+           // But to be safe and atomic, we should clone what we have.
+           const currentParticipants = { ...selectedRequest.participants };
+           if (currentParticipants[pub]) {
+               currentParticipants[pub] = { ...currentParticipants[pub], hasPass: newPassStatus };
+           }
+           gun.get('file_requests').get(selectedRequest.id).get('participants').put(JSON.stringify(currentParticipants));
+      } else {
+          // Standard Graph Update
+          gun.get('file_requests').get(selectedRequest.id).get('participants').get(pub).get('hasPass').put(newPassStatus);
+      }
 
       setParticipants(prev => prev.map(p => 
         p.id === pub ? { ...p, hasPass: newPassStatus } : p
@@ -275,7 +438,23 @@ export function CreatorTools() {
 
                     <div className="flex items-center justify-between mb-8">
                         <div>
-                            <h1 className="text-2xl font-bold text-white">{selectedRequest.title}</h1>
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-2xl font-bold text-white">{selectedRequest.title}</h1>
+                                <Link 
+                                    to={`/request/${selectedRequest.id}`} 
+                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                    title="Open Request Page"
+                                >
+                                    <ExternalLink className="w-5 h-5" />
+                                </Link>
+                                <button 
+                                    onClick={() => setIsEditOpen(true)}
+                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                    title="Edit Request"
+                                >
+                                    <Edit className="w-5 h-5" />
+                                </button>
+                            </div>
                             <p className="text-gray-400">Manage participants and exports</p>
                         </div>
                         <button 
@@ -288,11 +467,22 @@ export function CreatorTools() {
                     </div>
 
                     <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden overflow-x-auto">
+                        <div className="p-4 border-b border-gray-800 flex justify-end">
+                            <select
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value)}
+                                className="bg-gray-900 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:border-blue-500 outline-none"
+                            >
+                                <option value="all">All Statuses</option>
+                                <option value="submitted">Submitted</option>
+                                <option value="pending">Pending / Invited</option>
+                                <option value="accepted">Accepted</option>
+                            </select>
+                        </div>
                         <table className="w-full text-left whitespace-nowrap">
                             <thead className="bg-gray-900 text-gray-400 text-xs uppercase font-medium">
                                 <tr>
                                     <th className="px-6 py-4">Participant</th>
-                                    <th className="px-6 py-4">Contact</th>
                                     <th className="px-6 py-4">Status</th>
                                     <th className="px-6 py-4">Extensions</th>
                                     <th className="px-6 py-4">Pass</th>
@@ -300,16 +490,24 @@ export function CreatorTools() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-800">
-                                {participants.map((p, i) => (
+                                {participants.filter(p => {
+                                    if (filterStatus === 'all') return true;
+                                    if (filterStatus === 'submitted') return p.status === 'submitted';
+                                    if (filterStatus === 'pending') return p.status === 'pending' || p.status === 'invited';
+                                    return p.status === filterStatus;
+                                }).map((p, i) => (
                                     <tr key={i} className="text-sm hover:bg-gray-900/50 transition-colors">
                                         <td className="px-6 py-4 text-white font-medium">
-                                            {p.name}
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-400 font-mono text-xs">
-                                            {p.contact}
+                                            {p.type === 'user' ? (
+                                                <Link to={`/profile/${p.id}`} className="hover:text-blue-400 hover:underline">
+                                                    {p.name}
+                                                </Link>
+                                            ) : (
+                                                <span className="text-gray-300">{p.name}</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs border ${p.status === 'joined' || p.status === 'accepted' 
+                                            <span className={`px-2 py-1 rounded-full text-xs border ${p.status === 'joined' || p.status === 'accepted' || p.status === 'submitted'
                                                 ? 'bg-green-900/20 text-green-400 border-green-900/50'
                                                 : 'bg-yellow-900/20 text-yellow-400 border-yellow-900/50'
                                             }`}>
@@ -352,7 +550,7 @@ export function CreatorTools() {
                                 ))}
                                 {participants.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                             <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
                                             No participants found.
                                         </td>
@@ -369,6 +567,17 @@ export function CreatorTools() {
                 </div>
             )}
         </div>
+        
+        {isEditOpen && selectedRequest && (
+            <EditRequest 
+                request={selectedRequest}
+                onClose={() => setIsEditOpen(false)}
+                onUpdate={() => {
+                    // Refresh not strictly needed as Gun is realtime, but could force refetch if needed
+                    setSelectedRequest({ ...selectedRequest }); 
+                }}
+            />
+        )}
     </div>
   );
 }

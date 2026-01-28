@@ -7,10 +7,11 @@ const IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 export function IdleMonitor() {
   const { isConnected, disconnect, reconnect } = useGun();
   const { isPlaying } = usePlayer();
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(0);
   const [isIdle, setIsIdle] = useState(false);
 
   useEffect(() => {
+    lastActivityRef.current = Date.now();
     const handleActivity = () => {
       lastActivityRef.current = Date.now();
       if (isIdle) {

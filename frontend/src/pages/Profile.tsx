@@ -46,12 +46,23 @@ export function Profile() {
     // 1. Fetch Profile
     gun.get('all_users').get(targetPub).on((data: any) => {
         if (data) {
-            setProfile({ ...data, pub: targetPub });
+            let parsedLinks = [];
+            if (typeof data.links === 'string') {
+                try {
+                    parsedLinks = JSON.parse(data.links);
+                } catch (e) {
+                    parsedLinks = [];
+                }
+            } else if (Array.isArray(data.links)) {
+                parsedLinks = data.links;
+            }
+
+            setProfile({ ...data, pub: targetPub, links: parsedLinks });
             if (isEditing === false) { // Don't overwrite if editing
                 setEditAlias(data.alias || '');
                 setEditBio(data.bio || '');
                 setEditLocation(data.location || '');
-                setEditLinks(data.links || []);
+                setEditLinks(parsedLinks);
             }
             setLoading(false);
         }
@@ -112,7 +123,7 @@ export function Profile() {
               alias: editAlias,
               bio: editBio,
               location: editLocation,
-              links: editLinks,
+              links: JSON.stringify(editLinks),
               avatarUrl: avatarUrl || ''
           };
           

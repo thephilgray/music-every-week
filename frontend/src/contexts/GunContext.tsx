@@ -34,8 +34,10 @@ const GunContext = createContext<GunContextType>({
 export const useGun = () => useContext(GunContext);
 
 export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [pubKey, setPubKey] = useState<string | undefined>(undefined);
+  // @ts-ignore
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!gunUser.is);
+  // @ts-ignore
+  const [pubKey, setPubKey] = useState<string | undefined>(() => gunUser.is?.pub);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean | undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -104,12 +106,13 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Also check if already logged in (recalled from session)
     // @ts-ignore
     if (gunUser.is) {
-      setIsLoggedIn(true);
       setIsAuthLoading(false);
       // @ts-ignore
       const pub = gunUser.is.pub;
-      setPubKey(pub);
-      if (pub) checkAuthorization(pub);
+      if (pub) {
+          setPubKey(pub);
+          checkAuthorization(pub);
+      }
     } else {
       // If not immediately logged in, give it a moment to recall from session storage
       // If 'auth' doesn't fire within a short window, assume strictly logged out.

@@ -250,7 +250,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 id: notifId,
                 type: 'submission',
                 message: `You were added as a collaborator on "${title}"`,
-                link: `/request/${requestId}`,
+                link: `/request/${requestId}?submission=${submissionId}`,
                 fromPub: pubKey as string,
                 createdAt: Date.now(),
                 read: false
@@ -266,7 +266,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     id: notifId,
                     type: 'submission',
                     message: `New submission "${title}" on "${req.title}"`,
-                    link: `/request/${requestId}`,
+                    link: `/request/${requestId}?submission=${submissionId}`,
                     fromPub: pubKey as string,
                     createdAt: Date.now(),
                     read: false

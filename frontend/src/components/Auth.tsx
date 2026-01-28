@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useGun } from '../contexts/GunContext';
 
 export function Auth() {
@@ -6,19 +6,18 @@ export function Auth() {
   const [alias, setAlias] = useState('');
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
-  const [isSignup, setIsSignup] = useState(false);
+  const [inviteCode, setInviteCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('inviteCode') || '';
+  });
+  const [isSignup, setIsSignup] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return !!params.get('inviteCode');
+  });
   const [error, setError] = useState<string | null>(null);
 
   // Parse URL for invite code and request ID
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('inviteCode');
-    if (code) {
-        setInviteCode(code);
-        setIsSignup(true);
-    }
-  }, []);
+  // Removed useEffect as state is initialized above
 
   const checkPendingInvites = (pub: string, userEmail: string) => {
       // Check if we are landing on a request page

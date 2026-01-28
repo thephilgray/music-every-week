@@ -10,6 +10,7 @@ export function MiniPlayer({ src }: MiniPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -17,6 +18,7 @@ export function MiniPlayer({ src }: MiniPlayerProps) {
 
     const updateProgress = () => {
       if (audio.duration) {
+          setCurrentTime(audio.currentTime);
           setProgress((audio.currentTime / audio.duration) * 100);
       }
     };
@@ -82,7 +84,7 @@ export function MiniPlayer({ src }: MiniPlayerProps) {
              <div className="h-full bg-blue-400 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
          </div>
          <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-mono">
-             <span>{formatTime(audioRef.current?.currentTime || 0)}</span>
+             <span>{formatTime(currentTime)}</span>
              <span>{formatTime(duration)}</span>
          </div>
       </div>

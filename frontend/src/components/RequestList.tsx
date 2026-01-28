@@ -13,6 +13,7 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [myParticipation, setMyParticipation] = useState<Record<string, string>>({});
+  const [now] = useState(Date.now());
 
   // 1. Load User Participation Status
   useEffect(() => {
@@ -123,7 +124,7 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {requests.map(req => {
-        const isClosed = req.deadline && new Date(req.deadline).getTime() < Date.now();
+        const isClosed = req.deadline && new Date(req.deadline).getTime() < now;
         return (
           <RequestCard key={req.id} request={req} isClosed={!!isClosed} />
       )})}

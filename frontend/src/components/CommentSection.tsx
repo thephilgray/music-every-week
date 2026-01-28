@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Mic, Square, Trash2, Loader2 } from 'lucide-react';
+import { Send, Mic, Square, Trash2, Loader2, User } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import { CommentItem } from './CommentItem';
 import { MiniPlayer } from './ui/MiniPlayer';
-import type { Comment, Notification } from '../types';
+import type { Comment, Notification, UserProfile } from '../types';
 
 interface CommentSectionProps {
   requestId: string;
   submissionId: string;
+  highlightCommentId?: string;
 }
 
-export function CommentSection({ requestId, submissionId }: CommentSectionProps) {
-  const { gun, pubKey, user } = useGun();
+export function CommentSection({ requestId, submissionId, highlightCommentId }: CommentSectionProps) {
+  const { gun, pubKey, user, userProfile } = useGun();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   
@@ -22,8 +23,14 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   
+  // Mentions State
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<UserProfile[]>([]);
+  const [mentionedUsers, setMentionedUsers] = useState<Record<string, string>>({}); // Alias -> Pub
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Clear previous
@@ -59,6 +66,22 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
         if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [requestId, submissionId, gun]);
+
+  // Scroll to highlighted comment
+  useEffect(() => {
+      if (highlightCommentId && comments.length > 0) {
+          // Delay slightly to ensure rendering
+          const timer = setTimeout(() => {
+              const el = document.getElementById(`comment-${highlightCommentId}`);
+              if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.classList.add('bg-blue-900/30', 'ring-1', 'ring-blue-500/50');
+                  setTimeout(() => el.classList.remove('bg-blue-900/30', 'ring-1', 'ring-blue-500/50'), 3000);
+              }
+          }, 300);
+          return () => clearTimeout(timer);
+      }
+  }, [comments, highlightCommentId]);
 
   const startRecording = async () => {
     try {
@@ -105,6 +128,61 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
       setIsRecording(false);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setNewComment(val);
+
+      // Simple Mention Detection: Check if current word starts with @
+      const cursor = e.target.selectionStart || 0;
+      const textUpToCursor = val.substring(0, cursor);
+      const words = textUpToCursor.split(/\s+/);
+      const lastWord = words[words.length - 1];
+
+      if (lastWord.startsWith('@') && lastWord.length > 1) {
+          const query = lastWord.substring(1);
+          setMentionQuery(query);
+          
+          // Search Users
+          // Using a temporary map to dedup results from Gun stream
+          const resultsMap = new Map<string, UserProfile>();
+          gun.get('all_users').map().once((u: any, pub: string) => {
+              if (u && u.alias && u.alias.toLowerCase().includes(query.toLowerCase())) {
+                   if (!resultsMap.has(pub)) {
+                       resultsMap.set(pub, { ...u, pub });
+                       // Limit results to 5
+                       if (resultsMap.size <= 5) {
+                           setMentionResults(Array.from(resultsMap.values()));
+                       }
+                   }
+              }
+          });
+      } else {
+          setMentionQuery(null);
+          setMentionResults([]);
+      }
+  };
+
+  const selectMention = (user: UserProfile) => {
+      if (!mentionQuery) return;
+      
+      const val = newComment;
+      const cursor = inputRef.current?.selectionStart || val.length;
+      const textUpToCursor = val.substring(0, cursor);
+      const textAfterCursor = val.substring(cursor);
+      
+      // Replace the last word (the query) with the mention
+      const words = textUpToCursor.split(/\s+/);
+      words.pop(); // remove query
+      const newVal = [...words, `@${user.alias} `].join(' ') + textAfterCursor;
+      
+      setNewComment(newVal);
+      setMentionedUsers(prev => ({ ...prev, [user.alias]: user.pub }));
+      
+      setMentionQuery(null);
+      setMentionResults([]);
+      inputRef.current?.focus();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() && !recordedFile) return;
@@ -148,42 +226,54 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
         .get('submissions')
         .get(submissionId)
         .once((subData: any) => {
-            // Resolve if it's a pointer/reference (which it likely is now)
-            // .once() usually resolves, but let's be safe if it returns the pointer object
             const processNotification = (sub: any) => {
+                 // Notify Uploader if not self
                  if (sub && sub.uploaderPub && sub.uploaderPub !== pubKey) {
-                    console.log('Sending notification to:', sub.uploaderPub);
                     const notifId = crypto.randomUUID();
                     const notification: Notification = {
                         id: notifId,
                         type: 'comment',
                         message: `New comment on your track "${sub.title}"`,
-                        link: `/request/${requestId}`,
+                        link: `/request/${requestId}?submission=${submissionId}&comment=${id}`,
                         fromPub: pubKey as string,
                         createdAt: Date.now(),
                         read: false
                     };
-                    // Use public 'inboxes' graph since we can't write to other user's private graph
                     gun.get('inboxes').get(sub.uploaderPub).get(notifId).put(notification);
                  }
             };
+            processNotification(subData);
+        });
 
-            if (subData && !subData.uploaderPub) {
-                 // Try to fetch assuming 'subData' might be the key or pointer, 
-                 // but since we did .get(submissionId), subData should be the object.
-                 // However, if the object is purely a reference (e.g. {'#': 'soul'}), 
-                 // we might need to follow it.
-                 // Actually, standard Gun .once() returns the data. 
-                 // If the data was written as a reference, Gun follows it automatically.
-                 // The issue might be if the data is PARTIALLY loaded.
-                 processNotification(subData);
-            } else {
-                 processNotification(subData);
+        // Notify Mentioned Users
+        const processedPubs = new Set<string>();
+        // Scan for @Alias in the final text
+        const words = newComment.split(/\s+/);
+        words.forEach(word => {
+            if (word.startsWith('@')) {
+                const alias = word.substring(1).replace(/[^a-zA-Z0-9_-]/g, ''); // Simple sanitization
+                const pub = mentionedUsers[alias];
+                
+                if (pub && pub !== pubKey && !processedPubs.has(pub)) {
+                    processedPubs.add(pub);
+                    const notifId = crypto.randomUUID();
+                    const n: Notification = {
+                       id: notifId,
+                       type: 'comment',
+                       message: `You were mentioned in a comment by ${userProfile?.alias || 'someone'}`,
+                       link: `/request/${requestId}?submission=${submissionId}&comment=${id}`,
+                       fromPub: pubKey as string,
+                       createdAt: Date.now(),
+                       read: false
+                    };
+                    gun.get('inboxes').get(pub).get(notifId).put(n);
+                }
             }
         });
         
         setNewComment('');
         cancelRecording();
+        setMentionedUsers({});
 
     } catch (err) {
         console.error('Error posting comment:', err);
@@ -199,12 +289,35 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
        
        <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
           {comments.map(c => (
-             <CommentItem key={c.id} comment={c} />
+             <div key={c.id} id={`comment-${c.id}`} className="rounded transition-all duration-1000">
+                <CommentItem comment={c} />
+             </div>
           ))}
           {comments.length === 0 && <p className="text-xs text-gray-600 italic">No comments yet.</p>}
        </div>
 
-       <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+       <form onSubmit={handleSubmit} className="flex flex-col gap-2 relative">
+           {/* Mentions Dropdown */}
+           {mentionQuery && mentionResults.length > 0 && (
+               <div className="absolute bottom-full left-0 mb-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-20">
+                   {mentionResults.map(u => (
+                       <button
+                           key={u.pub}
+                           type="button"
+                           onClick={() => selectMention(u)}
+                           className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2 transition"
+                       >
+                           <div className="w-6 h-6 rounded-full bg-gray-600 overflow-hidden flex-shrink-0">
+                               {u.avatarUrl ? <img src={u.avatarUrl} className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-gray-300 mx-auto mt-1" />}
+                           </div>
+                           <div className="min-w-0">
+                               <p className="text-sm text-white font-medium truncate">{u.alias}</p>
+                           </div>
+                       </button>
+                   ))}
+               </div>
+           )}
+
            {/* Recording UI */}
            {(isRecording || recordedFile) && (
                <div className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-700">
@@ -232,10 +345,11 @@ export function CommentSection({ requestId, submissionId }: CommentSectionProps)
 
            <div className="flex gap-2">
                <input 
+                  ref={inputRef}
                   type="text" 
                   value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  placeholder="Write a comment..."
+                  onChange={handleInputChange}
+                  placeholder="Write a comment... (@ to mention)"
                   className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:border-blue-500 outline-none"
                   disabled={isRecording || isUploading}
                />

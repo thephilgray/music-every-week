@@ -32,6 +32,17 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
 
+  // Sync participants if data arrives after mount (e.g. was loading or ref)
+  useEffect(() => {
+      const currentIsRefOrEmpty = !selectedParticipants || Object.keys(selectedParticipants).length === 0 || ('#' in selectedParticipants);
+      const newHasData = request.participants && Object.keys(request.participants).length > 0 && !('#' in request.participants);
+      
+      if (currentIsRefOrEmpty && newHasData) {
+          console.log("[EditRequest] Syncing participants from props (late arrival)");
+          setSelectedParticipants(request.participants || {});
+      }
+  }, [request.participants]);
+
   useEffect(() => {
       // Parse pending emails
       if (request.pending_emails) {
@@ -142,17 +153,32 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         deadline,
         accessMode,
         artworkUrl,
-        participants: JSON.stringify(finalParticipants) as any,
+        // participants: handled below as graph node
         pending_emails: JSON.stringify(pendingEmails) as any
       };
 
       await gun.get('file_requests').get(request.id).put(updates);
 
+      // Handle Participants (Graph Mode)
+      // 1. Get current keys to identify deletions
+      const oldParticipants = request.participants || {};
+      const newParticipants = { ...finalParticipants };
+      
+      // 2. Mark removed users as null
+      Object.keys(oldParticipants).forEach(key => {
+          if (!newParticipants[key]) {
+              newParticipants[key] = null;
+          }
+      });
+      
+      // 3. Save participants node
+      await gun.get('file_requests').get(request.id).get('participants').put(newParticipants);
+
       // Notify New Participants
       const existingParticipants = request.participants || {};
-      const newParticipants = Object.keys(finalParticipants).filter(pub => !existingParticipants[pub]);
+      const addedParticipants = Object.keys(finalParticipants).filter(pub => !existingParticipants[pub]);
       
-      newParticipants.forEach(partPub => {
+      addedParticipants.forEach((partPub: string) => {
           if (partPub === pubKey) return;
           
           const notifId = crypto.randomUUID();

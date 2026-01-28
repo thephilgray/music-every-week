@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -12,6 +12,7 @@ import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { gun, pubKey, user } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
@@ -24,6 +25,10 @@ export function RequestDetail() {
   const [addToPlaylistSubmission, setAddToPlaylistSubmission] = useState<Submission | null>(null);
   const subscribedSubmissions = useRef(new Set<string>());
   const [copied, setCopied] = useState(false);
+
+  // Deep Link Params
+  const linkedSubmissionId = searchParams.get('submission');
+  const linkedCommentId = searchParams.get('comment');
 
   // Access Mode Logic
   const [myParticipationStatus, setMyParticipationStatus] = useState<'pending' | 'accepted' | 'declined' | null>(null);
@@ -166,7 +171,7 @@ export function RequestDetail() {
   }, [request, pubKey, myParticipationStatus]);
 
   // Deadline Logic
-  const now = Date.now();
+  const [now] = useState(Date.now());
   let deadlineTime = 0;
   let isPastDeadline = false;
   let extensionHours = 0;
@@ -255,6 +260,27 @@ export function RequestDetail() {
           });
       }
   };
+
+  // Deep Link Handling Effect
+  useEffect(() => {
+      if (linkedSubmissionId && submissions.length > 0) {
+          const sub = submissions.find(s => s.id === linkedSubmissionId);
+          // Check if visible (not locked)
+          if (sub && !isLocked(sub)) {
+              setExpandedSubmissionId(linkedSubmissionId);
+              
+              // Scroll to submission
+              setTimeout(() => {
+                  const el = document.getElementById(`submission-${linkedSubmissionId}`);
+                  if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.classList.add('ring-2', 'ring-blue-500');
+                      setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500'), 2500);
+                  }
+              }, 600);
+          }
+      }
+  }, [linkedSubmissionId, submissions.length]); // Intentionally minimal deps
 
   if (!request) {
       return (
@@ -397,7 +423,7 @@ export function RequestDetail() {
                     const isMySubmission = sub.uploaderPub === pubKey;
                     
                     return (
-                    <div key={sub.id} className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group`}>
+                    <div id={`submission-${sub.id}`} key={sub.id} className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group`}>
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0 relative">
                                 {sub.artworkUrl && !locked ? (
@@ -484,7 +510,11 @@ export function RequestDetail() {
                         </div>
                         
                         {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-                            <CommentSection requestId={id} submissionId={sub.id} />
+                            <CommentSection 
+                                requestId={id} 
+                                submissionId={sub.id} 
+                                highlightCommentId={linkedCommentId || undefined}
+                            />
                         )}
                     </div>
                 )})}

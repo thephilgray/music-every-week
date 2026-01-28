@@ -92,7 +92,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         audio.play().then(() => setIsPlaying(true)).catch(e => console.error("Playback failed", e));
     } else {
         audio.pause();
-        setIsPlaying(false);
+        if (isPlaying) setIsPlaying(false);
     }
   }, [currentTrack]);
 

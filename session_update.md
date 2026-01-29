@@ -18,6 +18,10 @@
     *   Relay URL: `https://mew2-relay-service-a65bc79-6xaixpnemq-uw.a.run.app`
     *   Health Check: Passed.
 
+### 4. Frontend Deployment
+*   **Action:** Deployed `frontend` to Vercel via CLI.
+*   **URL:** https://frontend-five-lime-89.vercel.app
+*   **Configuration:** `VITE_RELAY_URL` set to production relay.
+
 ## Next Steps
-*   **Deploy Frontend:** Deploy `frontend` to Vercel with `VITE_RELAY_URL`.
 *   **QA:** Perform the End-to-End smoke test on the live URLs, specifically testing the "Scale-to-Zero" persistence.

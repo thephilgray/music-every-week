@@ -35,7 +35,9 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
           user.get('my_invites').get(code).put(true);
       }
       
-      setInviteCode(code);
+      // Generate full URL
+      const url = `${window.location.origin}/?inviteCode=${code}`;
+      setInviteCode(url);
       setCopied(false);
       setShowInvite(true);
       setDropdownOpen(false);
@@ -178,18 +180,18 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                     </div>
                     <h3 className="text-xl font-bold text-white mb-2">Invite a Friend</h3>
                     <p className="text-gray-400 text-sm">
-                        Share this code with a friend to let them join the community.
+                        Share this link with a friend to let them join the community.
                     </p>
                 </div>
 
                 <div className="bg-black/50 border border-gray-700 rounded-lg p-4 flex items-center justify-between mb-4">
-                    <span className="font-mono text-xl text-white tracking-widest font-bold">
+                    <span className="font-mono text-sm text-white break-all pr-2">
                         {inviteCode}
                     </span>
                     <button 
                         onClick={copyToClipboard}
-                        className="p-2 hover:bg-gray-700 rounded transition text-gray-400 hover:text-white"
-                        title="Copy Code"
+                        className="p-2 hover:bg-gray-700 rounded transition text-gray-400 hover:text-white shrink-0"
+                        title="Copy Link"
                     >
                         <Copy className="w-5 h-5" />
                     </button>
@@ -197,7 +199,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
 
                 {copied && (
                     <p className="text-green-400 text-xs text-center mb-4 animate-pulse">
-                        Code copied to clipboard!
+                        Link copied to clipboard!
                     </p>
                 )}
 
@@ -205,7 +207,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                     onClick={generateInvite}
                     className="w-full py-2 text-sm text-gray-500 hover:text-white underline"
                 >
-                    Generate New Code
+                    Generate New Link
                 </button>
             </div>
         </div>

@@ -97,10 +97,30 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('Authentication confirmed:', ack);
       setIsLoggedIn(true);
       setIsAuthLoading(false);
+      
+      // Robustly determine pub key
       // @ts-ignore
-      const pub = gunUser.is?.pub;
-      setPubKey(pub);
-      if (pub) checkAuthorization(pub);
+      let pub = gunUser.is?.pub;
+      
+      // Fallback to ack if user.is isn't populated yet (common timing issue)
+      if (!pub && ack) {
+          // @ts-ignore
+          if (ack.sea && ack.sea.pub) {
+              // @ts-ignore
+              pub = ack.sea.pub;
+          } else if (ack.pub) {
+              pub = ack.pub;
+          }
+      }
+
+      console.log('Detected Pub Key:', pub);
+
+      if (pub) {
+          setPubKey(pub);
+          checkAuthorization(pub);
+      } else {
+          console.error("Auth confirmed but no public key found in 'user.is' or 'ack'.");
+      }
     });
 
     // Also check if already logged in (recalled from session)

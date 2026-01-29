@@ -70,7 +70,7 @@ export function Auth() {
              }
              // Add to Directory
              // @ts-ignore
-             const pub = user.is?.pub;
+             const pub = user.is?.pub || authAck?.sea?.pub || authAck?.pub;
              if (pub) {
                  gun.get('all_users').get(pub).put({
                      alias,
@@ -78,7 +78,7 @@ export function Auth() {
                      email, // Save email to profile
                      joinedAt: Date.now(),
                      isAdmin,
-                     invitedBy: inviterPub
+                     invitedBy: inviterPub || null
                  });
 
                  // Update Inviter's Invite Graph
@@ -103,7 +103,9 @@ export function Auth() {
       } else if (inviteCode) {
           gun.get('invites').get(inviteCode).once((data: any) => {
               if (data && data.status === 'active') {
-                  proceedWithSignup(false, data.createdBy);
+                  // Fix: Use 'from' as per ContextBar.tsx, fallback to 'createdBy' for backward compat
+                  const inviter = data.from || data.createdBy;
+                  proceedWithSignup(false, inviter);
               } else {
                   setError("Invalid or Expired Invite Code");
               }
@@ -141,7 +143,24 @@ export function Auth() {
            } else {
                // Success path
                console.log("Login successful with full key pair.");
-               // Optional: Update last login or similar, but for now just let the state update trigger the UI
+               
+               // Ensure we write to Directory (robust pub check)
+               // @ts-ignore
+               const pub = user.is?.pub || ack?.sea?.pub || ack?.pub;
+               
+               if (pub) {
+                   // On Login: Only ensure existence and update alias.
+                   // Do NOT overwrite email (it is empty here), joinedAt, or use undefined signup variables.
+                   gun.get('all_users').get(pub).put({
+                       alias,
+                       pub
+                   });
+                   
+                   // Check for Auto-Join only if email was somehow captured (unlikely on login) or fetch from profile
+                   // For now, we skip checkPendingInvites on simple login to avoid wiping data or missing context
+               } else {
+                   console.error("Could not write to Directory: Pub key missing despite success.");
+               }
            }
         }
       });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2 } from 'lucide-react';
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
+import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -10,7 +10,8 @@ import type { UserProfile, Submission, FileRequest } from '../types';
 export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
   const [searchParams] = useSearchParams();
-  const { gun, user, pubKey } = useGun();
+  const navigate = useNavigate();
+  const { gun, user, pubKey, isAdmin } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
   
@@ -162,6 +163,20 @@ export function Profile() {
       setEditLinks(newLinks);
   };
 
+  const handleAdminDelete = async () => {
+      if (!confirm(`Are you sure you want to remove ${profile?.alias} from the directory? This hides them from search but preserves their history.`)) return;
+      if (!targetPub) return;
+
+      try {
+          await gun.get('all_users').get(targetPub).put(null);
+          success("User removed from directory.");
+          navigate('/directory');
+      } catch (e) {
+          console.error(e);
+          error("Failed to remove user.");
+      }
+  };
+
   if (loading && !profile) {
       return <div className="p-8 text-center text-gray-500">Loading Profile...</div>;
   }
@@ -199,6 +214,15 @@ export function Profile() {
                                 className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
                             >
                                 <Edit className="w-4 h-4" />
+                            </button>
+                        )}
+                        {isAdmin && !isOwnProfile && (
+                            <button 
+                                onClick={handleAdminDelete}
+                                className="p-2 text-red-400 hover:text-red-200 bg-red-900/20 rounded-full hover:bg-red-900/40 border border-red-900/50 transition"
+                                title="Admin: Remove from Directory"
+                            >
+                                <ShieldAlert className="w-4 h-4" />
                             </button>
                         )}
                     </div>

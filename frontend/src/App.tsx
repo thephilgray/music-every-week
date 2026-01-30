@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useGun } from './contexts/GunContext';
-import { Auth } from './components/Auth';
 import { AppLayout } from './components/Layout/AppLayout';
 import { Home } from './pages/Home';
 import { Inbox } from './pages/Inbox';
@@ -14,6 +13,7 @@ import { Playlists } from './pages/Playlists';
 import { Settings } from './pages/Settings';
 import { ToastProvider } from './contexts/ToastContext';
 import { IdleMonitor } from './components/IdleMonitor';
+import { LandingPage } from './pages/LandingPage';
 
 function App() {
   const { isLoggedIn, isAuthorized, user, isAuthLoading } = useGun();
@@ -29,7 +29,7 @@ function App() {
   if (!isLoggedIn) {
     return (
       <ToastProvider>
-        <Auth />
+        <LandingPage />
       </ToastProvider>
     );
   }

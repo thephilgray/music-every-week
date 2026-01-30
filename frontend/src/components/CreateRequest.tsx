@@ -77,12 +77,14 @@ export function CreateRequest() {
     const requests: FileRequest[] = [];
     gun.get('file_requests').map().once((data: any, id: string) => {
       if (data && data.title) {
-        requests.push({ ...data, id });
-        // Simple distinct/sort could be added here, but for now just pushing
-        setExistingRequests([...requests]); // Update state (triggers re-render)
+        // Filter: Only show my requests or public/direct requests
+        if (data.ownerPub === pubKey || data.accessMode === 'direct') {
+            requests.push({ ...data, id });
+            setExistingRequests([...requests]); 
+        }
       }
     });
-  }, [gun]);
+  }, [gun, pubKey]);
 
   const handleImportSelect = async (requestId: string) => {
     setSelectedImportId(requestId);
@@ -94,78 +96,61 @@ export function CreateRequest() {
     
     console.log('Importing participants from:', requestId, 'Filter:', importFilter);
 
-    // Fetch submissions or participants depending on filter
-    // Strategy: 
-    // If 'all': Get all participants from the previous request object (if available) OR scan submissions.
-    // Ideally we look at the 'participants' field of the previous request.
-    
-    // Let's try to get the request object first to see its participants list
-    gun.get('file_requests').get(requestId).once((reqData: any) => {
-        if (reqData && reqData.participants) {
-            let parts: Record<string, any> = {};
-            if (typeof reqData.participants === 'string') {
-                try { parts = JSON.parse(reqData.participants); } catch (e) {}
-            } else {
-                parts = reqData.participants;
-            }
+    // We need to track submissions if filtering by 'submitted'
+    const submitters = new Set<string>();
+    if (importFilter === 'submitted') {
+         // This might be slow if there are many submissions, but necessary for filter
+         await new Promise<void>(resolve => {
+             let count = 0;
+             let done = false;
+             // Timeout safety
+             setTimeout(() => { done = true; resolve(); }, 1000);
+             
+             gun.get('file_requests').get(requestId).get('submissions').map().once((sub: any) => {
+                 if (done) return;
+                 if (sub && sub.uploaderPub) submitters.add(sub.uploaderPub);
+                 count++; 
+                 // Gun doesn't tell us when map is done, so we rely on stream or timeout
+             });
+         });
+    }
 
-            // First fetch submissions to determine who actually participated
-            const submitters = new Set<string>();
-            if (importFilter === 'submitted') {
-                 gun.get('file_requests').get(requestId).get('submissions').map().once((sub: any) => {
-                     if (sub && sub.uploaderPub) submitters.add(sub.uploaderPub);
-                 });
-            }
+    // Subscribe to the participant list
+    gun.get('request_participants').get(requestId).map().once(async (data: any, pub: string) => {
+        if (!data || !pub) return;
+        if (pub === pubKey) return; // Skip self
 
-            // Small delay to ensure submissions are gathered if filtering by submitted
-            // A more robust way would be to promisify the submission fetch, but for Gun sync this is tricky.
-            // However, iterating over the participants list and checking 'hasPass' is instant.
-            
-            setTimeout(() => {
-                const newParticipants: Record<string, { alias?: string, status: 'pending' | 'accepted' }> = {};
-                
-                Object.entries(parts).forEach(([pub, data]: [string, any]) => {
-                    if (pub === pubKey) return; // Skip self
+        // Filter Logic
+        if (importFilter === 'accepted' && data.status !== 'accepted') return;
+        
+        if (importFilter === 'submitted') {
+            const hasPass = data.hasPass === true;
+            const hasSubmitted = submitters.has(pub);
+            if (!hasPass && !hasSubmitted) return;
+        }
+        
+        console.log("Importing participant:", pub, data);
 
-                    // Filter Logic
-                    if (importFilter === 'accepted' && data.status !== 'accepted') return;
-                    
-                    if (importFilter === 'submitted') {
-                        const hasPass = data.hasPass === true;
-                        const hasSubmitted = submitters.has(pub);
-                        if (!hasPass && !hasSubmitted) return;
-                    }
-                    
-                    newParticipants[pub] = {
-                        status: 'pending', // Reset to pending for the NEW request
-                        alias: data.alias
-                    };
+        let alias = data.alias;
+        
+        // If alias is missing or 'Unknown', try to fetch from directory
+        if (!alias || alias === 'Unknown') {
+            await new Promise<void>(resolve => {
+                gun.get('all_users').get(pub).once((u: any) => {
+                    if (u && u.alias) alias = u.alias;
+                    resolve();
                 });
-                
-                setSelectedParticipants(prev => ({...prev, ...newParticipants}));
-            }, importFilter === 'submitted' ? 200 : 0);
-        } else {
-            // Fallback to scanning submissions if participants list is empty/old format
-             const newParticipants: Record<string, { alias?: string, status: 'pending' | 'accepted' }> = {};
-             gun.get('submissions').map().once(async (sub: any) => {
-                if (sub && sub.requestId === requestId && sub.uploaderPub) {
-                    // Everyone who submitted is definitely "Active/Accepted"
-                    if (sub.uploaderPub === pubKey) return;
-
-                    // Try to get alias
-                    let alias = 'Unknown';
-                    // Async fetch alias
-                    gun.get('all_users').get(sub.uploaderPub).once((u: any) => {
-                        if (u && u.alias) alias = u.alias;
-                        newParticipants[sub.uploaderPub] = {
-                            status: 'pending', 
-                            alias: alias
-                        };
-                        setSelectedParticipants(prev => ({...prev, ...newParticipants}));
-                    });
-                }
             });
         }
+
+        // Add to selection
+        setSelectedParticipants(prev => ({
+            ...prev,
+            [pub]: {
+                status: 'pending', 
+                alias: alias || 'Unknown' 
+            }
+        }));
     });
   };
 
@@ -206,6 +191,20 @@ export function CreateRequest() {
     setLoading(true);
 
     try {
+      // Process any lingering email input
+      let finalEmails = [...emails];
+      if (emailInput.trim()) {
+          const lingering = emailInput
+              .split(/[\n, ]+/)
+              .map(s => s.trim())
+              .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
+          if (lingering.length > 0) {
+              finalEmails = Array.from(new Set([...finalEmails, ...lingering]));
+              setEmails(finalEmails); // Update state for UI consistency (though we use var below)
+              setEmailInput('');
+          }
+      }
+
       let artworkUrl = '';
       if (file) {
         console.log('Uploading file...');
@@ -225,7 +224,7 @@ export function CreateRequest() {
       });
       
       let inviteCode = '';
-      if (emails.length > 0) {
+      if (finalEmails.length > 0) {
           inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
           // Create a reusable invite code for this request
           gun.get('invites').get(inviteCode).put({
@@ -249,7 +248,7 @@ export function CreateRequest() {
         artworkUrl,
         ownerPub: pubKey,
         createdAt: Date.now(),
-        pending_emails: JSON.stringify(emails),
+        pending_emails: JSON.stringify(finalEmails),
         inviteCode: inviteCode, // Store on request for reference
         // participants: finalParticipants -- Managed as separate graph node
       };
@@ -486,23 +485,57 @@ export function CreateRequest() {
             <div className="flex flex-col gap-2">
               <textarea 
                 value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
+                onChange={e => {
+                    const val = e.target.value;
+                    setEmailInput(val);
+                    
+                    // Auto-process on paste or delimiter
+                    if (val.includes(',') || val.includes('\n')) {
+                        const raw = val.split(/[\n,]+/);
+                        const valid: string[] = [];
+                        let remaining = '';
+
+                        raw.forEach((s, i) => {
+                            const trimmed = s.trim();
+                            // If it's the last chunk and doesn't end with delimiter, keep it as typing input
+                            // UNLESS the input ended with a delimiter
+                            const isLast = i === raw.length - 1;
+                            const endsWithDelimiter = val.trimEnd().match(/[\n,]$/);
+                            
+                            // Check for internal spaces (invalid email)
+                            const hasInternalSpace = trimmed.includes(' ');
+
+                            if (isLast && !endsWithDelimiter) {
+                                remaining = s; // Don't trim yet, user might be typing
+                            } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !emails.includes(trimmed) && !valid.includes(trimmed)) {
+                                valid.push(trimmed);
+                            }
+                        });
+                        
+                        if (valid.length > 0) {
+                            setEmails(prev => Array.from(new Set([...prev, ...valid])));
+                            // Keep only the incomplete part
+                            setEmailInput(remaining); 
+                        }
+                    }
+                }}
                 onBlur={() => {
+                    // Process remaining on blur
                     if (!emailInput.trim()) return;
-                    const raw = emailInput.split(/[\n, ]+/);
-                    const valid = raw
+                    const valid = emailInput
+                        .split(/[\n, ]+/)
                         .map(s => s.trim())
-                        .filter(s => s.length > 5 && s.includes('@') && !emails.includes(s));
+                        .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
                     
                     if (valid.length > 0) {
-                        setEmails(prev => [...prev, ...valid]);
-                        setEmailInput(''); // Clear input after successful parse
+                        setEmails(prev => Array.from(new Set([...prev, ...valid])));
+                        setEmailInput(''); 
                     }
                 }}
                 className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none h-20 text-sm"
-                placeholder="friend@example.com, team@music.com"
+                placeholder="friend@example.com (Press Enter or Comma to add)"
               />
-              <p className="text-xs text-gray-500">Paste emails here. They will be added to the list below automatically.</p>
+              <p className="text-xs text-gray-500">Paste a list of emails here. Separate with commas or newlines.</p>
             </div>
           </div>
 

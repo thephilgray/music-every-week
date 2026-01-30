@@ -172,7 +172,7 @@ export function Auth() {
            if ((!user.is || !user.is.priv) && ack.sea && ack.sea.priv) {
                console.warn("Manually injecting keys from Ack into user.is");
                // @ts-ignore
-               user.is = { ...user.is, ...ack.sea };
+               user.is = { ...user.is, ...ack.sea, alias };
                // @ts-ignore
                user._.is = user.is; // Gun internal reference
            }

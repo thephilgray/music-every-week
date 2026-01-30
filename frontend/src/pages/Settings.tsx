@@ -29,8 +29,14 @@ export function Settings() {
   // Load Initial Data
   useEffect(() => {
     // Load Username (Immutable)
+    // Prefer directory alias (userProfile) as it's reliable, fallback to session alias
     // @ts-ignore
-    if (user.is) setUsername(user.is.alias || '');
+    if (userProfile?.alias) {
+        setUsername(userProfile.alias);
+    } else if (user.is) {
+        // @ts-ignore
+        setUsername(user.is.alias || '');
+    }
 
     if (userProfile) {
       setDisplayName(userProfile.displayName || userProfile.alias || '');

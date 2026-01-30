@@ -17,7 +17,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [title, setTitle] = useState(request.title);
   const [desc, setDesc] = useState(request.description);
   const [deadline, setDeadline] = useState(request.deadline);
-  const [accessMode, setAccessMode] = useState<'direct' | 'invite'>(request.accessMode || 'invite');
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(request.accessMode || 'invite');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -280,6 +280,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     >
                         <option value="direct">Direct Add (Auto-Accept)</option>
                         <option value="invite">Invite Only</option>
+                        <option value="volunteer">Volunteer Pool</option>
                     </select>
                 </div>
             </div>

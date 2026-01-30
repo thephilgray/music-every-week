@@ -20,12 +20,13 @@ export interface FileRequest {
   title: string;
   description: string;
   deadline: string;
-  accessMode: 'direct' | 'invite';
+  accessMode: 'direct' | 'invite' | 'volunteer';
   artworkUrl?: string;
   ownerPub: string;
   createdAt: number;
   inviteCode?: string; // Reusable invite code
   poolSeats?: number; // Number of open seats for volunteer pool
+  allowParticipantSubmissions?: boolean; // If false, only owner can submit
   participants?: Record<string, { 
     status: 'pending' | 'accepted', 
     alias?: string, 

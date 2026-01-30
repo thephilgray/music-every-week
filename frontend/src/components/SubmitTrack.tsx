@@ -224,12 +224,13 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         };
 
         // Link submission to the Request
-        // We'll store it under file_requests/ID/submissions/SUB_ID
+        // We'll store it under file_requests/ID/submissions/SUB_ID -> CHANGED TO request_submissions/ID
         // Securely: Store in User Graph, then Link
         const userSubNode = user.get('submissions').get(submissionId);
         userSubNode.put(submission);
         
-        gun.get('file_requests').get(requestId).get('submissions').get(submissionId).put(userSubNode);
+        // Use separate root node for submissions to allow public writes
+        gun.get('request_submissions').get(requestId).get(submissionId).put(userSubNode);
 
         // Also link to user's public profile (Double-Linking)
         // This is crucial for the "Profile" view to show all works

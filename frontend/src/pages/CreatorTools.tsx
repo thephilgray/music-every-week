@@ -161,8 +161,8 @@ export function CreatorTools() {
 
       updateParticipants();
 
-      // Fetch Submissions to update status
-      gun.get('file_requests').get(selectedRequest.id!).get('submissions').map().on((sub: any) => {
+      // Fetch Submissions to update status (from public node)
+      gun.get('request_submissions').get(selectedRequest.id!).map().on((sub: any) => {
           if (!sub || !sub.uploaderPub) return;
           const pub = sub.uploaderPub;
           

@@ -115,7 +115,7 @@ export function RequestDetail() {
     // clearing submissions first to avoid dupes on re-mount if effect runs again
     setSubmissions([]); 
     
-    gun.get('file_requests').get(id).get('submissions').map().on((data: any, key: string) => {
+    gun.get('request_submissions').get(id).map().on((data: any, key: string) => {
         if (data) {
             // Security Check for Submissions
             const soul = data._ && data._['#'];
@@ -156,11 +156,9 @@ export function RequestDetail() {
                 
                 const commentsSet = new Set<string>(); // Use Set to avoid dupes
 
-                gun.get('file_requests')
-                .get(id)
-                .get('submissions')
+                // Subscribe to public comments node
+                gun.get('submission_comments')
                 .get(key)
-                .get('comments')
                 .map()
                 .on((cData: any, cKey: string) => {
                     if (cData) { // Just existence check is enough for count
@@ -263,6 +261,13 @@ export function RequestDetail() {
 
 
   const isLocked = (sub: Submission) => {
+      // If submissions are disabled for participants, it means this is a "Feedback Request" 
+      // where the owner wants feedback. All tracks (owner's) should be visible immediately.
+      if (request?.allowParticipantSubmissions === false) return false;
+      
+      // Volunteer mode is inherently open for feedback immediately
+      if (request?.accessMode === 'volunteer') return false;
+
       if (isPastDeadline) return false; // Open after deadline
       if (isOwner) return false; // Host sees all
       if (sub.uploaderPub === pubKey) return false; // Own track
@@ -493,7 +498,7 @@ export function RequestDetail() {
                  <div>ID: {id?.substring(0, 8)}...</div>
               </div>
 
-              {(isParticipant || hasSubmitted || isOwner) && (
+              {( (isParticipant && request.allowParticipantSubmissions !== false) || hasSubmitted || isOwner ) && (
               <button 
                 onClick={() => {
                     if (!isPastDeadline) setIsSubmitOpen(true);

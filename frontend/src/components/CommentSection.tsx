@@ -39,11 +39,9 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
     // Subscribe
     const commentsMap = new Map<string, Comment>();
 
-    gun.get('file_requests')
-       .get(requestId)
-       .get('submissions')
+    // Use Public Comments Node
+    gun.get('submission_comments')
        .get(submissionId)
-       .get('comments')
        .map()
        .on((data: any, key: string) => {
           // If data is a reference (pointer), resolve it
@@ -212,18 +210,15 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
         const userCommentNode = user.get('comments').get(id);
         userCommentNode.put(comment);
 
-        gun.get('file_requests')
-        .get(requestId)
-        .get('submissions')
+        // Write to Public Comments Node
+        gun.get('submission_comments')
         .get(submissionId)
-        .get('comments')
         .get(id)
         .put(userCommentNode);
 
         // Notify Submission Uploader
-        gun.get('file_requests')
+        gun.get('request_submissions')
         .get(requestId)
-        .get('submissions')
         .get(submissionId)
         .once((subData: any) => {
             const processNotification = (sub: any) => {

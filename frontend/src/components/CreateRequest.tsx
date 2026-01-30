@@ -12,7 +12,7 @@ export function CreateRequest() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [accessMode, setAccessMode] = useState<'direct' | 'invite'>('invite');
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>('direct');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   
@@ -20,8 +20,8 @@ export function CreateRequest() {
   const [emails, setEmails] = useState<string[]>([]);
 
   // Volunteer Pool Logic
-  const [useVolunteerPool, setUseVolunteerPool] = useState(false);
   const [poolSeats, setPoolSeats] = useState(3);
+  const [allowSubmissions, setAllowSubmissions] = useState(true);
 
   // Import & Search Logic
   const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
@@ -254,7 +254,8 @@ export function CreateRequest() {
         createdAt: Date.now(),
         pending_emails: JSON.stringify(finalEmails),
         inviteCode: inviteCode, // Store on request for reference
-        poolSeats: useVolunteerPool ? poolSeats : undefined,
+        poolSeats: accessMode === 'volunteer' ? poolSeats : undefined,
+        allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
         // participants: finalParticipants -- Managed as separate graph node
       };
 
@@ -278,7 +279,7 @@ export function CreateRequest() {
       });
 
       // 5. Handle Volunteer Pool Invites (Async)
-      if (useVolunteerPool) {
+      if (accessMode === 'volunteer') {
           console.log("Scanning for volunteers...");
           gun.get('all_users').map().once((u: any, uPub: string) => {
               if (u && u.isVolunteer && uPub !== pubKey && !finalParticipants[uPub]) {
@@ -427,11 +428,20 @@ export function CreateRequest() {
              <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
              <select 
                value={accessMode}
-               onChange={(e: any) => setAccessMode(e.target.value)}
+               onChange={(e: any) => {
+                   const newMode = e.target.value;
+                   setAccessMode(newMode);
+                   if (newMode === 'volunteer') {
+                       setSelectedParticipants({});
+                       setEmails([]);
+                       setEmailInput('');
+                   }
+               }}
                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
              >
-               <option value="invite">Invite Only (Participants must accept)</option>
                <option value="direct">Direct Add (Participants auto-accepted)</option>
+               <option value="invite">Invite Only (Participants must accept)</option>
+               <option value="volunteer">Volunteer Pool (Request Feedback)</option>
              </select>
              {accessMode === 'direct' && (
                 <p className="text-yellow-500 text-xs mt-1">
@@ -440,6 +450,38 @@ export function CreateRequest() {
              )}
           </div>
         </div>
+
+        {/* Volunteer Mode Settings */}
+        {accessMode === 'volunteer' && (
+            <div className="bg-gray-900 border border-gray-600 rounded p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-300">Volunteer Settings</h4>
+                
+                <div className="flex items-center gap-4">
+                    <label className="text-gray-400 text-sm">Open Seats:</label>
+                    <input 
+                        type="number" 
+                        min={2} 
+                        value={poolSeats} 
+                        onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
+                        className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-xs text-gray-500">Volunteers can view and comment immediately. First to accept get seats.</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        id="allowSubmissions"
+                        checked={allowSubmissions}
+                        onChange={e => setAllowSubmissions(e.target.checked)}
+                        className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none">
+                        Allow volunteers to submit tracks (Uncheck for Feedback-Only request)
+                    </label>
+                </div>
+            </div>
+        )}
 
         <div>
           <label className="block text-gray-400 text-sm mb-1">Artwork (Optional)</label>
@@ -451,45 +493,8 @@ export function CreateRequest() {
           />
         </div>
 
-        {/* Volunteer Pool Option */}
-        <div className="border-t border-gray-700 pt-4">
-            <label className="flex items-center gap-2 cursor-pointer mb-2">
-                <input 
-                    type="checkbox" 
-                    checked={useVolunteerPool}
-                    onChange={e => {
-                        setUseVolunteerPool(e.target.checked);
-                        if (e.target.checked) {
-                            // Clear manual participants to enforce mutual exclusivity
-                            setSelectedParticipants({});
-                            setEmails([]);
-                            setEmailInput('');
-                        }
-                    }}
-                    className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-gray-300 text-sm font-medium">Request Feedback from Volunteer Pool</span>
-            </label>
-            
-            {useVolunteerPool && (
-                <div className="pl-6 text-sm mb-4">
-                    <p className="text-gray-500 mb-2">
-                        We will notify community volunteers. The first 
-                        <input 
-                            type="number" 
-                            min={2} 
-                            value={poolSeats} 
-                            onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
-                            className="w-16 bg-gray-900 border border-gray-600 rounded mx-2 px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
-                        /> 
-                        volunteers to accept will get access.
-                    </p>
-                </div>
-            )}
-        </div>
-
         {/* Participants Management (Hidden if Volunteer Pool is active) */}
-        {!useVolunteerPool && (
+        {(accessMode !== 'volunteer') && (
         <div className="border-t border-gray-700 pt-4 space-y-4">
           <label className="block text-gray-400 text-sm mb-1 font-semibold">Manage Participants</label>
           

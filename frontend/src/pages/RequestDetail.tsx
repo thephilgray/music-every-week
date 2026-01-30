@@ -16,6 +16,7 @@ export function RequestDetail() {
   const { gun, pubKey, user } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
+  const [participants, setParticipants] = useState<Record<string, any>>({});
   const [isVerified, setIsVerified] = useState(true); // Security Check
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -45,7 +46,11 @@ export function RequestDetail() {
   const [unlockedSubmissionIds, setUnlockedSubmissionIds] = useState<string[]>([]);
 
   const copyLink = () => {
-      navigator.clipboard.writeText(window.location.href);
+      let url = window.location.origin + window.location.pathname;
+      if (isOwner && request?.inviteCode) {
+          url += `?requestInvite=${request.inviteCode}`;
+      }
+      navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
   };
@@ -57,35 +62,50 @@ export function RequestDetail() {
     gun.get('file_requests').get(id).on((data: any) => {
         if (data) {
             // Security Verification
-            // Check if the node is signed by the claimed owner
-            // User nodes have soul like `~PUBKEY...`
             const soul = data._ && data._['#'];
             if (soul && typeof soul === 'string' && soul.startsWith('~')) {
-                const signerPub = soul.split('~')[1].split('.')[0];
-                if (data.ownerPub && signerPub !== data.ownerPub) {
-                    console.warn("Security Alert: Request signer does not match ownerPub. Possible spoofing.");
+                const parts = soul.split('~');
+                // Handle case where split might result in different array lengths depending on soul format
+                const afterTilde = parts[1];
+                const signerPub = afterTilde ? afterTilde.split('.')[0] : '';
+                
+                // Normalize ownerPub (remove encryption key part if present)
+                const storedOwnerPub = data.ownerPub ? data.ownerPub.split('.')[0] : '';
+
+                if (storedOwnerPub && signerPub !== storedOwnerPub) {
+                    console.warn("Security Alert: Request signer does not match ownerPub.", {
+                        soul,
+                        signerPub,
+                        ownerPub: data.ownerPub,
+                        storedOwnerPub,
+                        mismatch: true
+                    });
                     setIsVerified(false);
                 } else {
                     setIsVerified(true);
                 }
+            } else {
+                // Not a user node (public node), technically unverified but maybe intended
+                // For now, assume verified if it matches our ID structure or logic
+                setIsVerified(true);
             }
-
-            let parsedParticipants = {};
-            if (typeof data.participants === 'string') {
-                try {
-                    parsedParticipants = JSON.parse(data.participants);
-                } catch (e) {
-                    console.error("Failed to parse participants", e);
-                }
-            } else if (typeof data.participants === 'object') {
-                parsedParticipants = data.participants;
-            }
-
+            
+            // We load participants separately via .map() below
             setRequest({
                 id: id,
                 ...data,
-                participants: parsedParticipants
+                participants: {} // Placeholder, populated by separate state
             });
+        }
+    });
+
+    // Fetch Participants Live (from Open Node)
+    gun.get('request_participants').get(id).map().on((data: any, pub: string) => {
+        if (data) {
+             setParticipants(prev => ({
+                 ...prev,
+                 [pub]: data
+             }));
         }
     });
 
@@ -161,14 +181,14 @@ export function RequestDetail() {
       if (!request || !pubKey) return false;
       if (request.ownerPub === pubKey) return true;
       
-      const inList = request.participants && request.participants[pubKey];
+      const inList = participants && participants[pubKey];
       if (!inList) return false; // Must be invited/in list
 
       if (request.accessMode === 'direct') return true;
       
       // Invite mode: must have accepted locally OR be marked accepted in list (legacy/fallback)
       return myParticipationStatus === 'accepted' || inList.status === 'accepted';
-  }, [request, pubKey, myParticipationStatus]);
+  }, [request, pubKey, participants, myParticipationStatus]); // Added participants dependency
 
   // Deadline Logic
   const [now] = useState(Date.now());
@@ -188,8 +208,8 @@ export function RequestDetail() {
       }
       
       // Check for extension
-      if (pubKey && request.participants && request.participants[pubKey]) {
-          extensionHours = request.participants[pubKey].extensionHours || 0;
+      if (pubKey && participants && participants[pubKey]) {
+          extensionHours = participants[pubKey].extensionHours || 0;
           deadlineTime += extensionHours * 3600 * 1000;
       }
       

@@ -1,11 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ContextBar } from './ContextBar';
 import { Player } from './Player';
+import { useGun } from '../../contexts/GunContext';
+import { useToast } from '../../contexts/ToastContext';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { gun, user, pubKey, userProfile } = useGun();
+  const { success, error } = useToast();
+
+  useEffect(() => {
+      const pendingReqId = sessionStorage.getItem('pendingJoinRequest');
+      if (pendingReqId && pubKey) {
+          console.log("Processing pending auto-join for:", pendingReqId);
+          sessionStorage.removeItem('pendingJoinRequest');
+          
+          const partData = {
+              alias: userProfile?.alias || 'Unknown',
+              status: 'accepted',
+              email: userProfile?.email || '',
+              joinedAt: Date.now()
+          };
+
+          gun.get('request_participants').get(pendingReqId).get(pubKey).put(partData, (ack: any) => {
+              if (ack.err) {
+                  console.error("Auto-join failed:", ack.err);
+                  error("Failed to join request automatically. Please try manually.");
+              } else {
+                  console.log("Auto-join success:", ack);
+                  success("You have successfully joined the request!");
+                  
+                  // Local marker
+                  user.get('participation').get(pendingReqId).put('accepted');
+              }
+          });
+      }
+  }, [pubKey, gun, user, userProfile]);
 
   return (
     <div className="flex h-screen bg-black overflow-hidden relative">

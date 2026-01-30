@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
+import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
 import { Check, Copy, ArrowRight, Filter } from 'lucide-react';
@@ -7,6 +8,7 @@ import { Link } from 'react-router-dom';
 
 export function CreateRequest() {
   const { gun, user, pubKey } = useGun();
+  const { error } = useToast();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
@@ -175,14 +177,6 @@ export function CreateRequest() {
   }, [importFilter]);
 
 
-  const addEmail = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (emailInput && !emails.includes(emailInput)) {
-      setEmails([...emails, emailInput]);
-      setEmailInput('');
-    }
-  };
-
   const removeEmail = (email: string) => {
     setEmails(emails.filter(e => e !== email));
   };
@@ -229,6 +223,22 @@ export function CreateRequest() {
       Object.keys(finalParticipants).forEach(pub => {
           finalParticipants[pub].status = accessMode === 'direct' ? 'accepted' : 'pending';
       });
+      
+      let inviteCode = '';
+      if (emails.length > 0) {
+          inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
+          // Create a reusable invite code for this request
+          gun.get('invites').get(inviteCode).put({
+              from: pubKey,
+              createdAt: Date.now(),
+              status: 'active',
+              forRequest: requestId
+          }, (ack: any) => {
+              if (ack.err) console.error("Invite write error:", ack.err);
+              else console.log("Invite write ack:", ack);
+          });
+          console.log('Created Invite Code for Request:', inviteCode);
+      }
 
       const request: any = {
         id: requestId, 
@@ -240,20 +250,28 @@ export function CreateRequest() {
         ownerPub: pubKey,
         createdAt: Date.now(),
         pending_emails: JSON.stringify(emails),
-        participants: finalParticipants 
+        inviteCode: inviteCode, // Store on request for reference
+        // participants: finalParticipants -- Managed as separate graph node
       };
 
       console.log('Saving to GunDB...', request);
       
-      // 1. Save to User Graph (Source of Truth - Secure)
+      // 1. Save to User Graph (Source of Truth - Secure Metadata)
       const userReqNode = user.get('requests').get(requestId);
       userReqNode.put(request);
       
-      // 2. Link Global Graph to User Graph
+      // 2. Link Global Graph to User Graph (for discovery)
       gun.get('file_requests').get(requestId).put(userReqNode);
       
       // 3. Link to user's my_requests for local listing
       user.get('my_requests').get(requestId).put(userReqNode);
+
+      // 4. Write Initial Participants to OPEN Graph Node
+      // We use a separate root node 'request_participants' to allow public writes
+      const participantsNode = gun.get('request_participants').get(requestId);
+      Object.entries(finalParticipants).forEach(([pPub, pData]) => {
+          participantsNode.get(pPub).put(pData);
+      });
 
       // Send Notifications to Participants
       Object.keys(finalParticipants).forEach(partPub => {
@@ -279,14 +297,18 @@ export function CreateRequest() {
       });
 
       // Prepare Success View
-      const link = `${window.location.origin}/request/${requestId}`;
+      let link = `${window.location.origin}/request/${requestId}`;
+      if (inviteCode) {
+          link += `?requestInvite=${inviteCode}`;
+      }
+      
       setInviteLink(link);
       setCreatedRequestId(requestId);
       setShowSuccess(true);
       
     } catch (err) {
       console.error(err);
-      alert('Error creating request: ' + (err instanceof Error ? err.message : String(err)));
+      error('Error creating request: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
     }
@@ -460,21 +482,27 @@ export function CreateRequest() {
 
           {/* 3. Email Invites */}
           <div>
-            <label className="block text-gray-500 text-xs mb-1">Invite by Email</label>
-            <div className="flex gap-2">
-              <input 
-                type="email" 
+            <label className="block text-gray-500 text-xs mb-1">Invite by Email (Comma or newline separated)</label>
+            <div className="flex flex-col gap-2">
+              <textarea 
                 value={emailInput}
                 onChange={e => setEmailInput(e.target.value)}
-                className="flex-1 bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
-                placeholder="friend@example.com"
+                onBlur={() => {
+                    if (!emailInput.trim()) return;
+                    const raw = emailInput.split(/[\n, ]+/);
+                    const valid = raw
+                        .map(s => s.trim())
+                        .filter(s => s.length > 5 && s.includes('@') && !emails.includes(s));
+                    
+                    if (valid.length > 0) {
+                        setEmails(prev => [...prev, ...valid]);
+                        setEmailInput(''); // Clear input after successful parse
+                    }
+                }}
+                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none h-20 text-sm"
+                placeholder="friend@example.com, team@music.com"
               />
-              <button 
-                onClick={addEmail}
-                className="bg-gray-700 hover:bg-gray-600 px-4 rounded text-white font-semibold"
-              >
-                Add
-              </button>
+              <p className="text-xs text-gray-500">Paste emails here. They will be added to the list below automatically.</p>
             </div>
           </div>
 

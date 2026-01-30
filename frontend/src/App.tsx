@@ -12,6 +12,7 @@ import { Profile } from './pages/Profile';
 import { Archive } from './pages/Archive';
 import { Playlists } from './pages/Playlists';
 import { Settings } from './pages/Settings';
+import { ToastProvider } from './contexts/ToastContext';
 import { IdleMonitor } from './components/IdleMonitor';
 
 function App() {
@@ -26,7 +27,11 @@ function App() {
   }
 
   if (!isLoggedIn) {
-    return <Auth />;
+    return (
+      <ToastProvider>
+        <Auth />
+      </ToastProvider>
+    );
   }
 
   if (isAuthorized === undefined) {
@@ -56,24 +61,26 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <IdleMonitor />
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/request/:id" element={<RequestDetail />} />
-          <Route path="/inbox" element={<Inbox />} />
-          <Route path="/creator" element={<CreatorTools />} />
-          <Route path="/directory" element={<Directory />} />
-          <Route path="/playlists" element={<Playlists />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/profile/:pub" element={<Profile />} />
-          <Route path="/archive" element={<Archive />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <IdleMonitor />
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/request/:id" element={<RequestDetail />} />
+            <Route path="/inbox" element={<Inbox />} />
+            <Route path="/creator" element={<CreatorTools />} />
+            <Route path="/directory" element={<Directory />} />
+            <Route path="/playlists" element={<Playlists />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/:pub" element={<Profile />} />
+            <Route path="/archive" element={<Archive />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }
 

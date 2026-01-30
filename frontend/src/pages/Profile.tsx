@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { UserProfile, Submission, FileRequest } from '../types';
 
@@ -11,6 +12,7 @@ export function Profile() {
   const [searchParams] = useSearchParams();
   const { gun, user, pubKey } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
+  const { success, error } = useToast();
   
   const targetPub = routePub || pubKey;
   const isOwnProfile = pubKey === targetPub;
@@ -23,7 +25,8 @@ export function Profile() {
   
   // Edit Mode
   const [isEditing, setIsEditing] = useState(false);
-  const [editAlias, setEditAlias] = useState('');
+  const [editAlias, setEditAlias] = useState(''); // Immutable Username
+  const [editDisplayName, setEditDisplayName] = useState(''); // Mutable Display Name
   const [editBio, setEditBio] = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [editLinks, setEditLinks] = useState<{label: string, url: string}[]>([]);
@@ -60,6 +63,7 @@ export function Profile() {
             setProfile({ ...data, pub: targetPub, links: parsedLinks });
             if (isEditing === false) { // Don't overwrite if editing
                 setEditAlias(data.alias || '');
+                setEditDisplayName(data.displayName || data.alias || '');
                 setEditBio(data.bio || '');
                 setEditLocation(data.location || '');
                 setEditLinks(parsedLinks);
@@ -120,7 +124,7 @@ export function Profile() {
           }
           
           const updates: any = {
-              alias: editAlias,
+              displayName: editDisplayName,
               bio: editBio,
               location: editLocation,
               links: JSON.stringify(editLinks),
@@ -131,13 +135,14 @@ export function Profile() {
           gun.get('all_users').get(pubKey as string).put(updates);
           
           // Update Private Profile (Auth) if needed, but 'all_users' is the source of truth for directory.
-          user.put(updates); // Updates the user root node
+          user.get('profile').put(updates); // Use proper 'profile' node structure
           
           setIsEditing(false);
           setEditAvatar(null);
+          success("Profile updated successfully");
       } catch (e) {
           console.error("Failed to save profile", e);
-          alert("Failed to save profile");
+          error("Failed to save profile");
       } finally {
           setIsSaving(false);
       }
@@ -182,7 +187,12 @@ export function Profile() {
                 
                 <div className="flex-1 text-center md:text-left">
                     <div className="flex items-center justify-center md:justify-start gap-4 mb-2">
-                        <h1 className="text-3xl font-bold text-white">{profile.alias}</h1>
+                        <h1 className="text-3xl font-bold text-white">
+                            {profile.displayName || profile.alias}
+                            {profile.displayName && profile.displayName !== profile.alias && (
+                                <span className="text-lg text-gray-500 font-normal ml-2">@{profile.alias}</span>
+                            )}
+                        </h1>
                         {isOwnProfile && (
                             <button 
                                 onClick={() => setIsEditing(true)}
@@ -347,12 +357,23 @@ export function Profile() {
                         </div>
                         
                         <div>
-                            <label className="block text-sm text-gray-400 mb-1">Alias</label>
+                            <label className="block text-sm text-gray-400 mb-1">Username (Immutable)</label>
                             <input 
                                 type="text" 
                                 value={editAlias}
-                                onChange={e => setEditAlias(e.target.value)}
+                                readOnly
+                                className="w-full bg-gray-900/50 border border-gray-700/50 rounded p-2 text-gray-400 cursor-not-allowed"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Display Name</label>
+                            <input 
+                                type="text" 
+                                value={editDisplayName}
+                                onChange={e => setEditDisplayName(e.target.value)}
                                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                                placeholder="e.g. CryptoMusician"
                             />
                         </div>
                         

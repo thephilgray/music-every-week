@@ -1,6 +1,7 @@
 export interface UserProfile {
   pub: string;
   alias: string;
+  displayName?: string; // Mutable Display Name
   bio?: string;
   avatarUrl?: string;
   email?: string;
@@ -22,6 +23,7 @@ export interface FileRequest {
   artworkUrl?: string;
   ownerPub: string;
   createdAt: number;
+  inviteCode?: string; // Reusable invite code
   participants?: Record<string, { 
     status: 'pending' | 'accepted', 
     alias?: string, 

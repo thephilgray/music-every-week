@@ -8,41 +8,54 @@ export function Auth() {
   const [pass, setPass] = useState('');
   const [inviteCode, setInviteCode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('inviteCode') || '';
+    return params.get('inviteCode') || params.get('requestInvite') || '';
   });
   const [isSignup, setIsSignup] = useState(() => {
     const params = new URLSearchParams(window.location.search);
+    // Explicit 'inviteCode' implies a direct invite link -> Signup
+    // 'requestInvite' implies a request share link -> Default to Login (returning users)
     return !!params.get('inviteCode');
   });
   const [error, setError] = useState<string | null>(null);
 
   // Parse URL for invite code and request ID
-  // Removed useEffect as state is initialized above
-
-  const checkPendingInvites = (pub: string, userEmail: string) => {
+  const checkPendingInvites = (pub: string, userEmail?: string) => {
       // Check if we are landing on a request page
       const match = window.location.pathname.match(/\/request\/([^/]+)/);
       if (match && match[1]) {
           const requestId = match[1];
           gun.get('file_requests').get(requestId).once((req: any) => {
-              if (req && req.pending_emails) {
+              if (!req) return;
+              
+              let shouldJoin = false;
+
+              // Check 1: Invite Code Match
+              if (inviteCode && req.inviteCode === inviteCode) {
+                  console.log("Auto-joining via Invite Code Match");
+                  shouldJoin = true;
+              }
+
+              // Check 2: Email Match
+              if (!shouldJoin && userEmail && req.pending_emails) {
                   let pending: string[] = [];
                   try {
                       pending = JSON.parse(req.pending_emails);
                   } catch (e) {}
 
                   if (pending.includes(userEmail)) {
-                      console.log("Auto-joining request:", requestId);
-                      // Add to participants with accepted status
-                      // We write to the Request's participants node (assuming open write or owner will process)
-                      // Actually, if participants is a node, we can write our own entry.
-                      gun.get('file_requests').get(requestId).get('participants').get(pub).put({
-                          alias,
-                          status: 'accepted',
-                          email: userEmail,
-                          joinedAt: Date.now()
-                      });
+                      console.log("Auto-joining via Email Match");
+                      shouldJoin = true;
                   }
+              }
+
+              if (shouldJoin) {
+                  console.log("Auto-joining request:", requestId);
+                  gun.get('file_requests').get(requestId).get('participants').get(pub).put({
+                      alias,
+                      status: 'accepted',
+                      email: userEmail || '',
+                      joinedAt: Date.now()
+                  });
               }
           });
       }
@@ -56,7 +69,7 @@ export function Auth() {
       // @ts-ignore
       const adminSecret = import.meta.env.VITE_ADMIN_SECRET || 'secret';
 
-      const proceedWithSignup = (isAdmin = false, inviterPub?: string) => {
+      const proceedWithSignup = (isAdmin = false, inviterPub?: string, requestToJoinId?: string) => {
         user.create(alias, pass, (ack: any) => {
           if (ack.err) {
             setError(ack.err);
@@ -92,30 +105,60 @@ export function Auth() {
                  }
 
                  // Check for Auto-Join
-                 if (email) checkPendingInvites(pub, email);
+                 if (requestToJoinId) {
+                     console.log("Queueing auto-join for request:", requestToJoinId);
+                     // Defer write to App.tsx to ensure session is fully ready and component doesn't unmount
+                     sessionStorage.setItem('pendingJoinRequest', requestToJoinId);
+                 } else if (email) {
+                     checkPendingInvites(pub, email);
+                 }
              }
           });
         });
       };
 
-      if (inviteCode && inviteCode === adminSecret) {
-          proceedWithSignup(true);
-      } else if (inviteCode) {
-          gun.get('invites').get(inviteCode).once((data: any) => {
+      const verifyGlobalInvite = (code: string) => {
+          console.log("Verifying global invite code:", code);
+          gun.get('invites').get(code).once((data: any) => {
               if (data && data.status === 'active') {
-                  // Fix: Use 'from' as per ContextBar.tsx, fallback to 'createdBy' for backward compat
                   const inviter = data.from || data.createdBy;
-                  proceedWithSignup(false, inviter);
+                  proceedWithSignup(false, inviter, data.forRequest);
               } else {
                   setError("Invalid or Expired Invite Code");
               }
           });
+      };
+
+      if (inviteCode && inviteCode === adminSecret) {
+          proceedWithSignup(true);
+      } else if (inviteCode) {
+          const code = inviteCode.trim();
+          
+          // Check if this is a Request-Specific invite (from URL)
+          const match = window.location.pathname.match(/\/request\/([^/]+)/);
+          const requestIdFromUrl = match ? match[1] : null;
+
+          if (requestIdFromUrl) {
+              console.log("Verifying invite against Request:", requestIdFromUrl);
+              gun.get('file_requests').get(requestIdFromUrl).once((req: any) => {
+                  if (req && req.inviteCode === code) {
+                      console.log("Invite matched Request!");
+                      // Valid!
+                      proceedWithSignup(false, req.ownerPub, requestIdFromUrl);
+                  } else {
+                      console.warn("Invite code did not match request. Checking global invites...");
+                      verifyGlobalInvite(code);
+                  }
+              });
+          } else {
+              verifyGlobalInvite(code);
+          }
       } else {
           setError("Invite Code is required");
       }
 
     } else {
-      // Clear any stale session data before auth
+      // Login Flow
       sessionStorage.clear();
       
       user.auth(alias, pass, (ack: any) => {
@@ -150,14 +193,13 @@ export function Auth() {
                
                if (pub) {
                    // On Login: Only ensure existence and update alias.
-                   // Do NOT overwrite email (it is empty here), joinedAt, or use undefined signup variables.
                    gun.get('all_users').get(pub).put({
                        alias,
                        pub
                    });
                    
-                   // Check for Auto-Join only if email was somehow captured (unlikely on login) or fetch from profile
-                   // For now, we skip checkPendingInvites on simple login to avoid wiping data or missing context
+                   // Check for Auto-Join
+                   checkPendingInvites(pub, email);
                } else {
                    console.error("Could not write to Directory: Pub key missing despite success.");
                }

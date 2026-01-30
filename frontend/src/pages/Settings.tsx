@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 
 export function Settings() {
   const { gun, user, pubKey, userProfile } = useGun();
+  const { success, error } = useToast();
   
   // Profile State
-  const [alias, setAlias] = useState('');
+  const [username, setUsername] = useState(''); // Immutable
+  const [displayName, setDisplayName] = useState(''); // Mutable
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
   const [links, setLinks] = useState<{label: string, url: string}[]>([]);
@@ -24,8 +27,12 @@ export function Settings() {
 
   // Load Initial Data
   useEffect(() => {
+    // Load Username (Immutable)
+    // @ts-ignore
+    if (user.is) setUsername(user.is.alias || '');
+
     if (userProfile) {
-      setAlias(userProfile.alias || '');
+      setDisplayName(userProfile.displayName || userProfile.alias || '');
       setBio(userProfile.bio || '');
       setLocation(userProfile.location || '');
       setLinks(userProfile.links || []);
@@ -54,7 +61,7 @@ export function Settings() {
       }
 
       const updates: any = {
-        alias,
+        displayName, // Only update display name
         bio,
         location,
         links,
@@ -62,17 +69,19 @@ export function Settings() {
       };
 
       // Update Public Profile in Directory
+      // We keep 'alias' as the username in the directory for searching, 
+      // but add 'displayName' for UI.
       gun.get('all_users').get(pubKey).put(updates);
       
       // Update User Node
-      user.put(updates);
+      user.get('profile').put(updates);
 
       // Reset file input
       setAvatar(null);
-      alert('Profile updated successfully!');
+      success('Profile updated successfully!');
     } catch (e) {
       console.error("Failed to save profile", e);
-      alert("Failed to save profile. Please try again.");
+      error("Failed to save profile. Please try again.");
     } finally {
       setIsSavingProfile(false);
     }
@@ -169,11 +178,20 @@ export function Settings() {
             {/* Fields */}
             <div className="grid grid-cols-1 gap-4">
                 <div>
-                    <label className="block text-sm text-gray-400 mb-1">Alias / Display Name</label>
+                    <label className="block text-sm text-gray-400 mb-1">Username (Immutable)</label>
                     <input 
                         type="text" 
-                        value={alias}
-                        onChange={e => setAlias(e.target.value)}
+                        value={username}
+                        readOnly
+                        className="w-full bg-gray-900/50 border border-gray-700/50 rounded-lg p-3 text-gray-400 cursor-not-allowed"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm text-gray-400 mb-1">Display Name</label>
+                    <input 
+                        type="text" 
+                        value={displayName}
+                        onChange={e => setDisplayName(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
                         placeholder="e.g. CryptoMusician"
                     />

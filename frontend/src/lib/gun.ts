@@ -3,6 +3,8 @@ import 'gun/sea';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'http://localhost:8080';
 
+console.log("GunDB Relay URL:", RELAY_URL);
+
 export const PEERS = [
   `${RELAY_URL}/gun` 
 ];

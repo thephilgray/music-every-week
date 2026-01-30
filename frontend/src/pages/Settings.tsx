@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle } from 'lucide-react';
+import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
@@ -20,6 +20,7 @@ export function Settings() {
 
   // Privacy State
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
+  const [isVolunteer, setIsVolunteer] = useState(false);
   const [isSavingPrivacy, setIsSavingPrivacy] = useState(false);
 
   // Data State
@@ -37,6 +38,7 @@ export function Settings() {
       setLocation(userProfile.location || '');
       setLinks(userProfile.links || []);
       setCurrentAvatarUrl(userProfile.avatarUrl || '');
+      setIsVolunteer(!!userProfile.isVolunteer);
     }
 
     // Load Privacy Settings
@@ -65,13 +67,17 @@ export function Settings() {
         bio,
         location,
         links,
+        isVolunteer,
         avatarUrl: avatarUrl || ''
       };
 
       // Update Public Profile in Directory
       // We keep 'alias' as the username in the directory for searching, 
       // but add 'displayName' for UI.
-      gun.get('all_users').get(pubKey).put(updates);
+      gun.get('all_users').get(pubKey).put(updates, (ack: any) => {
+          if (ack.err) console.error("Profile save error:", ack.err);
+          else console.log("Profile save success:", ack);
+      });
       
       // Update User Node
       user.get('profile').put(updates);
@@ -99,6 +105,17 @@ export function Settings() {
       const newLinks = [...links];
       newLinks[index] = { ...newLinks[index], [field]: value };
       setLinks(newLinks);
+  };
+
+  const handleToggleVolunteer = () => {
+      if (!pubKey) return;
+      const newValue = !isVolunteer;
+      setIsVolunteer(newValue); // Optimistic update
+      
+      // Save immediately to public directory
+      gun.get('all_users').get(pubKey).get('isVolunteer').put(newValue);
+      // Save to private profile
+      user.get('profile').get('isVolunteer').put(newValue);
   };
 
   const handleTogglePrivacy = () => {
@@ -261,6 +278,30 @@ export function Settings() {
             >
                 {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Profile
+            </button>
+        </div>
+      </section>
+
+      {/* Community Section */}
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+        <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+            <Users className="w-5 h-5 text-purple-500" />
+            Community Contributions
+        </h2>
+        
+        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800">
+            <div>
+                <h3 className="text-white font-medium mb-1">Join Feedback Volunteer Pool</h3>
+                <p className="text-sm text-gray-500 max-w-md">
+                    Opt-in to be randomly selected to give feedback on tracks from other users. 
+                    Helping others helps the community grow!
+                </p>
+            </div>
+            <button 
+                onClick={handleToggleVolunteer}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isVolunteer ? 'bg-purple-600' : 'bg-gray-600'}`}
+            >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isVolunteer ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
         </div>
       </section>

@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
 import { CommentSection } from '../components/CommentSection';
 import { AddToPlaylist } from '../components/AddToPlaylist';
@@ -15,6 +16,7 @@ export function RequestDetail() {
   const [searchParams] = useSearchParams();
   const { gun, pubKey, user } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
+  const { success, error } = useToast();
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [participants, setParticipants] = useState<Record<string, any>>({});
   const [isVerified, setIsVerified] = useState(true); // Security Check
@@ -302,6 +304,60 @@ export function RequestDetail() {
       }
   }, [linkedSubmissionId, submissions.length]); // Intentionally minimal deps
 
+  // Invite Acceptance Logic
+  const isInvited = useMemo(() => {
+      if (!pubKey || !participants) return false;
+      const p = participants[pubKey];
+      return p && (p.status === 'invited' || p.status === 'pending');
+  }, [pubKey, participants]);
+
+  const acceptedCount = useMemo(() => {
+      return Object.values(participants).filter(p => p.status === 'accepted').length;
+  }, [participants]);
+
+  const handleAcceptInvite = async () => {
+      if (!id || !pubKey || !request) return;
+      
+      // Check Seat Limit
+      if (request.poolSeats && acceptedCount >= request.poolSeats) {
+          error("Sorry, all volunteer seats for this request have been filled.");
+          return;
+      }
+
+      try {
+          // Write to public participants node
+          const partData = {
+              alias: participants[pubKey]?.alias || 'Volunteer',
+              status: 'accepted',
+              email: participants[pubKey]?.email || '',
+              joinedAt: Date.now()
+          };
+          
+          await gun.get('request_participants').get(id).get(pubKey).put(partData);
+          
+          // Write to local participation
+          user.get('participation').get(id).put('accepted');
+          
+          success("You have successfully joined the request!");
+          setMyParticipationStatus('accepted');
+      } catch (e) {
+          console.error("Failed to accept invite", e);
+          error("Failed to accept invite. Please try again.");
+      }
+  };
+
+  const handleDeclineInvite = async () => {
+      if (!id || !pubKey) return;
+      try {
+          await gun.get('request_participants').get(id).get(pubKey).get('status').put('declined');
+          user.get('participation').get(id).put('declined');
+          success("Invite declined.");
+          setMyParticipationStatus('declined');
+      } catch (e) {
+          error("Error declining invite");
+      }
+  };
+
   if (!request) {
       return (
         <div className="max-w-5xl mx-auto pb-20 p-4">
@@ -345,6 +401,40 @@ export function RequestDetail() {
       <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
         <ArrowLeft className="w-4 h-4" /> Back to Requests
       </Link>
+
+      {/* Volunteer Invite Banner */}
+      {isInvited && (
+          <div className="bg-indigo-900/40 border border-indigo-500/50 rounded-lg p-4 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+              <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Users className="w-5 h-5 text-indigo-400" />
+                      Volunteer Invite
+                  </h3>
+                  <p className="text-gray-300 text-sm">
+                      You have been invited to provide feedback on this request.
+                      {request.poolSeats && (
+                          <span className="block mt-1 text-indigo-300 font-mono">
+                              Open Seats: {Math.max(0, request.poolSeats - acceptedCount)} / {request.poolSeats}
+                          </span>
+                      )}
+                  </p>
+              </div>
+              <div className="flex items-center gap-3">
+                  <button 
+                      onClick={handleDeclineInvite}
+                      className="px-4 py-2 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition text-sm"
+                  >
+                      Decline
+                  </button>
+                  <button 
+                      onClick={handleAcceptInvite}
+                      className="px-6 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-900/50 transition transform hover:scale-105"
+                  >
+                      Accept Invite
+                  </button>
+              </div>
+          </div>
+      )}
 
       {/* Header / Banner */}
       <div className="flex flex-col md:flex-row gap-8 mb-10">

@@ -19,6 +19,10 @@ export function CreateRequest() {
   const [emailInput, setEmailInput] = useState('');
   const [emails, setEmails] = useState<string[]>([]);
 
+  // Volunteer Pool Logic
+  const [useVolunteerPool, setUseVolunteerPool] = useState(false);
+  const [poolSeats, setPoolSeats] = useState(3);
+
   // Import & Search Logic
   const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
   const [selectedImportId, setSelectedImportId] = useState<string>('');
@@ -250,6 +254,7 @@ export function CreateRequest() {
         createdAt: Date.now(),
         pending_emails: JSON.stringify(finalEmails),
         inviteCode: inviteCode, // Store on request for reference
+        poolSeats: useVolunteerPool ? poolSeats : undefined,
         // participants: finalParticipants -- Managed as separate graph node
       };
 
@@ -271,6 +276,35 @@ export function CreateRequest() {
       Object.entries(finalParticipants).forEach(([pPub, pData]) => {
           participantsNode.get(pPub).put(pData);
       });
+
+      // 5. Handle Volunteer Pool Invites (Async)
+      if (useVolunteerPool) {
+          console.log("Scanning for volunteers...");
+          gun.get('all_users').map().once((u: any, uPub: string) => {
+              if (u && u.isVolunteer && uPub !== pubKey && !finalParticipants[uPub]) {
+                  // Add as Invited
+                  participantsNode.get(uPub).put({
+                      alias: u.alias,
+                      status: 'invited',
+                      invitedAt: Date.now()
+                  });
+                  
+                  // Notify
+                  const notifId = crypto.randomUUID();
+                  const notification: Notification = {
+                      id: notifId,
+                      type: 'invite', // Reuse invite type, or make 'pool_invite'
+                      message: `Volunteer Opportunity: "${title}" needs feedback!`,
+                      link: `/request/${requestId}`,
+                      fromPub: pubKey as string,
+                      createdAt: Date.now(),
+                      read: false,
+                      requestId: requestId
+                  };
+                  gun.get('inboxes').get(uPub).get(notifId).put(notification);
+              }
+          });
+      }
 
       // Send Notifications to Participants
       Object.keys(finalParticipants).forEach(partPub => {
@@ -417,7 +451,45 @@ export function CreateRequest() {
           />
         </div>
 
-        {/* Participants Management */}
+        {/* Volunteer Pool Option */}
+        <div className="border-t border-gray-700 pt-4">
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                <input 
+                    type="checkbox" 
+                    checked={useVolunteerPool}
+                    onChange={e => {
+                        setUseVolunteerPool(e.target.checked);
+                        if (e.target.checked) {
+                            // Clear manual participants to enforce mutual exclusivity
+                            setSelectedParticipants({});
+                            setEmails([]);
+                            setEmailInput('');
+                        }
+                    }}
+                    className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-gray-300 text-sm font-medium">Request Feedback from Volunteer Pool</span>
+            </label>
+            
+            {useVolunteerPool && (
+                <div className="pl-6 text-sm mb-4">
+                    <p className="text-gray-500 mb-2">
+                        We will notify community volunteers. The first 
+                        <input 
+                            type="number" 
+                            min={2} 
+                            value={poolSeats} 
+                            onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
+                            className="w-16 bg-gray-900 border border-gray-600 rounded mx-2 px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        /> 
+                        volunteers to accept will get access.
+                    </p>
+                </div>
+            )}
+        </div>
+
+        {/* Participants Management (Hidden if Volunteer Pool is active) */}
+        {!useVolunteerPool && (
         <div className="border-t border-gray-700 pt-4 space-y-4">
           <label className="block text-gray-400 text-sm mb-1 font-semibold">Manage Participants</label>
           
@@ -497,24 +569,20 @@ export function CreateRequest() {
 
                         raw.forEach((s, i) => {
                             const trimmed = s.trim();
-                            // If it's the last chunk and doesn't end with delimiter, keep it as typing input
-                            // UNLESS the input ended with a delimiter
-                            const isLast = i === raw.length - 1;
                             const endsWithDelimiter = val.trimEnd().match(/[\n,]$/);
                             
                             // Check for internal spaces (invalid email)
                             const hasInternalSpace = trimmed.includes(' ');
 
-                            if (isLast && !endsWithDelimiter) {
-                                remaining = s; // Don't trim yet, user might be typing
-                            } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !emails.includes(trimmed) && !valid.includes(trimmed)) {
+                            if (i === raw.length - 1 && !endsWithDelimiter) {
+                                remaining = s; 
+                            } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !emails.includes(trimmed)) {
                                 valid.push(trimmed);
                             }
                         });
                         
                         if (valid.length > 0) {
                             setEmails(prev => Array.from(new Set([...prev, ...valid])));
-                            // Keep only the incomplete part
                             setEmailInput(remaining); 
                         }
                     }
@@ -562,6 +630,7 @@ export function CreateRequest() {
             </div>
           )}
         </div>
+        )}
 
         <button 
           type="submit" 

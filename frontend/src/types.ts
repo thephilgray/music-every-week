@@ -8,6 +8,7 @@ export interface UserProfile {
   location?: string;
   links?: { label: string; url: string }[];
   isAdmin?: boolean;
+  isVolunteer?: boolean; // Opt-in for random feedback requests
   submissions?: Record<string, boolean>; // Linked to Submission IDs
   invitedBy?: string; // Pub key of inviter
   invites?: Record<string, boolean>; // List of invited pub keys
@@ -24,6 +25,7 @@ export interface FileRequest {
   ownerPub: string;
   createdAt: number;
   inviteCode?: string; // Reusable invite code
+  poolSeats?: number; // Number of open seats for volunteer pool
   participants?: Record<string, { 
     status: 'pending' | 'accepted', 
     alias?: string, 

@@ -78,10 +78,12 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setUserProfile({
             pub,
             alias: data.alias || 'Unknown',
+            displayName: data.displayName,
             bio: data.bio,
             avatarUrl: data.avatarUrl,
             email: data.email,
             isAdmin: !!data.isAdmin,
+            isVolunteer: !!data.isVolunteer,
             submissions: data.submissions,
           });
         } else {

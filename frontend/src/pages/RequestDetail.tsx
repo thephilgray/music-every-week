@@ -120,9 +120,14 @@ export function RequestDetail() {
             // Security Check for Submissions
             const soul = data._ && data._['#'];
             if (soul && typeof soul === 'string' && soul.startsWith('~')) {
-                 const signerPub = soul.split('~')[1].split('.')[0];
-                 if (data.uploaderPub && signerPub !== data.uploaderPub) {
-                     console.warn(`Ignored spoofed submission ${key}: signer ${signerPub} != uploader ${data.uploaderPub}`);
+                 const parts = soul.split('~');
+                 const afterTilde = parts[1];
+                 const signerPub = afterTilde ? afterTilde.split('.')[0] : '';
+                 
+                 const uploaderPub = data.uploaderPub ? data.uploaderPub.split('.')[0] : '';
+
+                 if (uploaderPub && signerPub !== uploaderPub) {
+                     console.warn(`Ignored spoofed submission ${key}: signer ${signerPub} != uploader ${uploaderPub}`);
                      return; // Ignore spoofed submission
                  }
             }

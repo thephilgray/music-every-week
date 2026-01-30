@@ -8,7 +8,7 @@ import type { Notification } from '../types';
 export function Inbox() {
   const { user, pubKey, gun } = useGun();
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Privacy & Contacts
@@ -30,27 +30,44 @@ export function Inbox() {
         }
     });
 
-    const notifsMap = new Map<string, Notification>();
+    const notifsMap = new Map<string, Notification & { fromAlias?: string }>();
+
+    const updateState = () => {
+        // Sort: Priority (Invite > Submission > Comment) then Date (Newest first)
+        const sorted = Array.from(notifsMap.values()).sort((a, b) => {
+            const priority = { invite: 3, submission: 2, comment: 1 };
+            const pA = priority[a.type as keyof typeof priority] || 0;
+            const pB = priority[b.type as keyof typeof priority] || 0;
+            
+            if (pA !== pB) return pB - pA; // Higher priority first
+            return b.createdAt - a.createdAt; // Then newest first
+        });
+        setNotifications(sorted);
+        setLoading(false);
+    };
 
     // Subscribe to inbox
-    // We map over the inbox node
     gun.get('inboxes').get(pubKey).map().on((data: any, key: string) => {
       // If data is null, it might have been deleted, but usually we just get the node
       if (data && data.type) { 
-          const n: Notification = { ...data, id: key };
-          notifsMap.set(key, n);
+          // Check if we already have this notification and its alias
+          const existing = notifsMap.get(key);
+          const n: Notification & { fromAlias?: string } = { ...data, id: key, fromAlias: existing?.fromAlias };
           
-          // Sort: Priority (Invite > Submission > Comment) then Date (Newest first)
-          const sorted = Array.from(notifsMap.values()).sort((a, b) => {
-              const priority = { invite: 3, submission: 2, comment: 1 };
-              const pA = priority[a.type as keyof typeof priority] || 0;
-              const pB = priority[b.type as keyof typeof priority] || 0;
-              
-              if (pA !== pB) return pB - pA; // Higher priority first
-              return b.createdAt - a.createdAt; // Then newest first
-          });
-          setNotifications(sorted);
-          setLoading(false);
+          // If we don't have the alias yet, fetch it
+          if (!n.fromAlias && n.fromPub) {
+              gun.get('all_users').get(n.fromPub).once((u: any) => {
+                  if (u && (u.alias || u.displayName)) {
+                      // Update the specific notification in the map and trigger re-render
+                      const updated = { ...n, fromAlias: u.displayName || u.alias };
+                      notifsMap.set(key, updated);
+                      updateState();
+                  }
+              });
+          }
+
+          notifsMap.set(key, n);
+          updateState();
       }
     });
     
@@ -58,7 +75,7 @@ export function Inbox() {
     const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
 
-  }, [user, pubKey, gun]); // Added gun to dependency
+  }, [user, pubKey, gun]);
 
   // Filter Notifications based on Privacy
   const filteredNotifications = notifications.filter(n => {
@@ -102,7 +119,6 @@ export function Inbox() {
     }
 
     markAsRead(n);
-    // Optimistic UI update or wait for gun? For Inbox we just mark read.
   };
 
   const handleDecline = async (e: React.MouseEvent, n: Notification) => {
@@ -179,12 +195,25 @@ export function Inbox() {
                           {getIcon(n.type)}
                       </div>
                       
-                      <div className="flex-1">
-                          <p className={`text-sm ${n.read ? 'text-gray-400' : 'text-gray-200 font-medium'}`}>
+                      <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start mb-1">
+                              <div className="flex items-center gap-2">
+                                  {/* Sender Alias Display */}
+                                  <span className="font-bold text-white text-sm truncate max-w-[150px]">
+                                      {n.fromAlias || 'Someone'}
+                                  </span>
+                                  <span className="text-gray-500 text-xs">•</span>
+                                  <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+                                      {n.type}
+                                  </span>
+                              </div>
+                              <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                                  {new Date(n.createdAt).toLocaleDateString()}
+                              </span>
+                          </div>
+                          
+                          <p className={`text-sm mb-3 ${n.read ? 'text-gray-500' : 'text-gray-300 font-medium'}`}>
                               {n.message}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">
-                              {new Date(n.createdAt).toLocaleDateString()} at {new Date(n.createdAt).toLocaleTimeString()}
                           </p>
                           
                           {/* Invite Actions */}
@@ -207,7 +236,7 @@ export function Inbox() {
                       </div>
 
                       {!n.read && (
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                          <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
                       )}
                   </div>
               ))}

@@ -49,8 +49,9 @@ export function Sidebar({ onClose }: SidebarProps) {
   return (
     <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
       <div className="p-6 flex justify-between items-center">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/mewlogo.png" alt="MEOW" className="h-12 w-auto" />
+        <Link to="/" className="flex items-center gap-3">
+          <img src="/mewlogo.png" alt="MEW" className="h-8 w-auto" />
+          <span className="font-bold text-xl tracking-tight text-white">MEW</span>
         </Link>
         {/* Mobile Close Button */}
         <button 
@@ -101,8 +102,8 @@ export function Sidebar({ onClose }: SidebarProps) {
         >
             Log Out
         </button>
-        <div className="text-xs text-gray-500 font-mono px-4">
-          v2.0.0-alpha
+        <div className="text-xs text-gray-600 font-mono px-4 text-center">
+          TrackPeer v0.1-beta
         </div>
       </div>
     </div>

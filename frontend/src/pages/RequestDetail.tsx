@@ -15,9 +15,10 @@ export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const { gun, pubKey, user } = useGun();
-  const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
+  const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
+  const [hostName, setHostName] = useState<string>('');
   const [participants, setParticipants] = useState<Record<string, any>>({});
   const [isVerified, setIsVerified] = useState(true); // Security Check
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
@@ -98,6 +99,13 @@ export function RequestDetail() {
                 ...data,
                 participants: {} // Placeholder, populated by separate state
             });
+
+            // Fetch Host Name
+            if (data.ownerPub) {
+                gun.get('all_users').get(data.ownerPub).once((u: any) => {
+                    if (u) setHostName(u.displayName || u.alias || 'Unknown Host');
+                });
+            }
         }
     });
 
@@ -487,6 +495,10 @@ export function RequestDetail() {
                 )}
               </div>
               
+              <div className="text-gray-400 text-sm mb-2 font-medium">
+                  Hosted by <Link to={`/profile/${request.ownerPub}`} className="text-blue-400 hover:underline">{hostName || 'Loading...'}</Link>
+              </div>
+
               <p className="text-gray-300 text-lg mb-4">{request.description}</p>
               
               <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-gray-400 mb-6 justify-center md:justify-start">

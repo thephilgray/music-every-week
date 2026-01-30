@@ -6,16 +6,23 @@ import { RequestCard } from './RequestCard';
 
 interface RequestListProps {
   filter?: 'active' | 'archived' | 'all';
+  requests?: FileRequest[];
+  loading?: boolean;
 }
 
-export function RequestList({ filter = 'all' }: RequestListProps) {
+export function RequestList({ filter = 'all', requests: propRequests, loading: propLoading }: RequestListProps) {
   const { gun, pubKey, user } = useGun();
-  const [requests, setRequests] = useState<FileRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [internalRequests, setInternalRequests] = useState<FileRequest[]>([]);
+  const [internalLoading, setInternalLoading] = useState(true);
   const [myParticipation, setMyParticipation] = useState<Record<string, string>>({});
   const [now] = useState(Date.now());
 
-  // 1. Load User Participation Status
+  const requests = propRequests || internalRequests;
+  const isLoading = propLoading !== undefined ? propLoading : internalLoading;
+
+  // 1. Load User Participation Status (Only if fetching internally or needing status for display?)
+  // Actually, participation status is useful for rendering cards (e.g. showing "Accepted" badge), 
+  // so we keep this subscription active regardless.
   useEffect(() => {
       if (!user || !pubKey) return;
       
@@ -29,6 +36,8 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
   }, [user, pubKey]);
 
   useEffect(() => {
+    if (propRequests) return; // Skip internal fetch if props provided
+
     // Subscribe to all file_requests
     const requestsMap = new Map<string, FileRequest>();
     const now = Date.now();
@@ -90,17 +99,17 @@ export function RequestList({ filter = 'all' }: RequestListProps) {
            return dateB - dateA; // Newest archived first
        });
        
-       setRequests(sorted);
-       setLoading(false);
+       setInternalRequests(sorted);
+       setInternalLoading(false);
     };
 
     gun.get('file_requests').map().on(processRequest);
     
-    const timer = setTimeout(() => setLoading(false), 2000);
+    const timer = setTimeout(() => setInternalLoading(false), 2000);
     return () => clearTimeout(timer);
-  }, [gun, filter, pubKey, myParticipation]); // Re-run when participation changes
+  }, [gun, filter, pubKey, myParticipation, propRequests]); // Added propRequests dep
 
-  if (loading && requests.length === 0) {
+  if (isLoading && requests.length === 0) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map(i => (

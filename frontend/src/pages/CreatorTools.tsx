@@ -70,7 +70,7 @@ export function CreatorTools() {
       const reqId = selectedRequest.id;
       const reqNode = gun.get('file_requests').get(reqId);
 
-      // Subscribe to Root
+      // Subscribe to Root Metadata
       reqNode.on((data: any) => {
           if (!data) return;
           
@@ -84,68 +84,32 @@ export function CreatorTools() {
                   parsedEmails = data.pending_emails;
               }
 
-              // CRITICAL FIX: Do not overwrite detailed participants with a Gun reference from the root node
-              let participantsUpdate = {};
-              if (typeof data.participants === 'string') {
-                  // Legacy string format - we MUST use this if present
-                  try { participantsUpdate = { participants: JSON.parse(data.participants) }; } catch (e) {}
-              } else if (data.participants && typeof data.participants === 'object' && !('#' in data.participants)) {
-                  // It's a real object (not a reference), so we can use it (rare in Gun for sub-nodes)
-                  // But usually, we rely on the specific .get('participants') subscription.
-                  // To be safe, if we already have detailed participants, we might skip this unless it looks "better".
-                  // For now, if it's NOT a reference, we treat it as valid data.
-                  // However, often 'root' updates sends the reference. 
-                  // If data.participants has keys other than '_', it might be data.
-              } else {
-                  // It is likely a reference (has '#') or empty or null.
-                  // We explicitly DO NOT include 'participants' in this update to avoid overwriting 
-                  // the state maintained by the specific participants subscription.
-                  // So participantsUpdate remains {}.
-              }
-
-              // If participantsUpdate is empty, we don't want to accidentally spread 'undefined' or empty object 
-              // over our existing valid participants.
-              // So we construct the update object carefully.
-              
+              // Update metadata only, preserve existing participants if already loaded from separate node
+              // We create a clean update object
               const update: any = { ...data, pending_emails: parsedEmails };
               
-              // Only apply participants update if we actually parsed something valid (legacy string)
-              if (Object.keys(participantsUpdate).length > 0) {
-                  update.participants = (participantsUpdate as any).participants;
-              } else {
-                  // Remove participants from 'data' to prevent overwriting with the raw reference/undefined
-                  delete update.participants;
-              }
+              // Remove participants from metadata update to avoid overwriting the detailed list
+              delete update.participants;
 
               return { ...prev, ...update };
           });
       });
 
-      // Subscribe to Participants Node
-      reqNode.get('participants').on((parts: any) => {
-          if (parts && typeof parts === 'object') {
-              const cleanParts: any = {};
-              Object.keys(parts).forEach(k => {
-                  if (k !== '_' && parts[k]) cleanParts[k] = parts[k];
-              });
-
+      // Subscribe to Participants Node (Separate Root)
+      gun.get('request_participants').get(reqId).map().on((data: any, pub: string) => {
+          if (data) {
               setSelectedRequest(prev => {
                   if (!prev || prev.id !== reqId) return prev;
+                  const prevParticipants = prev.participants || {};
                   
-                  const prevParts = prev.participants;
-                  // Check if previous participants was a Gun reference (has '#')
-                  const isPrevRef = prevParts && typeof prevParts === 'object' && '#' in prevParts;
-                  const newHasData = Object.keys(cleanParts).length > 0;
-                  const prevHasData = prevParts && Object.keys(prevParts).length > 0;
-
-                  // Defensive Merge Strategy:
-                  // If we receive an empty update, but we already have valid data (that isn't just a reference),
-                  // assume it's a transient glitch or race condition and ignore it.
-                  if (!newHasData && prevHasData && !isPrevRef) {
-                      return prev;
-                  }
-                  
-                  return { ...prev, participants: cleanParts };
+                  // Merge new participant data
+                  return {
+                      ...prev,
+                      participants: {
+                          ...prevParticipants,
+                          [pub]: data
+                      }
+                  };
               });
           }
       });
@@ -312,16 +276,8 @@ export function CreatorTools() {
   const grantExtension = (pub: string, hours: number) => {
       if (!selectedRequest || !selectedRequest.id) return;
       
-      // Update global request node
-      // We target the participants node directly.
-      // Note: This only works if participants is a node (object), not a string.
-      // If it's a string (legacy), we can't easily update.
-      if (typeof selectedRequest.participants === 'string') {
-          alert("This request uses an old data format. Cannot grant extensions.");
-          return;
-      }
-
-      gun.get('file_requests').get(selectedRequest.id).get('participants').get(pub).get('extensionHours').put(hours);
+      // Update global request node (using new participants root)
+      gun.get('request_participants').get(selectedRequest.id).get(pub).get('extensionHours').put(hours);
       
       // Update local state optimistically
       setParticipants(prev => prev.map(p => 
@@ -334,20 +290,8 @@ export function CreatorTools() {
       
       const newPassStatus = !participants.find(p => p.id === pub)?.hasPass;
 
-      // Handle Legacy String Format Safely
-      if (typeof selectedRequest.participants === 'string' || (selectedRequest as any)._participantsWasString) {
-           // We need to fetch the current parsed object from our state (which is parsed), update it, and write it back as a string
-           // Actually, selectedRequest.participants in state IS the parsed object if we did it right in useEffect.
-           // But to be safe and atomic, we should clone what we have.
-           const currentParticipants = { ...selectedRequest.participants };
-           if (currentParticipants[pub]) {
-               currentParticipants[pub] = { ...currentParticipants[pub], hasPass: newPassStatus };
-           }
-           gun.get('file_requests').get(selectedRequest.id).get('participants').put(JSON.stringify(currentParticipants));
-      } else {
-          // Standard Graph Update
-          gun.get('file_requests').get(selectedRequest.id).get('participants').get(pub).get('hasPass').put(newPassStatus);
-      }
+      // Standard Graph Update (New Architecture)
+      gun.get('request_participants').get(selectedRequest.id).get(pub).get('hasPass').put(newPassStatus);
 
       setParticipants(prev => prev.map(p => 
         p.id === pub ? { ...p, hasPass: newPassStatus } : p

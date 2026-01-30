@@ -556,7 +556,7 @@ export function RequestDetail() {
       
       {isEditOpen && request && (
           <EditRequest 
-             request={request}
+             request={{ ...request, participants }}
              onClose={() => setIsEditOpen(false)}
              onUpdate={() => {
                  // GunDB updates are live, so we might not need to manually refresh state 

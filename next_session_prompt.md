@@ -19,6 +19,7 @@
 *   **Known Fixes (Already Applied):**
     *   Fixed "User already created" / Infinite loading on signup (Auth/GunContext race condition).
     *   Fixed "Invite a Friend" flow (deep linking and data sanitization).
+    *   **New Issue:** Frontend routing broken on Settings page (production-only bug). After navigating to the Settings page, navigation to other pages is impossible.
 
 ### 2. Live QA (Smoke Test - Round 2)
 *   **Once fixes are deployed:**

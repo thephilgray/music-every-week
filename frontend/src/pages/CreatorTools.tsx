@@ -16,11 +16,10 @@ interface ParticipantRow {
 }
 
 export function CreatorTools() {
-  const { gun, user, pubKey, isAdmin } = useGun();
+  const { gun, user, pubKey } = useGun();
   const [myRequests, setMyRequests] = useState<FileRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -224,55 +223,6 @@ export function CreatorTools() {
 
   }, [selectedRequest, gun]);
 
-  const generateInvite = () => {
-      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-      gun.get('invites').get(code).put({
-          createdBy: pubKey,
-          createdAt: Date.now(),
-          status: 'active'
-      });
-      setInviteCode(code);
-  };
-
-  const generateSeedData = async () => {
-      if (!confirm("Generate seed data? This will add fake users and requests.")) return;
-      
-      const FAKE_USERS = [
-          { alias: 'Alice Songwriter', bio: 'Lofi producer from NY', location: 'New York, USA' },
-          { alias: 'Bob Beats', bio: 'Techno enthusiast', location: 'Berlin, DE' },
-          { alias: 'Charlie Chords', bio: 'Acoustic vibes', location: 'London, UK' },
-      ];
-
-      FAKE_USERS.forEach((u, i) => {
-          const fakePub = `fake_pub_${Math.random().toString(36).substring(7)}`;
-          gun.get('all_users').get(fakePub).put({
-              ...u,
-              pub: fakePub,
-              joinedAt: Date.now() - (i * 86400000)
-          });
-          
-          // Create a request for each
-          const reqId = `fake_req_${Math.random().toString(36).substring(7)}`;
-          const deadline = new Date();
-          deadline.setDate(deadline.getDate() + 7);
-          
-          const req = {
-              id: reqId,
-              title: `${u.alias}'s Challenge`,
-              description: `A weekly challenge hosted by ${u.alias}.`,
-              deadline: deadline.toISOString(),
-              accessMode: 'direct', // Make it visible
-              ownerPub: fakePub,
-              createdAt: Date.now(),
-              participants: {}
-          };
-          
-          gun.get('file_requests').get(reqId).put(req);
-      });
-      
-      alert("Seed data generated!");
-  };
-
   const grantExtension = (pub: string, hours: number) => {
       if (!selectedRequest || !selectedRequest.id) return;
       
@@ -324,30 +274,6 @@ export function CreatorTools() {
     <div className="flex flex-col md:flex-row h-[calc(100vh-theme(spacing.16))]">
         {/* Sidebar List of Requests */}
         <div className={`w-full md:w-80 border-r border-gray-800 p-4 bg-gray-950/50 overflow-y-auto ${selectedRequest ? 'hidden md:block' : 'block'}`}>
-            {isAdmin && (
-                <div className="mb-6 p-4 bg-blue-900/20 border border-blue-900/50 rounded-lg">
-                    <h3 className="text-blue-400 font-bold mb-2 text-sm uppercase">Admin Tools</h3>
-                    <button
-                        onClick={generateInvite}
-                        className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition"
-                    >
-                        Generate Invite Code
-                    </button>
-                    <button
-                        onClick={generateSeedData}
-                        className="w-full mt-2 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm font-medium transition"
-                    >
-                        Seed Directory (Dev)
-                    </button>
-                    {inviteCode && (
-                        <div className="mt-3 p-2 bg-gray-900 rounded border border-gray-700 text-center">
-                            <span className="text-xl font-mono text-white tracking-widest">{inviteCode}</span>
-                            <p className="text-xs text-gray-500 mt-1">Share this code with a new user</p>
-                        </div>
-                    )}
-                </div>
-            )}
-
             <h2 className="text-lg font-bold text-gray-200 mb-4 px-2">Your Requests</h2>
             <div className="space-y-1">
                 {myRequests.map(req => (

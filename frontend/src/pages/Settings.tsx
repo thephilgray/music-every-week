@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users } from 'lucide-react';
+import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 
 export function Settings() {
-  const { gun, user, pubKey, userProfile } = useGun();
+  const { gun, user, pubKey, userProfile, isAdmin } = useGun();
   const { success, error } = useToast();
   
   // Profile State
@@ -156,6 +156,50 @@ export function Settings() {
       setTimeout(() => {
           window.location.reload();
       }, 1000);
+  };
+
+  const exportBugReports = async () => {
+      if (!pubKey) return;
+      const reports: any[] = [];
+      
+      // Fetch
+      await new Promise<void>(resolve => {
+          let count = 0;
+          // Timeout
+          setTimeout(resolve, 2000);
+          
+          gun.get('inboxes').get(pubKey).map().once((data: any) => {
+              if (data && data.message && data.message.startsWith('BUG REPORT')) {
+                  reports.push({
+                      date: new Date(data.createdAt).toISOString(),
+                      from: data.fromPub,
+                      message: data.message.replace(/\n/g, '  '),
+                      link: data.link
+                  });
+              }
+              count++;
+          });
+      });
+
+      if (reports.length === 0) {
+          error("No bug reports found.");
+          return;
+      }
+
+      const headers = ['Date', 'From', 'Message', 'Screenshot/Link'];
+      const csvContent = [
+          headers.join(','),
+          ...reports.map(r => `"${r.date}","${r.from}","${r.message}","${r.link}"`)
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `bug_reports_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
   };
 
   return (
@@ -337,7 +381,7 @@ export function Settings() {
       </section>
 
       {/* Data Management Section */}
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-yellow-500" />
             Data Management
@@ -360,6 +404,27 @@ export function Settings() {
             </button>
         </div>
       </section>
+
+      {/* Admin Tools (Hidden) */}
+      {isAdmin && (
+      <section className="bg-red-900/10 border border-red-900/30 rounded-xl p-6">
+        <h2 className="text-xl font-semibold text-red-400 mb-6 flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Admin Tools
+        </h2>
+        
+        <div className="bg-gray-900 p-4 rounded-lg border border-gray-800">
+            <h3 className="text-white font-medium mb-3">Bug Reports</h3>
+            <p className="text-xs text-gray-500 mb-3">Export all bug reports sent to your inbox as a CSV file.</p>
+            <button
+                onClick={exportBugReports}
+                className="w-full md:w-auto px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 rounded text-sm font-medium transition flex items-center justify-center gap-2"
+            >
+                <Bug className="w-4 h-4" /> Export CSV
+            </button>
+        </div>
+      </section>
+      )}
     </div>
   );
 }

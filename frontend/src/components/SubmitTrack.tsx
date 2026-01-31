@@ -295,6 +295,36 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     }
   };
 
+  const handleDelete = async () => {
+      if (!existingSubmission) return;
+      if (!confirm("Are you sure you want to delete this submission? This cannot be undone.")) return;
+      
+      setIsUploading(true);
+      try {
+          const subId = existingSubmission.id;
+          
+          // 1. Remove from User Graph
+          user.get('submissions').get(subId).put(null);
+          user.get('my_submissions').get(subId).put(null);
+          
+          // 2. Remove from Request Node
+          gun.get('request_submissions').get(requestId).get(subId).put(null);
+          
+          // 3. Remove from Public Profile
+          if (pubKey) {
+              gun.get('all_users').get(pubKey).get('submissions').get(subId).put(null);
+          }
+          
+          onSuccess();
+          onClose();
+      } catch (e) {
+          console.error("Delete failed", e);
+          setError("Failed to delete submission.");
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
   return createPortal(
     <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 bg-gray-950 backdrop-blur-none overscroll-none touch-none">
       <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto overscroll-contain touch-auto">
@@ -554,32 +584,46 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 />
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
-                <button 
-                    type="button" 
-                    onClick={onClose}
-                    className="px-4 py-2 text-gray-400 hover:text-white transition"
-                    disabled={isUploading}
-                >
-                    Cancel
-                </button>
-                <button 
-                    type="submit" 
-                    disabled={isUploading}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isUploading ? (
-                        <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            {existingSubmission ? 'Updating...' : 'Uploading...'}
-                        </>
-                    ) : (
-                        <>
-                            <Upload className="w-4 h-4" />
-                            {existingSubmission ? 'Update Submission' : 'Submit Track'}
-                        </>
+            <div className="flex justify-between items-center pt-4 border-t border-gray-800 mt-6">
+                <div>
+                    {existingSubmission && (
+                        <button 
+                            type="button" 
+                            onClick={handleDelete}
+                            className="text-red-500 hover:text-red-400 text-sm flex items-center gap-1 transition"
+                            disabled={isUploading}
+                        >
+                            <Trash2 className="w-4 h-4" /> Delete
+                        </button>
                     )}
-                </button>
+                </div>
+                <div className="flex gap-3">
+                    <button 
+                        type="button" 
+                        onClick={onClose}
+                        className="px-4 py-2 text-gray-400 hover:text-white transition"
+                        disabled={isUploading}
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        type="submit" 
+                        disabled={isUploading}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isUploading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                {existingSubmission ? 'Updating...' : 'Uploading...'}
+                            </>
+                        ) : (
+                            <>
+                                <Upload className="w-4 h-4" />
+                                {existingSubmission ? 'Update' : 'Submit Track'}
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </form>
       </div>

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { EditRequest } from '../components/EditRequest';
-import type { FileRequest } from '../types';
+import { SubmitTrack } from '../components/SubmitTrack'; // For editing submissions
+import type { FileRequest, Submission } from '../types';
 
 interface ParticipantRow {
     id: string;
@@ -17,31 +18,35 @@ interface ParticipantRow {
 
 export function CreatorTools() {
   const { gun, user, pubKey } = useGun();
+  
+  // Tabs
+  const [activeTab, setActiveTab] = useState<'requests' | 'submissions'>('requests');
+
+  // Requests Data
   const [myRequests, setMyRequests] = useState<FileRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isEditRequestOpen, setIsEditRequestOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
+  // Submissions Data
+  const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [isEditSubmissionOpen, setIsEditSubmissionOpen] = useState(false);
+
+  // Fetch Requests
   useEffect(() => {
     if (!user) return;
-    
     const reqMap = new Map<string, FileRequest>();
-    // Listen to my_requests
     user.get('my_requests').map().on((data: any, key: string) => {
         if (data && data.title) { 
-            // Parse fields if they are strings (GunDB quirk or legacy data)
+            // ... (keep parsing logic)
             let parsedParticipants = {};
             let parsedEmails: string[] = [];
             
             if (typeof data.participants === 'string') {
                 try { parsedParticipants = JSON.parse(data.participants); } catch (e) {}
             } else if (data.participants) {
-                // If it's an object (graph node), we need to load it?
-                // Gun.map() usually loads one level. If participants is a node, data.participants might be a reference.
-                // However, for this list view, we might not need deep data yet.
-                // But for the selected view we do.
-                // Let's store what we have.
                 parsedParticipants = data.participants;
             }
 
@@ -62,7 +67,25 @@ export function CreatorTools() {
     });
   }, [user]);
 
-  // 1. Fetch Request Data
+  // Fetch Submissions
+  useEffect(() => {
+      if (!user) return;
+      const subMap = new Map<string, Submission>();
+      
+      // Listen to my_submissions (private reference) OR submissions (public reference, usually same data)
+      user.get('my_submissions').map().on((data: any, key: string) => {
+          if (data && data.title) {
+              subMap.set(key, { ...data, id: key });
+              setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+          } else if (data === null) {
+              // Handle deletion
+              subMap.delete(key);
+              setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+          }
+      });
+  }, [user]);
+
+  // ... (Keep existing fetch logic for selectedRequest)
   useEffect(() => {
       if (!selectedRequest || !selectedRequest.id) return;
 
@@ -272,32 +295,66 @@ export function CreatorTools() {
 
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-theme(spacing.16))]">
-        {/* Sidebar List of Requests */}
-        <div className={`w-full md:w-80 border-r border-gray-800 p-4 bg-gray-950/50 overflow-y-auto ${selectedRequest ? 'hidden md:block' : 'block'}`}>
-            <h2 className="text-lg font-bold text-gray-200 mb-4 px-2">Your Requests</h2>
-            <div className="space-y-1">
-                {myRequests.map(req => (
-                    <button
-                        key={req.id}
-                        onClick={() => setSelectedRequest(req)}
-                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between group transition-colors ${selectedRequest?.id === req.id 
-                            ? 'bg-blue-900/30 text-blue-400'
-                            : 'text-gray-400 hover:bg-gray-900 hover:text-gray-200'
-                        }`}
-                    >
-                        <span className="truncate">{req.title}</span>
-                        <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedRequest?.id === req.id ? 'opacity-100' : ''}`} />
-                    </button>
-                ))}
-                {myRequests.length === 0 && (
-                    <div className="text-gray-600 text-sm px-2 italic">No requests created yet.</div>
+        {/* Sidebar */}
+        <div className={`w-full md:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission ? 'hidden md:flex' : 'flex'}`}>
+            {/* Tabs */}
+            <div className="flex border-b border-gray-800">
+                <button
+                    onClick={() => { setActiveTab('requests'); setSelectedSubmission(null); }}
+                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'requests' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                    <List className="w-4 h-4" /> Requests
+                </button>
+                <button
+                    onClick={() => { setActiveTab('submissions'); setSelectedRequest(null); }}
+                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'submissions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                    <Music className="w-4 h-4" /> Submissions
+                </button>
+            </div>
+
+            <div className="p-4 space-y-1 flex-1 overflow-y-auto">
+                {activeTab === 'requests' ? (
+                    <>
+                        {myRequests.map(req => (
+                            <button
+                                key={req.id}
+                                onClick={() => setSelectedRequest(req)}
+                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between group transition-colors ${selectedRequest?.id === req.id 
+                                    ? 'bg-blue-900/30 text-blue-400'
+                                    : 'text-gray-400 hover:bg-gray-900 hover:text-gray-200'
+                                }`}
+                            >
+                                <span className="truncate">{req.title}</span>
+                                <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedRequest?.id === req.id ? 'opacity-100' : ''}`} />
+                            </button>
+                        ))}
+                        {myRequests.length === 0 && <div className="text-gray-600 text-sm px-2 italic">No requests created.</div>}
+                    </>
+                ) : (
+                    <>
+                        {mySubmissions.map(sub => (
+                            <button
+                                key={sub.id}
+                                onClick={() => setSelectedSubmission(sub)}
+                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between group transition-colors ${selectedSubmission?.id === sub.id 
+                                    ? 'bg-blue-900/30 text-blue-400'
+                                    : 'text-gray-400 hover:bg-gray-900 hover:text-gray-200'
+                                }`}
+                            >
+                                <span className="truncate">{sub.title}</span>
+                                <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedSubmission?.id === sub.id ? 'opacity-100' : ''}`} />
+                            </button>
+                        ))}
+                        {mySubmissions.length === 0 && <div className="text-gray-600 text-sm px-2 italic">No submissions yet.</div>}
+                    </>
                 )}
             </div>
         </div>
 
         {/* Main Content */}
-        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest ? 'block' : 'hidden md:block'}`}>
-            {selectedRequest ? (
+        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission ? 'block' : 'hidden md:block'}`}>
+            {activeTab === 'requests' && selectedRequest ? (
                 <div>
                     <button 
                         onClick={() => setSelectedRequest(null)}
@@ -318,7 +375,7 @@ export function CreatorTools() {
                                     <ExternalLink className="w-5 h-5" />
                                 </Link>
                                 <button 
-                                    onClick={() => setIsEditOpen(true)}
+                                    onClick={() => setIsEditRequestOpen(true)}
                                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
                                     title="Edit Request"
                                 >
@@ -430,21 +487,92 @@ export function CreatorTools() {
                         </table>
                     </div>
                 </div>
+            ) : activeTab === 'submissions' && selectedSubmission ? (
+                <div>
+                    <button 
+                        onClick={() => setSelectedSubmission(null)}
+                        className="md:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
+                    >
+                        <ArrowLeft className="w-4 h-4" /> Back to List
+                    </button>
+
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-2xl font-bold text-white">{selectedSubmission.title}</h1>
+                                <button 
+                                    onClick={() => setIsEditSubmissionOpen(true)}
+                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                    title="Edit Submission"
+                                >
+                                    <Edit className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <p className="text-gray-400 text-sm">
+                                Submitted on {new Date(selectedSubmission.createdAt).toLocaleDateString()}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-950 border border-gray-800 rounded-xl p-6">
+                        <div className="flex items-start gap-6">
+                            <div className="w-32 h-32 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                                {selectedSubmission.artworkUrl ? (
+                                    <img src={selectedSubmission.artworkUrl} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-600"><Music className="w-12 h-12" /></div>
+                                )}
+                            </div>
+                            <div className="space-y-4 flex-1">
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase font-bold">Byline</label>
+                                    <p className="text-white">{selectedSubmission.byline || 'Unknown'}</p>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase font-bold">Request</label>
+                                    <p>
+                                        <Link to={`/request/${selectedSubmission.requestId}`} className="text-blue-400 hover:underline flex items-center gap-1">
+                                            View Request <ExternalLink className="w-3 h-3" />
+                                        </Link>
+                                    </p>
+                                </div>
+                                {selectedSubmission.lyrics && (
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold">Lyrics / Notes</label>
+                                        <p className="text-gray-300 text-sm whitespace-pre-wrap mt-1">{selectedSubmission.lyrics}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500">
-                    <Users className="w-16 h-16 mb-4 opacity-20" />
-                    <p>Select a request from the sidebar to manage participants.</p>
+                    {activeTab === 'requests' ? <Users className="w-16 h-16 mb-4 opacity-20" /> : <Music className="w-16 h-16 mb-4 opacity-20" />}
+                    <p>Select a {activeTab === 'requests' ? 'request' : 'submission'} from the sidebar to manage it.</p>
                 </div>
             )}
         </div>
         
-        {isEditOpen && selectedRequest && (
+        {isEditRequestOpen && selectedRequest && (
             <EditRequest 
                 request={selectedRequest}
-                onClose={() => setIsEditOpen(false)}
+                onClose={() => setIsEditRequestOpen(false)}
                 onUpdate={() => {
-                    // Refresh not strictly needed as Gun is realtime, but could force refetch if needed
                     setSelectedRequest({ ...selectedRequest }); 
+                }}
+            />
+        )}
+
+        {isEditSubmissionOpen && selectedSubmission && (
+            <SubmitTrack
+                requestId={selectedSubmission.requestId}
+                existingSubmission={selectedSubmission}
+                onClose={() => setIsEditSubmissionOpen(false)}
+                onSuccess={() => {
+                    // Refresh not needed as Gun is realtime, but maybe update local list if changed
+                    setIsEditSubmissionOpen(false);
+                    // Re-select to show updates? Handled by gun subscriptions generally.
                 }}
             />
         )}

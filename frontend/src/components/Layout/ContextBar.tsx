@@ -4,7 +4,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { gun, user, pubKey, userProfile } = useGun();
+  const { gun, user, pubKey, userProfile, isConnected } = useGun();
   const location = useLocation();
   const navigate = useNavigate();
   const pathnames = location.pathname.split('/').filter((x) => x);
@@ -98,7 +98,13 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       </div>
 
       {/* User Dropdown */}
-      <div className="relative">
+      <div className="relative flex items-center gap-3">
+        {/* Status Indicator */}
+        <div 
+            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`}
+            title={isConnected ? "Online" : "Offline (Idle)"}
+        />
+
         <button 
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 rounded-full pl-1 pr-3 py-1 border border-gray-700 transition"

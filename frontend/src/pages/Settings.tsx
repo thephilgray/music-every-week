@@ -22,7 +22,7 @@ export function Settings() {
   const [isVolunteer, setIsVolunteer] = useState(false);
   const [showRequestsOnProfile, setShowRequestsOnProfile] = useState(true);
   const [showSubmissionsOnProfile, setShowSubmissionsOnProfile] = useState(true);
-  const [isSavingPrivacy, setIsSavingPrivacy] = useState(false);
+
 
   // Data State
   const [isClearing, setIsClearing] = useState(false);

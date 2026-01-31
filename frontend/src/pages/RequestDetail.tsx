@@ -108,7 +108,6 @@ export function RequestDetail() {
         } else if (data === null) {
             // Explicitly deleted
             setRequest(null);
-            setLoading(false);
         }
     });
 

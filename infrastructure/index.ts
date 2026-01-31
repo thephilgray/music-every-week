@@ -6,6 +6,13 @@ import * as docker from "@pulumi/docker";
 const config = new pulumi.Config();
 const location = config.get("location") || "us-central1";
 
+// R2 Credentials (Required for File Uploads)
+// Run `pulumi config set --secret r2AccessKeyId <value>` etc. to set these.
+const r2AccountId = config.require("r2AccountId");
+const r2AccessKeyId = config.requireSecret("r2AccessKeyId");
+const r2SecretAccessKey = config.requireSecret("r2SecretAccessKey");
+const r2BucketName = config.require("r2BucketName");
+
 // 1. Enable Services (Optional: might be managed manually)
 // We define them to ensure they are enabled.
 const runService = new gcp.projects.Service("run-service", {
@@ -74,6 +81,12 @@ const service = new gcp.cloudrunv2.Service("mew2-relay-service", {
                     memory: "512Mi",
                 },
             },
+            env: [
+                { name: "R2_ACCOUNT_ID", value: r2AccountId },
+                { name: "R2_ACCESS_KEY_ID", value: r2AccessKeyId },
+                { name: "R2_SECRET_ACCESS_KEY", value: r2SecretAccessKey },
+                { name: "R2_BUCKET_NAME", value: r2BucketName },
+            ],
         }],
         volumes: [{
             name: "gcs-mount",

@@ -29,6 +29,15 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
+  // Volunteer Settings
+  const [poolSeats, setPoolSeats] = useState(request.poolSeats || 3);
+  const [allowSubmissions, setAllowSubmissions] = useState(request.allowParticipantSubmissions !== undefined ? request.allowParticipantSubmissions : true);
+
+  // Import Logic
+  const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
+  const [selectedImportId, setSelectedImportId] = useState<string>('');
+  const [importFilter, setImportFilter] = useState<'all' | 'accepted' | 'submitted'>('all');
+
   // Participant Management Logic
   const [selectedParticipants, setSelectedParticipants] = useState<Record<string, any>>(request.participants || {});
   const [emailInput, setEmailInput] = useState('');
@@ -41,6 +50,74 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'unset'; };
   }, []);
+
+  // Fetch Existing Requests for Import
+  useEffect(() => {
+    if (!user || !pubKey) return;
+    const list: FileRequest[] = [];
+    user.get('my_requests').map().once((data: any, id: string) => {
+        if (data && data.title && id !== request.id) { // Exclude current
+            list.push({ ...data, id });
+            setExistingRequests([...list].sort((a, b) => b.createdAt - a.createdAt));
+        }
+    });
+  }, [user, pubKey, request.id]);
+
+  const handleImportSelect = async (importId: string) => {
+    setSelectedImportId(importId);
+    if (!importId) return;
+    
+    // We append to existing participants instead of replacing
+    const submitters = new Set<string>();
+    if (importFilter === 'submitted') {
+         await new Promise<void>(resolve => {
+             let done = false;
+             setTimeout(() => { done = true; resolve(); }, 1000);
+             gun.get('file_requests').get(importId).get('submissions').map().once((sub: any) => {
+                 if (done) return;
+                 if (sub && sub.uploaderPub) submitters.add(sub.uploaderPub);
+             });
+         });
+    }
+
+    gun.get('request_participants').get(importId).map().once(async (data: any, pub: string) => {
+        if (!data || !pub) return;
+        if (pub === pubKey) return;
+        if (selectedParticipants[pub]) return; // Skip if already in list
+
+        if (importFilter === 'accepted' && data.status !== 'accepted') return;
+        if (importFilter === 'submitted') {
+            const hasPass = data.hasPass === true;
+            const hasSubmitted = submitters.has(pub);
+            if (!hasPass && !hasSubmitted) return;
+        }
+
+        let alias = data.alias;
+        if (!alias || alias === 'Unknown') {
+            await new Promise<void>(resolve => {
+                gun.get('all_users').get(pub).once((u: any) => {
+                    if (u && u.alias) alias = u.alias;
+                    resolve();
+                });
+            });
+        }
+
+        setSelectedParticipants(prev => ({
+            ...prev,
+            [pub]: {
+                status: 'pending', 
+                alias: alias || 'Unknown' 
+            }
+        }));
+    });
+  };
+
+  // Re-run import if filter changes and an ID is selected
+  useEffect(() => {
+      if (selectedImportId) {
+          handleImportSelect(selectedImportId);
+      }
+  }, [importFilter]);
 
   // Sync participants if data arrives after mount
   useEffect(() => {
@@ -147,7 +224,9 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         deadline,
         accessMode,
         artworkUrl,
-        pending_emails: JSON.stringify(pendingEmails)
+        pending_emails: JSON.stringify(pendingEmails),
+        poolSeats: accessMode === 'volunteer' ? poolSeats : null,
+        allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true
       };
 
       // Update Metadata
@@ -296,12 +375,73 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                 </div>
             </div>
 
+            {/* Volunteer Mode Settings */}
+            {accessMode === 'volunteer' && (
+                <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-300">Volunteer Settings</h4>
+                    
+                    <div className="flex items-center gap-4">
+                        <label className="text-gray-400 text-sm">Open Seats:</label>
+                        <input 
+                            type="number" 
+                            min={2} 
+                            value={poolSeats} 
+                            onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
+                            className="w-20 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="checkbox" 
+                            id="allowSubmissions"
+                            checked={allowSubmissions}
+                            onChange={e => setAllowSubmissions(e.target.checked)}
+                            className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none">
+                            Allow volunteers to submit tracks
+                        </label>
+                    </div>
+                </div>
+            )}
+
             {/* Participants Management */}
+            {accessMode !== 'volunteer' && (
             <div className="border-t border-gray-800 pt-4">
                <label className="block text-gray-400 text-sm mb-2 font-semibold flex items-center gap-2">
                  <UserPlus className="w-4 h-4" />
                  Manage Participants
                </label>
+               
+               {/* Import from previous */}
+               <div className="flex gap-2 items-end mb-4">
+                <div className="flex-1">
+                    <label className="block text-gray-500 text-xs mb-1">Import from Previous</label>
+                    <select
+                        value={selectedImportId}
+                        onChange={(e) => handleImportSelect(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                    >
+                        <option value="">-- Select --</option>
+                        {existingRequests.map(req => (
+                            <option key={req.id} value={req.id}>{req.title}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="w-1/3">
+                    <label className="block text-gray-500 text-xs mb-1">Filter</label>
+                    <select
+                        value={importFilter}
+                        onChange={(e: any) => setImportFilter(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                    >
+                        <option value="all">All</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="submitted">Submitted</option>
+                    </select>
+                </div>
+               </div>
                
                {/* Search Directory */}
                <div className="relative mb-3">
@@ -366,6 +506,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                   </div>
                )}
             </div>
+            )}
 
             <div>
                 <label className="block text-gray-400 text-sm mb-1">Update Artwork (Optional)</label>

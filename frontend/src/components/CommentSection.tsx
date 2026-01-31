@@ -81,10 +81,26 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
       }
   }, [comments, highlightCommentId]);
 
+  const getSupportedMimeType = () => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg',
+    ];
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return 'audio/webm'; // Fallback
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
 
@@ -95,8 +111,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioFile = new File([audioBlob], 'voice-comment.webm', { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const audioFile = new File([audioBlob], `voice-comment.${mimeType.split('/')[1].split(';')[0]}`, { type: mimeType });
         setRecordedFile(audioFile);
         const url = URL.createObjectURL(audioBlob);
         setPreviewUrl(url);
@@ -279,7 +295,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
   };
 
   return (
-    <div className="mt-4 bg-gray-950/50 rounded p-4 border border-gray-800 ml-16">
+    <div className="mt-4 bg-gray-950/50 rounded p-4 border border-gray-800">
        <h5 className="text-sm font-semibold text-gray-400 mb-3">Comments</h5>
        
        <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">

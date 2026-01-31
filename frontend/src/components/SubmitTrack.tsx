@@ -246,7 +246,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             requestId,
             title,
             byline: finalByline,
-            lyrics: lyrics || '',
+            lyrics: String(lyrics),
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderPub: pubKey as string,

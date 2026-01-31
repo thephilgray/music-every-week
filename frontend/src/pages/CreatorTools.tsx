@@ -294,9 +294,9 @@ export function CreatorTools() {
   if (!pubKey) return <div className="text-center py-20 text-gray-500">Please login to access Creator Tools.</div>;
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-theme(spacing.16))]">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-theme(spacing.16))]">
         {/* Sidebar */}
-        <div className={`w-full md:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`w-full lg:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission ? 'hidden lg:flex' : 'flex'}`}>
             {/* Tabs */}
             <div className="flex border-b border-gray-800">
                 <button
@@ -353,12 +353,12 @@ export function CreatorTools() {
         </div>
 
         {/* Main Content */}
-        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission ? 'block' : 'hidden md:block'}`}>
+        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission ? 'block' : 'hidden lg:block'}`}>
             {activeTab === 'requests' && selectedRequest ? (
                 <div>
                     <button 
                         onClick={() => setSelectedRequest(null)}
-                        className="md:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
+                        className="lg:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
                     >
                         <ArrowLeft className="w-4 h-4" /> Back to List
                     </button>
@@ -491,7 +491,7 @@ export function CreatorTools() {
                 <div>
                     <button 
                         onClick={() => setSelectedSubmission(null)}
-                        className="md:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
+                        className="lg:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
                     >
                         <ArrowLeft className="w-4 h-4" /> Back to List
                     </button>

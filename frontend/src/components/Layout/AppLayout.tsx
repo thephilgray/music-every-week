@@ -14,7 +14,6 @@ export function AppLayout() {
   useEffect(() => {
       const pendingReqId = sessionStorage.getItem('pendingJoinRequest');
       if (pendingReqId && pubKey) {
-          console.log("Processing pending auto-join for:", pendingReqId);
           sessionStorage.removeItem('pendingJoinRequest');
           
           const partData = {
@@ -29,7 +28,6 @@ export function AppLayout() {
                   console.error("Auto-join failed:", ack.err);
                   error("Failed to join request automatically. Please try manually.");
               } else {
-                  console.log("Auto-join success:", ack);
                   success("You have successfully joined the request!");
                   
                   // Local marker

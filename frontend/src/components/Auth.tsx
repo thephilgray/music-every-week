@@ -112,7 +112,6 @@ export function Auth() {
 
                  // Check for Auto-Join
                  if (requestToJoinId) {
-                     console.log("Queueing auto-join for request:", requestToJoinId);
                      // Defer write to App.tsx to ensure session is fully ready and component doesn't unmount
                      sessionStorage.setItem('pendingJoinRequest', requestToJoinId);
                  } else if (email) {
@@ -124,7 +123,6 @@ export function Auth() {
       };
 
       const verifyGlobalInvite = (code: string) => {
-          console.log("Verifying global invite code:", code);
           gun.get('invites').get(code).once((data: any) => {
               if (data && data.status === 'active') {
                   const inviter = data.from || data.createdBy;
@@ -145,19 +143,15 @@ export function Auth() {
           const requestIdFromUrl = match ? match[1] : null;
 
           if (requestIdFromUrl) {
-              console.log("Verifying invite against Request:", requestIdFromUrl);
               gun.get('file_requests').get(requestIdFromUrl).once((req: any) => {
                   if (req && req.inviteCode === code) {
-                      console.log("Invite matched Request!");
                       // Valid!
                       proceedWithSignup(false, req.ownerPub, requestIdFromUrl);
                   } else {
-                      console.warn("Invite code did not match request. Checking global invites...");
+                      // Fallback to global check
                       verifyGlobalInvite(code);
                   }
               });
-          } else {
-              verifyGlobalInvite(code);
           }
       } else {
           setError("Invite Code is required");

@@ -53,8 +53,6 @@ export function Home() {
       return isOwner || isDirect || myStatus === 'accepted' || myStatus === 'joined' || myStatus === 'invited';
   }).sort((a, b) => b.createdAt - a.createdAt);
 
-  console.log("Home render: loading =", loading, "requests =", visibleRequests.length);
-
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20 p-4">
       <div className="flex items-center justify-between">

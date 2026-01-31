@@ -11,6 +11,7 @@ import { Profile } from './pages/Profile';
 import { Archive } from './pages/Archive';
 import { Playlists } from './pages/Playlists';
 import { Settings } from './pages/Settings';
+import { Community } from './pages/Community';
 import { ToastProvider } from './contexts/ToastContext';
 import { IdleMonitor } from './components/IdleMonitor';
 import { LandingPage } from './pages/LandingPage';
@@ -67,6 +68,7 @@ function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Home />} />
+            <Route path="/feed" element={<Community />} />
             <Route path="/request/:id" element={<RequestDetail />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/creator" element={<CreatorTools />} />

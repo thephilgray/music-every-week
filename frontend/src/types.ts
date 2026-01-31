@@ -51,6 +51,8 @@ export interface Submission {
   collaborators?: Record<string, boolean>; // Map of user public keys
   waveform?: number[];
   hiddenFromProfile?: boolean;
+  stage?: string;
+  feedbackFocus?: string[];
 }
 
 export interface Comment {

@@ -125,8 +125,11 @@ export function RequestDetail() {
     // clearing submissions first to avoid dupes on re-mount if effect runs again
     setSubmissions([]); 
     
+    console.log("Subscribing to submissions for:", id);
     gun.get('request_submissions').get(id).map().on((data: any, key: string) => {
         if (data) {
+            console.log("Received submission data:", key, data);
+            
             // Security Check for Submissions
             const soul = data._ && data._['#'];
             if (soul && typeof soul === 'string' && soul.startsWith('~')) {
@@ -144,6 +147,8 @@ export function RequestDetail() {
 
             setSubmissions(prev => {
                 let parsedWaveform = data.waveform;
+                let parsedFocus = data.feedbackFocus;
+
                 // Check if waveform is stringified (new format)
                 if (typeof data.waveform === 'string') {
                     try {
@@ -153,8 +158,17 @@ export function RequestDetail() {
                         parsedWaveform = []; // Fallback
                     }
                 }
+                
+                // Check if feedbackFocus is stringified
+                if (typeof data.feedbackFocus === 'string') {
+                    try { parsedFocus = JSON.parse(data.feedbackFocus); } catch (e) { parsedFocus = []; }
+                } else if (!Array.isArray(data.feedbackFocus)) {
+                    parsedFocus = [];
+                }
 
-                const safeData = { ...data, id: key, waveform: parsedWaveform }; // ensure ID is present & parsed waveform
+                const safeData = { ...data, id: key, waveform: parsedWaveform, feedbackFocus: parsedFocus }; // ensure ID is present & parsed props
+                console.log("Processed safe submission:", safeData);
+                
                 const exists = prev.find(s => s.id === key);
                 if (exists) {
                     // Avoid update if identical to prevent re-renders
@@ -642,11 +656,29 @@ export function RequestDetail() {
                         </div>
                         
                         {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-                            <CommentSection 
-                                requestId={id} 
-                                submissionId={sub.id} 
-                                highlightCommentId={linkedCommentId || undefined}
-                            />
+                            <div className="mt-4 px-4">
+                                {(sub.stage || (sub.feedbackFocus && sub.feedbackFocus.length > 0)) && (
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {sub.stage && (
+                                            <span className="px-2 py-1 rounded bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
+                                                Stage: {sub.stage}
+                                            </span>
+                                        )}
+                                        {sub.feedbackFocus?.map(focus => (
+                                            <span key={focus} className="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300 text-xs">
+                                                {focus}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                <CommentSection 
+                                    requestId={id} 
+                                    submissionId={sub.id} 
+                                    highlightCommentId={linkedCommentId || undefined}
+                                    accessMode={request.accessMode}
+                                    requestTitle={request.title}
+                                />
+                            </div>
                         )}
                     </div>
                 )})}
@@ -659,9 +691,36 @@ export function RequestDetail() {
             requestId={id} 
             participants={request.participants}
             existingSubmission={userSubmission}
+            accessMode={request.accessMode}
             onClose={() => setIsSubmitOpen(false)}
-            onSuccess={() => {
-                // optional: trigger a toast or refresh logic if needed
+            onSuccess={(newSub) => {
+                if (newSub) {
+                    // Manually inject into state for instant feedback
+                    setSubmissions(prev => {
+                        // Parse feedbackFocus if stringified (which it is from SubmitTrack)
+                        let parsedFocus = newSub.feedbackFocus;
+                        if (typeof newSub.feedbackFocus === 'string') {
+                            try { parsedFocus = JSON.parse(newSub.feedbackFocus); } catch(e) { parsedFocus = []; }
+                        }
+                        
+                        // Parse waveform if stringified
+                        let parsedWaveform = newSub.waveform;
+                        if (typeof newSub.waveform === 'string') {
+                            try { parsedWaveform = JSON.parse(newSub.waveform); } catch(e) { parsedWaveform = []; }
+                        }
+
+                        const safeSub = { ...newSub, feedbackFocus: parsedFocus, waveform: parsedWaveform };
+                        
+                        // Replace if exists (edit), else add
+                        const idx = prev.findIndex(s => s.id === safeSub.id);
+                        if (idx >= 0) {
+                            const copy = [...prev];
+                            copy[idx] = safeSub;
+                            return copy;
+                        }
+                        return [safeSub, ...prev];
+                    });
+                }
             }}
           />
       )}

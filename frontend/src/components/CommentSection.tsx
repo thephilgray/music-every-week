@@ -4,15 +4,18 @@ import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import { CommentItem } from './CommentItem';
 import { MiniPlayer } from './ui/MiniPlayer';
+import { ConfirmModal } from './ui/ConfirmModal';
 import type { Comment, Notification, UserProfile } from '../types';
 
 interface CommentSectionProps {
   requestId: string;
   submissionId: string;
   highlightCommentId?: string;
+  accessMode?: string;
+  requestTitle?: string;
 }
 
-export function CommentSection({ requestId, submissionId, highlightCommentId }: CommentSectionProps) {
+export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle }: CommentSectionProps) {
   const { gun, pubKey, user, userProfile } = useGun();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -27,6 +30,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionResults, setMentionResults] = useState<UserProfile[]>([]);
   const [mentionedUsers, setMentionedUsers] = useState<Record<string, string>>({}); // Alias -> Pub
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -44,12 +48,23 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
        .get(submissionId)
        .map()
        .on((data: any, key: string) => {
+          // Handle Deletion (data is null)
+          if (data === null) {
+              commentsMap.delete(key);
+              setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
+              return;
+          }
+
           // If data is a reference (pointer), resolve it
           if (data && !data.text && !data.audioUrl) {
               gun.get(key).once((resolvedData: any) => {
                   if (resolvedData && (resolvedData.text || resolvedData.audioUrl)) {
                       const comment: Comment = { ...resolvedData, id: key };
                       commentsMap.set(key, comment);
+                      setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
+                  } else if (resolvedData === null) {
+                      // Handle resolved node being deleted
+                      commentsMap.delete(key);
                       setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
                   }
               });
@@ -232,7 +247,35 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
         .get(id)
         .put(userCommentNode);
 
+        // Write to Global Feed if Public
+        if (accessMode === 'direct') {
+            const pulseId = crypto.randomUUID();
+            const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const bucketKey = `global_pulse_${dateStr}`;
+
+            // Fetch submission title for context
+            gun.get('request_submissions').get(requestId).get(submissionId).once((subData: any) => {
+                const feedItem = {
+                    id: pulseId,
+                    type: 'comment',
+                    text: newComment,
+                    authorPub: pubKey as string,
+                    submissionId,
+                    requestId,
+                    submissionTitle: subData?.title || 'Unknown Track',
+                    requestTitle: requestTitle || 'Unknown Request',
+                    createdAt: Date.now()
+                };
+                gun.get(bucketKey).get(pulseId).put(feedItem);
+                
+                // Store pulseId & bucket ref in comment for future updates/deletes
+                user.get('comments').get(id).get('globalPulseId').put(pulseId);
+                user.get('comments').get(id).get('globalBucket').put(bucketKey);
+            });
+        }
+
         // Notify Submission Uploader
+        gun.get('request_submissions')
         gun.get('request_submissions')
         .get(requestId)
         .get(submissionId)
@@ -294,6 +337,43 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
     }
   };
 
+  const handleDeleteComment = (commentId: string) => {
+      setDeleteCandidateId(commentId);
+  };
+
+  const confirmDelete = () => {
+      if (!deleteCandidateId) return;
+      const commentId = deleteCandidateId;
+      setDeleteCandidateId(null);
+
+      // Check for Global Pulse ID to delete from feed
+      user.get('comments').get(commentId).once((cData: any) => {
+          if (cData && cData.globalPulseId) {
+              const bucket = cData.globalBucket || 'global_pulse'; // Fallback for legacy
+              gun.get(bucket).get(cData.globalPulseId).put(null);
+          }
+      });
+
+      // Delete from Public List (Pointer)
+      gun.get('submission_comments').get(submissionId).get(commentId).put(null);
+      
+      // Delete from User Graph (Actual Data)
+      user.get('comments').get(commentId).put(null);
+  };
+
+  const handleEditComment = (commentId: string, newText: string) => {
+      // Update User Graph (Source of Truth)
+      user.get('comments').get(commentId).get('text').put(newText);
+      
+      // Update Global Pulse if exists
+      user.get('comments').get(commentId).once((cData: any) => {
+          if (cData && cData.globalPulseId) {
+              const bucket = cData.globalBucket || 'global_pulse'; // Fallback
+              gun.get(bucket).get(cData.globalPulseId).get('text').put(newText);
+          }
+      });
+  };
+
   return (
     <div className="mt-4 bg-gray-950/50 rounded p-4 border border-gray-800">
        <h5 className="text-sm font-semibold text-gray-400 mb-3">Comments</h5>
@@ -301,7 +381,11 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
        <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
           {comments.map(c => (
              <div key={c.id} id={`comment-${c.id}`} className="rounded transition-all duration-1000">
-                <CommentItem comment={c} />
+                <CommentItem 
+                    comment={c} 
+                    onDelete={handleDeleteComment} 
+                    onEdit={handleEditComment}
+                />
              </div>
           ))}
           {comments.length === 0 && <p className="text-xs text-gray-600 italic">No comments yet.</p>}
@@ -397,6 +481,16 @@ export function CommentSection({ requestId, submissionId, highlightCommentId }: 
                </button>
            </div>
        </form>
+
+       <ConfirmModal
+           isOpen={!!deleteCandidateId}
+           title="Delete Comment?"
+           message="Are you sure you want to delete this comment? This cannot be undone."
+           confirmLabel="Delete"
+           isDestructive
+           onConfirm={confirmDelete}
+           onCancel={() => setDeleteCandidateId(null)}
+       />
     </div>
   );
 }

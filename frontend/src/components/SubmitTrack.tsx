@@ -13,10 +13,11 @@ interface SubmitTrackProps {
   participants?: Record<string, { status: 'pending' | 'accepted', alias?: string, email?: string }>;
   existingSubmission?: Submission;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (submission?: Submission) => void;
+  accessMode?: string;
 }
 
-export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess }: SubmitTrackProps) {
+export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess, accessMode }: SubmitTrackProps) {
   const { gun, user, pubKey, userProfile } = useGun();
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
@@ -31,6 +32,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [knownAliases, setKnownAliases] = useState<Record<string, string>>({}); // Store aliases for UI display
   
+  // Feedback Metadata
+  const [stage, setStage] = useState('First Draft / Demo');
+  const [feedbackFocus, setFeedbackFocus] = useState<string[]>([]);
+
   // Audio Recording
   const [audioType, setAudioType] = useState<'upload' | 'record'>('upload');
   const [isRecording, setIsRecording] = useState(false);
@@ -57,6 +62,17 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setByline(existingSubmission.byline || '');
         setLyrics(existingSubmission.lyrics || '');
         setCollaborators(Object.keys(existingSubmission.collaborators || {}));
+        setStage(existingSubmission.stage || 'First Draft / Demo');
+        
+        let parsedFocus: string[] = [];
+        if (existingSubmission.feedbackFocus) {
+            if (typeof existingSubmission.feedbackFocus === 'string') {
+                try { parsedFocus = JSON.parse(existingSubmission.feedbackFocus); } catch(e) {}
+            } else if (Array.isArray(existingSubmission.feedbackFocus)) {
+                parsedFocus = existingSubmission.feedbackFocus;
+            }
+        }
+        setFeedbackFocus(parsedFocus);
     } else {
         if (!user) return;
         user.get('preferences').get('lastByline').once((data: any) => {
@@ -228,6 +244,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
         // 3. Save to Gun
         const submissionId = existingSubmission?.id || crypto.randomUUID();
+        console.log('Preparing submission object...', submissionId);
         
         // Convert collaborators array to Record<string, boolean>
         const collaboratorsMap: Record<string, boolean> = {};
@@ -252,17 +269,28 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             uploaderPub: pubKey as string,
             createdAt: existingSubmission?.createdAt || Date.now(),
             collaborators: collaboratorsMap,
-            waveform: waveformStr // Saved as string
+            waveform: waveformStr, // Saved as string
+            stage,
+            feedbackFocus: JSON.stringify(feedbackFocus) // Serialize array for GunDB
         };
+
+        console.log('Saving submission to GunDB...', submission);
 
         // Link submission to the Request
         // We'll store it under file_requests/ID/submissions/SUB_ID -> CHANGED TO request_submissions/ID
         // Securely: Store in User Graph, then Link
         const userSubNode = user.get('submissions').get(submissionId);
-        userSubNode.put(submission);
+        userSubNode.put(submission, (ack: any) => {
+            if (ack.err) console.error('Error saving to user graph:', ack.err);
+            else console.log('Saved to user graph:', ack);
+        });
         
         // Use separate root node for submissions to allow public writes
-        gun.get('request_submissions').get(requestId).get(submissionId).put(userSubNode);
+        // STORE COPY INSTEAD OF REFERENCE for reliability
+        gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
+            if (ack.err) console.error('Error linking to request_submissions:', ack.err);
+            else console.log('Linked to request_submissions:', ack);
+        });
 
         // Also link to user's public profile (Double-Linking)
         // This is crucial for the "Profile" view to show all works
@@ -304,11 +332,34 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     createdAt: Date.now(),
                     read: false
                 };
-                gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
-            }
+            };
+            gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
         });
 
-        onSuccess();
+        // Write to Global Feed if Public and New
+        if (accessMode === 'direct' && !existingSubmission) {
+            const pulseId = crypto.randomUUID();
+            const dateStr = new Date().toISOString().split('T')[0];
+            const bucketKey = `global_pulse_${dateStr}`;
+            
+            // We need request title. Fetching it.
+            gun.get('file_requests').get(requestId).once((req: any) => {
+                const feedItem = {
+                    id: pulseId,
+                    type: 'submission',
+                    text: `Submitted a new track: "${title}"`,
+                    authorPub: pubKey as string,
+                    submissionId,
+                    requestId,
+                    submissionTitle: title,
+                    requestTitle: req?.title || 'Unknown Request',
+                    createdAt: Date.now()
+                };
+                gun.get(bucketKey).get(pulseId).put(feedItem);
+            });
+        }
+
+        onSuccess(submission);
         onClose();
 
     } catch (err: any) {
@@ -599,6 +650,61 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         );
                     })}
                 </div>
+            </div>
+
+            {/* Stage & Feedback */}
+            <div className="grid grid-cols-1 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Completion Stage</label>
+                    <select 
+                        value={stage}
+                        onChange={(e) => setStage(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                    >
+                        {["Seed of an Idea", "First Draft / Demo", "In Production / Full Arrangement", 
+                          "Ready for Mixing", "Final Polish / Mastering", "All or Mostly AI"].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <details className="group border border-gray-700 rounded bg-gray-800/30">
+                    <summary className="p-3 cursor-pointer text-sm font-medium text-gray-300 hover:text-white flex justify-between items-center select-none">
+                        <span>
+                            Feedback Focus
+                            {feedbackFocus.length > 0 && <span className="ml-2 text-blue-400 text-xs">({feedbackFocus.length} selected)</span>}
+                        </span>
+                        <span className="text-gray-500 text-xs group-open:rotate-180 transition-transform">▼</span>
+                    </summary>
+                    <div className="p-4 pt-0 border-t border-gray-700/50 mt-2 space-y-4 max-h-60 overflow-y-auto">
+                        {Object.entries({
+                            "Songwriting & Composition": ["Lyrics", "Melody", "Harmony / Chords"],
+                            "Arrangement & Structure": ["Song Structure", "Instrumentation", "Dynamics / Pacing"],
+                            "Performance": ["Vocal Performance", "Instrumental Performance"],
+                            "Production & Mix": ["Recording Quality", "Mixing", "Sound Design / Vibe"]
+                        }).map(([category, items]) => (
+                            <div key={category}>
+                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 mt-2">{category}</h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {items.map(item => (
+                                        <label key={item} className="flex items-center gap-2 cursor-pointer hover:bg-gray-700/50 p-1 rounded">
+                                            <input 
+                                                type="checkbox"
+                                                checked={feedbackFocus.includes(item)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setFeedbackFocus([...feedbackFocus, item]);
+                                                    else setFeedbackFocus(feedbackFocus.filter(i => i !== item));
+                                                }}
+                                                className="rounded bg-gray-900 border-gray-600 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <span className="text-sm text-gray-300">{item}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </details>
             </div>
 
             <div>

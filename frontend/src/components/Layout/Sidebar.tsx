@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut } from 'lucide-react';
+import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut, Globe } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 import { BugReportModal } from '../BugReportModal';
@@ -39,6 +39,7 @@ export function Sidebar({ onClose }: SidebarProps) {
   
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
+    { icon: Globe, label: 'Community', path: '/feed' },
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     { icon: Users, label: 'Directory', path: '/directory' },
     { icon: ListMusic, label: 'Playlists', path: '/playlists' },

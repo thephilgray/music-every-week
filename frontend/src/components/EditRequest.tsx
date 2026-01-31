@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
-import { X, Save, Trash2, Loader2, UserPlus, Filter } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { ConfirmModal } from './ui/ConfirmModal';
 
 interface EditRequestProps {
@@ -15,7 +15,7 @@ interface EditRequestProps {
 }
 
 export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
-  const { gun, pubKey, user } = useGun();
+  const { gun, user, pubKey } = useGun();
   const { success, error } = useToast();
   const navigate = useNavigate();
   
@@ -24,7 +24,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [deadline, setDeadline] = useState(request.deadline || '');
   const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(request.accessMode || 'direct');
   const [file, setFile] = useState<File | null>(null);
-  const [currentArtworkUrl, setCurrentArtworkUrl] = useState(request.artworkUrl || '');
+  const [currentArtworkUrl] = useState(request.artworkUrl || ''); // Removed unused setter
   const [loading, setLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -56,7 +56,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
     if (!user || !pubKey) return;
     const list: FileRequest[] = [];
     user.get('my_requests').map().once((data: any, id: string) => {
-        if (data && data.title && id !== request.id) { // Exclude current
+        if (data && data.title && id !== request.id) {
             list.push({ ...data, id });
             setExistingRequests([...list].sort((a, b) => b.createdAt - a.createdAt));
         }
@@ -209,6 +209,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!request.id) return;
     setLoading(true);
 
     try {
@@ -230,25 +231,23 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       };
 
       // Update Metadata
-      await user.get('requests').get(request.id).put(updates);
-      await gun.get('file_requests').get(request.id).put(updates);
-      await user.get('my_requests').get(request.id).put(updates);
+      await user.get('requests').get(request.id!).put(updates);
+      await gun.get('file_requests').get(request.id!).put(updates);
+      await user.get('my_requests').get(request.id!).put(updates);
 
       // Handle Participants (Graph Mode)
-      // 1. Get current keys to identify deletions
       const oldParticipants = request.participants || {};
       const newParticipants = { ...selectedParticipants };
       
-      // 2. Mark removed users as null (deletion)
+      // Mark removed users as null (deletion)
       Object.keys(oldParticipants).forEach(key => {
           if (!newParticipants[key]) {
               newParticipants[key] = null;
           }
       });
       
-      // 3. Save participants node
-      // Note: We write individually to avoid clobbering concurrent writes if we can, but bulk put is okay for owner
-      const participantsNode = gun.get('request_participants').get(request.id);
+      // Save participants node
+      const participantsNode = gun.get('request_participants').get(request.id!);
       Object.entries(newParticipants).forEach(([pub, data]) => {
           participantsNode.get(pub).put(data);
       });
@@ -273,7 +272,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
               fromPub: pubKey as string,
               createdAt: Date.now(),
               read: false,
-              requestId: request.id
+              requestId: request.id!
           };
           gun.get('inboxes').get(partPub).get(notifId).put(notification);
       });
@@ -300,9 +299,9 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       
       try {
           // Soft delete / nullify
-          await user.get('requests').get(request.id).put(null);
-          await user.get('my_requests').get(request.id).put(null);
-          await gun.get('file_requests').get(request.id).put(null);
+          await user.get('requests').get(request.id!).put(null);
+          await user.get('my_requests').get(request.id!).put(null);
+          await gun.get('file_requests').get(request.id!).put(null);
           
           success("Request deleted.");
           onUpdate();
@@ -523,9 +522,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     type="button"
                     onClick={handleDeleteClick}
                     className="text-red-500 hover:text-red-400 text-sm flex items-center gap-1 transition"
-                    disabled={loading}
+                    disabled={loading || isDeleting}
                 >
-                    <Trash2 className="w-4 h-4" /> Delete Request
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Delete Request
                 </button>
 
                 <div className="flex gap-3">
@@ -533,13 +533,13 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                         type="button" 
                         onClick={onClose}
                         className="px-4 py-2 text-gray-400 hover:text-white transition"
-                        disabled={loading}
+                        disabled={loading || isDeleting}
                     >
                         Cancel
                     </button>
                     <button 
                         type="submit" 
-                        disabled={loading}
+                        disabled={loading || isDeleting}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center gap-2 disabled:opacity-50"
                     >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

@@ -295,10 +295,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     }
   };
 
-  const handleDelete = async () => {
-      if (!existingSubmission) return;
-      if (!confirm("Are you sure you want to delete this submission? This cannot be undone.")) return;
-      
+  const executeDelete = async () => {
+      if (!existingSubmission || !existingSubmission.id) return;
+      setShowConfirmDelete(false);
       setIsUploading(true);
       try {
           const subId = existingSubmission.id;
@@ -318,12 +317,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
           onSuccess();
           onClose();
       } catch (e) {
-          console.error("Delete failed", e);
-          setError("Failed to delete submission.");
-      } finally {
-          setIsUploading(false);
-      }
-  };
 
   return createPortal(
     <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 bg-gray-950 backdrop-blur-none overscroll-none touch-none">

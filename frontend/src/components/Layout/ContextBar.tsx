@@ -124,7 +124,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
         {dropdownOpen && (
             <>
                 <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)}></div>
-                <div className="absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1">
+                <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1">
                     <div className="px-4 py-3 border-b border-gray-700 md:hidden">
                         <p className="text-sm text-white font-bold truncate">{userProfile?.alias || 'User'}</p>
                         <p className="text-xs text-gray-500 truncate">{pubKey?.substring(0, 12)}...</p>

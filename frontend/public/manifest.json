@@ -1,0 +1,27 @@
+{
+  "name": "MEW - Music Every Week",
+  "short_name": "MEW",
+  "description": "Collaborative music file sharing and feedback platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#111827",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/mewlogo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/mewlogo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/mewlogo.png",
+      "sizes": "any",
+      "type": "image/png"
+    }
+  ]
+}

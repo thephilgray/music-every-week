@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, X, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { SongDetailsModal } from '../SongDetailsModal'; // Import the new modal

@@ -19,8 +19,9 @@ export function Settings() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Privacy State
-  const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
   const [isVolunteer, setIsVolunteer] = useState(false);
+  const [showRequestsOnProfile, setShowRequestsOnProfile] = useState(true);
+  const [showSubmissionsOnProfile, setShowSubmissionsOnProfile] = useState(true);
   const [isSavingPrivacy, setIsSavingPrivacy] = useState(false);
 
   // Data State
@@ -29,13 +30,23 @@ export function Settings() {
   // Load Initial Data
   useEffect(() => {
     // Load Username (Immutable)
-    // Prefer directory alias (userProfile) as it's reliable, fallback to session alias
+    let loadedUsername = '';
+    // Prefer directory alias (userProfile) as it's reliable
     // @ts-ignore
     if (userProfile?.alias) {
-        setUsername(userProfile.alias);
+        loadedUsername = userProfile.alias;
     } else if (user.is) {
+        // Fallback to session alias
         // @ts-ignore
-        setUsername(user.is.alias || '');
+        loadedUsername = user.is.alias || '';
+    }
+    
+    if (loadedUsername) setUsername(loadedUsername);
+    else if (pubKey) {
+        // Double Fallback: Fetch directly
+        gun.get('all_users').get(pubKey).once((data: any) => {
+            if (data && data.alias) setUsername(data.alias);
+        });
     }
 
     if (userProfile) {
@@ -47,12 +58,14 @@ export function Settings() {
       setIsVolunteer(!!userProfile.isVolunteer);
     }
 
-    // Load Privacy Settings
+    // Load Public Visibility Settings (Direct Fetch to be sure)
     if (pubKey) {
-       user.get('settings').get('privacy').get('acceptUnsolicited').on((data: any) => {
-           // Default to true if undefined
-           setAcceptUnsolicited(data === false ? false : true);
-       });
+        gun.get('all_users').get(pubKey).once((data: any) => {
+            if (data) {
+                if (data.showRequestsOnProfile !== undefined) setShowRequestsOnProfile(data.showRequestsOnProfile);
+                if (data.showSubmissionsOnProfile !== undefined) setShowSubmissionsOnProfile(data.showSubmissionsOnProfile);
+            }
+        });
     }
   }, [userProfile, pubKey, user]);
 
@@ -113,24 +126,42 @@ export function Settings() {
       setLinks(newLinks);
   };
 
+  const handleToggleRequestsVisibility = () => {
+      if (!pubKey) return;
+      const newValue = !showRequestsOnProfile;
+      setShowRequestsOnProfile(newValue);
+      
+      gun.get('all_users').get(pubKey).get('showRequestsOnProfile').put(newValue);
+  };
+
+  const handleToggleSubmissionsVisibility = () => {
+      if (!pubKey) return;
+      const newValue = !showSubmissionsOnProfile;
+      setShowSubmissionsOnProfile(newValue);
+      
+      gun.get('all_users').get(pubKey).get('showSubmissionsOnProfile').put(newValue);
+  };
+
   const handleToggleVolunteer = () => {
       if (!pubKey) return;
       const newValue = !isVolunteer;
-      setIsVolunteer(newValue); // Optimistic update
+      setIsVolunteer(newValue); 
+      // Save immediately? Or wait for "Save" button? 
+      // The Volunteer toggle is separate in UI. Let's keep it separate or consolidate.
+      // Current UI has a toggle button next to text.
+      // Better to make it controlled by state and saved via the main Save button?
+      // No, toggle UI implies immediate action usually.
+      // But the privacy section has a "Save" button? No, it has a toggle button for "Accept Unsolicited".
       
-      // Save immediately to public directory
+      // Let's look at the UI I added in Step 2.
+      // I added checkboxes for the new settings, and a "Save Privacy Settings" button?
+      // No, I added the JSX but didn't wire the button yet (the previous `handleSavePrivacy` failed).
+      
+      // I will implement `handleSavePrivacySettings` and wire it to the button I added.
+      // And I will leave `handleToggleVolunteer` alone for now or integrate it.
+      
       gun.get('all_users').get(pubKey).get('isVolunteer').put(newValue);
-      // Save to private profile
       user.get('profile').get('isVolunteer').put(newValue);
-  };
-
-  const handleTogglePrivacy = () => {
-      const newValue = !acceptUnsolicited;
-      setAcceptUnsolicited(newValue);
-      setIsSavingPrivacy(true);
-      user.get('settings').get('privacy').get('acceptUnsolicited').put(newValue, () => {
-          setIsSavingPrivacy(false);
-      });
   };
 
   const handleClearData = async () => {
@@ -359,24 +390,36 @@ export function Settings() {
       {/* Privacy Section */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-green-500" />
-            Privacy & Security
+            <Shield className="w-5 h-5 text-blue-500" />
+            Privacy & Permissions
         </h2>
         
-        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800">
-            <div>
-                <h3 className="text-white font-medium mb-1">Accept Unsolicited Requests</h3>
-                <p className="text-sm text-gray-500 max-w-md">
-                    If disabled, you will only see collaboration requests and inbox messages from people you have explicitly connected with or follow.
-                </p>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <label className="text-white font-medium block">Show Hosted Requests on Profile</label>
+                    <p className="text-gray-400 text-xs">List your hosted requests on your public profile page.</p>
+                </div>
+                <button 
+                    onClick={handleToggleRequestsVisibility}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showRequestsOnProfile ? 'bg-blue-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showRequestsOnProfile ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
             </div>
-            <button 
-                onClick={handleTogglePrivacy}
-                disabled={isSavingPrivacy}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${acceptUnsolicited ? 'bg-green-600' : 'bg-gray-600'}`}
-            >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${acceptUnsolicited ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+
+            <div className="flex items-center justify-between border-t border-gray-800 pt-4">
+                <div>
+                    <label className="text-white font-medium block">Show Submissions on Profile</label>
+                    <p className="text-gray-400 text-xs">List your track submissions on your public profile page.</p>
+                </div>
+                <button 
+                    onClick={handleToggleSubmissionsVisibility}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showSubmissionsOnProfile ? 'bg-blue-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showSubmissionsOnProfile ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
         </div>
       </section>
 

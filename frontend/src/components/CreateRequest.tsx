@@ -249,12 +249,12 @@ export function CreateRequest() {
         description: desc,
         deadline,
         accessMode,
-        artworkUrl,
+        artworkUrl: artworkUrl || null,
         ownerPub: pubKey,
         createdAt: Date.now(),
         pending_emails: JSON.stringify(finalEmails),
-        inviteCode: inviteCode, // Store on request for reference
-        poolSeats: accessMode === 'volunteer' ? poolSeats : undefined,
+        inviteCode: inviteCode || null, // Store on request for reference
+        poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
         // participants: finalParticipants -- Managed as separate graph node
       };

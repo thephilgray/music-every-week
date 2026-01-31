@@ -63,7 +63,7 @@ function App() {
   return (
     <ToastProvider>
       <BrowserRouter>
-        {/* <IdleMonitor /> */}
+        <IdleMonitor />
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Home />} />

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import gun, { user as gunUser, PEERS } from '../lib/gun';
 import type { IGunUserInstance } from 'gun';
 import type { UserProfile } from '../types';
@@ -43,6 +43,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdmin, setIsAdmin] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const hasAuthorizedRef = useRef(false); // Ref to track authorization to prevent flapping
 
   const disconnect = () => {
     console.log('Disconnecting Gun peers...');
@@ -73,6 +74,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       gun.get('all_users').get(pub).on((data: any) => {
         // If data exists, the user is in the directory
         if (data) {
+          hasAuthorizedRef.current = true;
           setIsAuthorized(true);
           setIsAdmin(!!data.isAdmin);
           setUserProfile({
@@ -87,9 +89,13 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             submissions: data.submissions,
           });
         } else {
-          setIsAuthorized(false);
-          setIsAdmin(false);
-          setUserProfile(null);
+          // Only deny access if we haven't successfully authorized yet
+          // This prevents "flashing" to Access Restricted screen if Gun sync glitches
+          if (!hasAuthorizedRef.current) {
+              setIsAuthorized(false);
+              setIsAdmin(false);
+              setUserProfile(null);
+          }
         }
       });
     };

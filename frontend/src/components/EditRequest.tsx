@@ -74,15 +74,20 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
     }
   };
 
-  const handleDelete = async () => {
-      if (!confirm("Are you sure? This will delete the request and all associated data visible to you.")) return;
-      setLoading(true);
+  const handleDeleteClick = () => {
+      setShowConfirmDelete(true);
+  };
+
+  const executeDelete = async () => {
+      if (!request.id) return;
+      setIsDeleting(true);
+      setShowConfirmDelete(false);
       
       try {
           // Soft delete / nullify
-          user.get('requests').get(request.id).put(null);
-          user.get('my_requests').get(request.id).put(null);
-          gun.get('file_requests').get(request.id).put(null);
+          await user.get('requests').get(request.id).put(null);
+          await user.get('my_requests').get(request.id).put(null);
+          await gun.get('file_requests').get(request.id).put(null);
           
           success("Request deleted.");
           onUpdate();
@@ -90,8 +95,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       } catch (err) {
           console.error(err);
           error("Failed to delete request.");
-      } finally {
-          setLoading(false);
+          setIsDeleting(false);
       }
   };
 
@@ -172,7 +176,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
             <div className="flex justify-between pt-4 border-t border-gray-800 mt-4">
                 <button
                     type="button"
-                    onClick={handleDelete}
+                    onClick={handleDeleteClick}
                     className="text-red-500 hover:text-red-400 text-sm flex items-center gap-1 transition"
                     disabled={loading}
                 >
@@ -199,6 +203,16 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                 </div>
             </div>
         </form>
+        
+        <ConfirmModal 
+            isOpen={showConfirmDelete}
+            title="Delete Request?"
+            message="Are you sure you want to delete this request? This will hide it from all participants and cannot be undone."
+            confirmLabel="Delete Forever"
+            isDestructive={true}
+            onConfirm={executeDelete}
+            onCancel={() => setShowConfirmDelete(false)}
+        />
       </div>
     </div>,
     document.body

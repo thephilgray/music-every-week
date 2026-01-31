@@ -5,6 +5,7 @@ import { useGun } from '../contexts/GunContext';
 import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
+import { ConfirmModal } from './ui/ConfirmModal';
 import type { Notification, UserProfile, Submission } from '../types';
 
 interface SubmitTrackProps {
@@ -24,6 +25,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const [artFile, setArtFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [knownAliases, setKnownAliases] = useState<Record<string, string>>({}); // Store aliases for UI display
@@ -45,6 +48,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     // Lock Body Scroll
     document.body.style.overflow = 'hidden';
     
+    // Hide Root to prevent z-index fighting/flashing on mobile
+    const root = document.getElementById('root');
+    if (root) root.style.visibility = 'hidden';
+    
     if (existingSubmission) {
         setTitle(existingSubmission.title);
         setByline(existingSubmission.byline || '');
@@ -61,6 +68,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     
     return () => {
         document.body.style.overflow = 'unset';
+        if (root) root.style.visibility = 'visible';
     };
   }, [existingSubmission, user]);
 
@@ -295,6 +303,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     }
   };
 
+  const handleDeleteClick = () => {
+      setShowConfirmDelete(true);
+  };
+
   const executeDelete = async () => {
       if (!existingSubmission || !existingSubmission.id) return;
       setShowConfirmDelete(false);
@@ -317,6 +329,12 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
           onSuccess();
           onClose();
       } catch (e) {
+          console.error("Delete failed", e);
+          setError("Failed to delete submission.");
+      } finally {
+          setIsUploading(false);
+      }
+  };
 
   return createPortal(
     <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 bg-gray-950 backdrop-blur-none overscroll-none touch-none">
@@ -582,7 +600,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     {existingSubmission && (
                         <button 
                             type="button" 
-                            onClick={handleDelete}
+                            onClick={handleDeleteClick}
                             className="text-red-500 hover:text-red-400 text-sm flex items-center gap-1 transition"
                             disabled={isUploading}
                         >
@@ -619,6 +637,16 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 </div>
             </div>
         </form>
+        
+        <ConfirmModal 
+            isOpen={showConfirmDelete}
+            title="Delete Submission?"
+            message="Are you sure you want to delete this track? This cannot be undone."
+            confirmLabel="Delete Forever"
+            isDestructive={true}
+            onConfirm={executeDelete}
+            onCancel={() => setShowConfirmDelete(false)}
+        />
       </div>
     </div>,
     document.body

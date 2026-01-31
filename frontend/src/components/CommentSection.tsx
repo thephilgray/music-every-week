@@ -350,7 +350,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       user.get('comments').get(commentId).once((cData: any) => {
           if (cData && cData.globalPulseId) {
               const bucket = cData.globalBucket || 'global_pulse'; // Fallback for legacy
-              gun.get(bucket).get(cData.globalPulseId).put(null);
+              gun.get(bucket).get(cData.globalPulseId).put(null as any);
           }
       });
 
@@ -369,7 +369,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       user.get('comments').get(commentId).once((cData: any) => {
           if (cData && cData.globalPulseId) {
               const bucket = cData.globalBucket || 'global_pulse'; // Fallback
-              gun.get(bucket).get(cData.globalPulseId).get('text').put(newText);
+              (gun.get(bucket).get(cData.globalPulseId) as any).get('text').put(newText);
           }
       });
   };

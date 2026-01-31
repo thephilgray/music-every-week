@@ -46,7 +46,7 @@ export function Community() {
                   // Resolve Author Profile
                   gun.get('all_users').get(data.authorPub).once((u: any) => {
                       if (u) {
-                          setFeed(prev => {
+                          setFeed(_prev => {
                                // Update existing or add new
                                feedMap.set(key, { ...item, authorAlias: u.alias, authorAvatar: u.avatarUrl });
                                return Array.from(feedMap.values()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 100);

@@ -327,8 +327,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     createdAt: Date.now(),
                     read: false
                 };
-            };
-            gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
+                gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
+            }
         });
 
         // Write to Global Feed if Public and New

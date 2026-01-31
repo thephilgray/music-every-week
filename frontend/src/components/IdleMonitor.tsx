@@ -5,7 +5,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 const IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
 export function IdleMonitor() {
-  const { isConnected, disconnect, reconnect } = useGun();
+  const { isConnected, disconnect, reconnect, setIdle: setGlobalIdle } = useGun();
   const { isPlaying } = usePlayer();
   const lastActivityRef = useRef(0);
   const [isIdle, setIsIdle] = useState(false);
@@ -17,6 +17,7 @@ export function IdleMonitor() {
       if (isIdle) {
         console.log('User active: Reconnecting...');
         setIsIdle(false);
+        setGlobalIdle(false);
         if (!isConnected) {
             reconnect();
         }
@@ -34,6 +35,7 @@ export function IdleMonitor() {
         if (!isIdle) {
             console.log('User idle: Checking disconnect conditions...');
             setIsIdle(true);
+            setGlobalIdle(true);
             if (!isPlaying) {
                 console.log('Audio not playing: Disconnecting...');
                 disconnect();

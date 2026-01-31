@@ -4,7 +4,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { gun, user, pubKey, userProfile, isConnected } = useGun();
+  const { gun, user, pubKey, userProfile, isConnected, isIdle, isInternetOnline } = useGun();
   const location = useLocation();
   const navigate = useNavigate();
   const pathnames = location.pathname.split('/').filter((x) => x);
@@ -14,6 +14,21 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Status Logic
+  let statusClass = "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse-slow";
+  let statusTitle = "Online";
+
+  if (!isInternetOnline) {
+      statusClass = "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]";
+      statusTitle = "Offline";
+  } else if (isIdle) {
+      statusClass = "bg-gray-500";
+      statusTitle = "Idle";
+  } else if (!isConnected) {
+      statusClass = "bg-yellow-500";
+      statusTitle = "Disconnected";
+  }
 
   const handleLogout = () => {
     user.leave();
@@ -100,10 +115,15 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       {/* User Dropdown */}
       <div className="relative flex items-center gap-3">
         {/* Status Indicator */}
-        <div 
-            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse-slow' : 'bg-gray-500'}`}
-            title={isConnected ? "Online" : "Offline"}
-        />
+        <div className="group relative flex items-center justify-center">
+            <div 
+                className={`w-2 h-2 rounded-full cursor-help ${statusClass}`}
+            />
+            {/* Tooltip */}
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-max px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg whitespace-nowrap">
+                {statusTitle}
+            </div>
+        </div>
 
         <button 
           onClick={() => setDropdownOpen(!dropdownOpen)}

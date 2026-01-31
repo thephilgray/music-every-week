@@ -15,6 +15,9 @@ interface GunContextType {
   reconnect: () => void;
   isConnected: boolean;
   isAuthLoading: boolean;
+  isIdle: boolean;
+  isInternetOnline: boolean;
+  setIdle: (idle: boolean) => void;
 }
 
 const GunContext = createContext<GunContextType>({
@@ -29,6 +32,9 @@ const GunContext = createContext<GunContextType>({
   reconnect: () => {},
   isConnected: true,
   isAuthLoading: true,
+  isIdle: false,
+  isInternetOnline: true,
+  setIdle: () => {},
 });
 
 export const useGun = () => useContext(GunContext);
@@ -43,7 +49,24 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdmin, setIsAdmin] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isIdle, setIsIdle] = useState(false);
+  const [isInternetOnline, setIsInternetOnline] = useState(navigator.onLine);
   const hasAuthorizedRef = useRef(false); // Ref to track authorization to prevent flapping
+
+  useEffect(() => {
+    const handleOnline = () => setIsInternetOnline(true);
+    const handleOffline = () => setIsInternetOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const setIdle = (idle: boolean) => {
+    setIsIdle(idle);
+  };
 
   const disconnect = () => {
     console.log('Disconnecting Gun peers...');
@@ -148,7 +171,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   return (
-    <GunContext.Provider value={{ gun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading }}>
+    <GunContext.Provider value={{ gun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle }}>
       {children}
     </GunContext.Provider>
   );

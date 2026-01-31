@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Save, Loader2, Trash2 } from 'lucide-react';
+import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
-import type { FileRequest } from '../types';
+import type { FileRequest, UserProfile, Notification } from '../types';
+import { ConfirmModal } from './ui/ConfirmModal';
 
 interface EditRequestProps {
   request: FileRequest;
@@ -15,6 +17,7 @@ interface EditRequestProps {
 export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const { gun, user, pubKey } = useGun();
   const { success, error } = useToast();
+  const navigate = useNavigate();
   
   const [title, setTitle] = useState(request.title);
   const [desc, setDesc] = useState(request.description);
@@ -23,8 +26,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [file, setFile] = useState<File | null>(null);
   const [currentArtworkUrl, setCurrentArtworkUrl] = useState(request.artworkUrl || '');
   const [loading, setLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
-  // Scroll Lock
+  // Participant Management Logic
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'unset'; };

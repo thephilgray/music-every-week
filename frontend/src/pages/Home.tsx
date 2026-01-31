@@ -22,60 +22,38 @@ export function Home() {
 
     const reqMap = new Map<string, FileRequest>();
 
-        // 2. Listen to Global Requests
-
-        gun.get('file_requests').map().on((data: any, key: string) => {
-
-            if (data && data.title) {
-
-                reqMap.set(key, { ...data, id: key });
-
-                
-
-                // Debounce/Batch update
-
-                setRequests(Array.from(reqMap.values()));
-
-                setLoading(false);
-
-            }
-
-        });
-
-        
-
-        // Fallback: If no requests found within 2s, stop loading
-
-        const timer = setTimeout(() => setLoading(false), 2000);
-
-        
-
-        return () => {
-
-            reqMap.clear();
-
-            clearTimeout(timer);
-
-        };
-
-      }, [user, pubKey, gun]);
+    // 2. Listen to Global Requests
+    gun.get('file_requests').map().on((data: any, key: string) => {
+        if (data && data.title) {
+            reqMap.set(key, { ...data, id: key });
+            
+            // Debounce/Batch update
+            setRequests(Array.from(reqMap.values()));
+            setLoading(false);
+        }
+    });
+    
+    // Fallback: If no requests found within 2s, stop loading
+    const timer = setTimeout(() => setLoading(false), 2000);
+    
+    return () => {
+        reqMap.clear();
+        clearTimeout(timer);
+    };
+  }, [user, pubKey, gun]);
 
   // Filter for View
   const visibleRequests = requests.filter(req => {
       if (!req.id) return false;
       const isOwner = req.ownerPub === pubKey;
-      const isDirect = req.accessMode === 'direct'; // Direct is public
+      const isDirect = req.accessMode === 'direct'; 
       
       const myStatus = participation[req.id];
       
-      // Show if:
-      // 1. I created it.
-      // 2. I have 'accepted' or 'joined' or 'invited' status.
-      // 3. It is 'direct' access (public).
-      // 4. It is 'volunteer' access AND I am invited (checked via participation).
-      
       return isOwner || isDirect || myStatus === 'accepted' || myStatus === 'joined' || myStatus === 'invited';
   }).sort((a, b) => b.createdAt - a.createdAt);
+
+  console.log("Home render: loading =", loading, "requests =", visibleRequests.length);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20 p-4">
@@ -99,11 +77,11 @@ export function Home() {
         </div>
       )}
 
-      {loading && visibleRequests.length === 0 ? (
-          <RequestList requests={[]} loading={true} filter="active" />
-      ) : (
-          <RequestList requests={visibleRequests} filter="active" />
-      )}
+      <RequestList 
+          requests={visibleRequests} 
+          loading={loading} 
+          filter="active" 
+      />
     </div>
   );
 }

@@ -35,6 +35,7 @@ export interface FileRequest {
     hasPass?: boolean 
   }>; // Snapshot of participants
   pending_emails?: string[];
+  hiddenFromProfile?: boolean;
 }
 
 export interface Submission {
@@ -49,6 +50,7 @@ export interface Submission {
   byline?: string; // Custom artist/project name
   collaborators?: Record<string, boolean>; // Map of user public keys
   waveform?: number[];
+  hiddenFromProfile?: boolean;
 }
 
 export interface Comment {

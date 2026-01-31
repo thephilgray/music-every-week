@@ -65,7 +65,8 @@ export function Home() {
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-blue-900/20"
         >
           <Plus className={`w-5 h-5 transition-transform ${showCreate ? 'rotate-45' : ''}`} />
-          {showCreate ? 'Cancel' : 'New Request'}
+          <span className="md:hidden">{showCreate ? 'Cancel' : 'New'}</span>
+          <span className="hidden md:inline">{showCreate ? 'Cancel' : 'New Request'}</span>
         </button>
       </div>
 

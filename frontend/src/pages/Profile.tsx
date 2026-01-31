@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert } from 'lucide-react';
+import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -80,20 +80,31 @@ export function Profile() {
             
             gun.user(targetPub).get('submissions').get(subId).once((subData: any) => {
                 if (subData && subData.title) {
-                     setSubmissions(prev => {
-                        const exists = prev.find(s => s.id === subId);
-                        if (exists) return prev;
-                        
-                        let parsedWaveform = subData.waveform;
-                        if (typeof subData.waveform === 'string') {
-                            try {
-                                parsedWaveform = JSON.parse(subData.waveform);
-                            } catch (e) {
-                                parsedWaveform = [];
+                    // Fetch Request to check Access Mode for Default Visibility
+                    gun.get('file_requests').get(subData.requestId).once((reqData: any) => {
+                         setSubmissions(prev => {
+                            const exists = prev.find(s => s.id === subId);
+                            if (exists) return prev;
+                            
+                            let parsedWaveform = subData.waveform;
+                            if (typeof subData.waveform === 'string') {
+                                try {
+                                    parsedWaveform = JSON.parse(subData.waveform);
+                                } catch (e) {
+                                    parsedWaveform = [];
+                                }
                             }
-                        }
-                        
-                        return [...prev, { ...subData, id: subId, waveform: parsedWaveform }];
+                            
+                            // Determine default hidden state based on request access mode
+                            let isHidden = subData.hiddenFromProfile;
+                            if (isHidden === undefined && reqData && reqData.accessMode) {
+                                if (reqData.accessMode !== 'direct') {
+                                    isHidden = true;
+                                }
+                            }
+
+                            return [...prev, { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden }];
+                        });
                     });
                 }
             });
@@ -177,6 +188,48 @@ export function Profile() {
       }
   };
 
+  const handleToggleVisibility = (e: React.MouseEvent, sub: Submission) => {
+      e.stopPropagation();
+      if (!isOwnProfile || !user || !sub.id) return;
+      
+      const newValue = !sub.hiddenFromProfile;
+      
+      // Update local state immediately for UI response
+      setSubmissions(prev => prev.map(s => 
+          s.id === sub.id ? { ...s, hiddenFromProfile: newValue } : s
+      ));
+
+      // Update GunDB
+      user.get('submissions').get(sub.id).get('hiddenFromProfile').put(newValue);
+  };
+
+  const handleToggleRequestVisibility = (e: React.MouseEvent, req: FileRequest) => {
+      e.stopPropagation();
+      if (!isOwnProfile || !user || !req.id) return;
+      
+      // If hiddenFromProfile is undefined, calculate default state first to toggle correctly
+      const currentHidden = req.hiddenFromProfile !== undefined 
+          ? req.hiddenFromProfile 
+          : (req.accessMode !== 'direct');
+
+      const newValue = !currentHidden;
+      
+      // Update local state
+      setRequests(prev => prev.map(r => 
+          r.id === req.id ? { ...r, hiddenFromProfile: newValue } : r
+      ));
+
+      // Update GunDB (User's private requests node is source of truth for visibility preferences usually, 
+      // but 'file_requests' is public. We should update the public node for this property so others see/don't see it.)
+      // Note: 'file_requests' is global. Updating it there affects everyone. 
+      // Profile visibility is usually a property of the *Reference* in the user's profile, but here we list by querying all requests.
+      // So we must update the request object itself or the user's graph reference.
+      // Since the query is `gun.get('file_requests').map()`, we update the request object.
+      // Ideally, this should be a user-specific setting, but sticking to the current architecture:
+      user.get('requests').get(req.id).get('hiddenFromProfile').put(newValue);
+      gun.get('file_requests').get(req.id).get('hiddenFromProfile').put(newValue);
+  };
+
   if (loading && !profile) {
       return <div className="p-8 text-center text-gray-500">Loading Profile...</div>;
   }
@@ -184,6 +237,26 @@ export function Profile() {
   if (!profile) {
       return <div className="p-8 text-center text-gray-500">User not found.</div>;
   }
+
+  // Filter Submissions for View
+  // Rule: Hidden if hiddenFromProfile is true.
+  // Default: Hidden if request.accessMode !== 'direct' AND hiddenFromProfile is undefined.
+  // We need request info for submissions.
+  const visibleSubmissions = submissions.filter(s => {
+      if (isOwnProfile) return true;
+      if (s.hiddenFromProfile !== undefined) return !s.hiddenFromProfile;
+      // If undefined, check accessMode logic (handled in fetch or here if we have request data)
+      // Since we don't have request data easily linked here without fetching, 
+      // we updated fetch logic to populate hiddenFromProfile based on request.
+      return true; 
+  });
+
+  // Filter Requests for View
+  const visibleRequests = requests.filter(r => {
+      if (isOwnProfile) return true;
+      if (r.hiddenFromProfile !== undefined) return !r.hiddenFromProfile;
+      return r.accessMode === 'direct'; // Default: Hidden if not direct
+  });
 
   return (
     <div className="max-w-5xl mx-auto pb-20">
@@ -255,11 +328,11 @@ export function Profile() {
                     
                     <div className="flex items-center justify-center md:justify-start gap-6 text-sm text-gray-500">
                         <div className="flex flex-col items-center md:items-start">
-                            <span className="text-white font-bold text-lg">{submissions.length}</span>
+                            <span className="text-white font-bold text-lg">{visibleSubmissions.length}</span>
                             <span>Submissions</span>
                         </div>
                         <div className="flex flex-col items-center md:items-start">
-                            <span className="text-white font-bold text-lg">{requests.length}</span>
+                            <span className="text-white font-bold text-lg">{visibleRequests.length}</span>
                             <span>Requests</span>
                         </div>
                         {profile.joinedAt && (
@@ -294,14 +367,23 @@ export function Profile() {
         {/* Content */}
         {activeTab === 'submissions' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {submissions.length === 0 && (
+                {visibleSubmissions.length === 0 && (
                     <div className="col-span-full py-12 text-center text-gray-500 border border-gray-800 border-dashed rounded-lg">
                         <Music className="w-10 h-10 mx-auto mb-2 opacity-20" />
                         No submissions yet.
                     </div>
                 )}
-                {submissions.map(sub => (
-                    <div key={sub.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4 group hover:border-gray-700 transition">
+                {visibleSubmissions.map(sub => (
+                    <div key={sub.id} className={`bg-gray-900 border border-gray-800 rounded-lg p-4 group hover:border-gray-700 transition relative ${sub.hiddenFromProfile ? 'opacity-60 border-dashed' : ''}`}>
+                        {isOwnProfile && (
+                            <button 
+                                onClick={(e) => handleToggleVisibility(e, sub)}
+                                className="absolute top-2 right-2 p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded-full z-10 opacity-0 group-hover:opacity-100 transition"
+                                title={sub.hiddenFromProfile ? "Show on Profile" : "Hide from Profile"}
+                            >
+                                {sub.hiddenFromProfile ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                        )}
                         <div className="flex items-center gap-4">
                              <div className="w-12 h-12 bg-gray-800 rounded overflow-hidden flex-shrink-0 relative">
                                 {sub.artworkUrl ? (
@@ -333,22 +415,35 @@ export function Profile() {
 
         {activeTab === 'requests' && (
             <div className="space-y-2">
-                 {requests.length === 0 && (
+                 {visibleRequests.length === 0 && (
                     <div className="py-12 text-center text-gray-500 border border-gray-800 border-dashed rounded-lg">
                         <List className="w-10 h-10 mx-auto mb-2 opacity-20" />
                         No requests hosted yet.
                     </div>
                 )}
-                {requests.map(req => (
-                    <Link to={`/request/${req.id}`} key={req.id} className="block group">
-                        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between hover:bg-gray-800/50 hover:border-blue-500/50 transition">
+                {visibleRequests.map(req => {
+                    const isHidden = req.hiddenFromProfile !== undefined ? req.hiddenFromProfile : (req.accessMode !== 'direct');
+                    
+                    return (
+                    <div key={req.id} className={`group relative bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between hover:bg-gray-800/50 hover:border-blue-500/50 transition ${isHidden ? 'opacity-60 border-dashed' : ''}`}>
+                         {isOwnProfile && (
+                            <button 
+                                onClick={(e) => handleToggleRequestVisibility(e, req)}
+                                className="absolute top-2 right-2 p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded-full z-10 opacity-0 group-hover:opacity-100 transition"
+                                title={isHidden ? "Show on Profile" : "Hide from Profile"}
+                            >
+                                {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                        )}
+                        <Link to={`/request/${req.id}`} className="flex-1 min-w-0 mr-8">
                             <div>
                                 <h3 className="text-white font-bold group-hover:text-blue-400 transition">{req.title}</h3>
                                 <p className="text-gray-500 text-sm line-clamp-1">{req.description}</p>
                             </div>
-                        </div>
-                    </Link>
-                ))}
+                        </Link>
+                    </div>
+                    );
+                })}
             </div>
         )}
 

@@ -51,7 +51,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
 
   return (
     <>
-    <div className="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 md:px-6 z-20 sticky top-0">
+    <div className="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 md:px-6 z-20 relative">
       <div className="flex items-center gap-4">
         {/* Mobile Menu Button */}
         <button 

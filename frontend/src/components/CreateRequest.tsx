@@ -413,7 +413,7 @@ export function CreateRequest() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-gray-400 text-sm mb-1">Deadline</label>
             <input 
@@ -439,8 +439,8 @@ export function CreateRequest() {
                }}
                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
              >
-               <option value="direct">Direct Add (Participants auto-accepted)</option>
-               <option value="invite">Invite Only (Participants must accept)</option>
+               <option value="direct">Public (Participants auto-accepted)</option>
+               <option value="invite">Private (Invite Only)</option>
                <option value="volunteer">Volunteer Pool (Request Feedback)</option>
              </select>
              {accessMode === 'direct' && (

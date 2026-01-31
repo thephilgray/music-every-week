@@ -131,6 +131,13 @@ export function Inbox() {
     markAsRead(n);
   };
 
+  const deleteNotification = (e: React.MouseEvent, n: Notification) => {
+      e.stopPropagation();
+      if (!pubKey) return;
+      gun.get('inboxes').get(pubKey).get(n.id).put(null);
+      setNotifications(prev => prev.filter(item => item.id !== n.id));
+  };
+
   const getIcon = (type: string) => {
       switch (type) {
           case 'comment': return <MessageSquare className="w-5 h-5 text-blue-400" />;
@@ -184,14 +191,14 @@ export function Inbox() {
                     key={n.id}
                     onClick={() => handleNotificationClick(n)}
                     className={`
-                        group flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all
+                        group flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition-all relative
                         ${n.read 
                             ? 'bg-gray-950 border-gray-900 opacity-60 hover:opacity-100' 
                             : 'bg-gray-900 border-gray-800 hover:border-gray-700 shadow-sm'
                         }
                     `}
                   >
-                      <div className={`p-2 rounded-full ${n.read ? 'bg-gray-900' : 'bg-gray-800'}`}>
+                      <div className={`hidden md:block p-2 rounded-full ${n.read ? 'bg-gray-900' : 'bg-gray-800'}`}>
                           {getIcon(n.type)}
                       </div>
                       
@@ -207,12 +214,12 @@ export function Inbox() {
                                       {n.type}
                                   </span>
                               </div>
-                              <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                              <span className="text-xs text-gray-500 whitespace-nowrap ml-2 mr-6 md:mr-0">
                                   {new Date(n.createdAt).toLocaleDateString()}
                               </span>
                           </div>
                           
-                          <p className={`text-sm mb-3 ${n.read ? 'text-gray-500' : 'text-gray-300 font-medium'}`}>
+                          <p className={`text-sm mb-3 break-words ${n.read ? 'text-gray-500' : 'text-gray-300 font-medium'}`}>
                               {n.message}
                           </p>
                           
@@ -235,9 +242,18 @@ export function Inbox() {
                           )}
                       </div>
 
-                      {!n.read && (
-                          <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
-                      )}
+                      <div className="flex flex-col items-end gap-2">
+                        {!n.read && (
+                            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
+                        )}
+                        <button 
+                            onClick={(e) => deleteNotification(e, n)}
+                            className="text-gray-600 hover:text-red-500 p-1 md:opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 md:relative md:top-auto md:right-auto"
+                            title="Dismiss"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                      </div>
                   </div>
               ))}
           </div>

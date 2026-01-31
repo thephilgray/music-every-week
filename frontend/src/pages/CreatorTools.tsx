@@ -515,15 +515,15 @@ export function CreatorTools() {
                     </div>
 
                     <div className="bg-gray-950 border border-gray-800 rounded-xl p-6">
-                        <div className="flex items-start gap-6">
-                            <div className="w-32 h-32 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                        <div className="flex flex-col md:flex-row items-start gap-6">
+                            <div className="w-full md:w-32 aspect-square md:h-32 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                                 {selectedSubmission.artworkUrl ? (
                                     <img src={selectedSubmission.artworkUrl} className="w-full h-full object-cover" />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-gray-600"><Music className="w-12 h-12" /></div>
                                 )}
                             </div>
-                            <div className="space-y-4 flex-1">
+                            <div className="space-y-4 flex-1 w-full">
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase font-bold">Byline</label>
                                     <p className="text-white">{selectedSubmission.byline || 'Unknown'}</p>

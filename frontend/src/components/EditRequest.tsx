@@ -350,7 +350,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                 />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="block text-gray-400 text-sm mb-1">Deadline</label>
                     <input 
@@ -367,8 +367,8 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                         onChange={(e: any) => setAccessMode(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                     >
-                        <option value="direct">Direct Add (Public)</option>
-                        <option value="invite">Invite Only</option>
+                        <option value="direct">Public (Participants auto-accepted)</option>
+                        <option value="invite">Private (Invite Only)</option>
                         <option value="volunteer">Volunteer Pool</option>
                     </select>
                 </div>

@@ -58,7 +58,7 @@ export function Player() {
 
       <div className={`${isMinimized ? 'h-16' : 'h-24'} bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-between w-full flex-none transition-all duration-300 ease-in-out`}>
       {/* Track Info */}
-      <div className="w-1/3 flex items-center gap-4">
+      <div className={`${isMinimized ? 'flex-1 lg:w-1/3' : 'w-1/3'} flex items-center gap-4 transition-all duration-300`}>
         <div className={`${isMinimized ? 'w-10 h-10' : 'w-14 h-14'} bg-gray-800 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0 relative group transition-all`}>
              {currentTrack?.artworkUrl ? (
                  <img src={currentTrack.artworkUrl} alt={currentTrack.title} className="w-full h-full object-cover" />
@@ -71,7 +71,7 @@ export function Player() {
                  </button>
              </div>
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
            <div className="text-white font-medium truncate flex items-center gap-2">
                {currentTrack?.title || 'No Track Selected'}
                {currentTrack?.lyrics && (
@@ -95,7 +95,7 @@ export function Player() {
       </div>
 
       {/* Controls */}
-      <div className={`flex flex-col items-center justify-center w-1/3 min-w-[200px] ${isMinimized ? 'gap-0' : 'gap-2'}`}>
+      <div className={`flex flex-col items-center justify-center ${isMinimized ? 'w-auto ml-4 flex-row gap-4 lg:w-1/3 lg:justify-center' : 'w-1/3 min-w-[200px] gap-2'}`}>
          <div className="flex items-center gap-6">
             <button onClick={prev} className="text-gray-400 hover:text-white transition" disabled={!currentTrack}>
                 <SkipBack className="w-5 h-5" />
@@ -103,7 +103,7 @@ export function Player() {
             <button 
                 onClick={isPlaying ? pause : resume}
                 disabled={!currentTrack}
-                className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-black hover:scale-105 transition disabled:opacity-50"
+                className={`${isMinimized ? 'w-8 h-8' : 'w-10 h-10'} bg-white rounded-full flex items-center justify-center text-black hover:scale-105 transition disabled:opacity-50`}
             >
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
             </button>
@@ -140,8 +140,8 @@ export function Player() {
       </div>
 
       {/* Volume / Extras */}
-      <div className="w-1/3 flex justify-end items-center gap-4">
-          <div className={`flex items-center gap-4 ${isMinimized ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`${isMinimized ? 'w-auto ml-4 lg:w-1/3' : 'w-1/3'} flex justify-end items-center gap-4`}>
+          <div className={`flex items-center gap-4 ${isMinimized ? 'hidden' : 'flex'}`}>
               <button onClick={toggleMute} className="text-gray-400 hover:text-white">
                   {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
               </button>
@@ -161,7 +161,7 @@ export function Player() {
           
           <button 
             onClick={() => setIsMinimized(!isMinimized)}
-            className="p-2 text-gray-500 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition hidden md:block"
+            className="p-2 text-gray-500 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
             title={isMinimized ? "Expand Player" : "Minimize Player"}
           >
              {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}

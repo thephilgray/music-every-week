@@ -38,7 +38,7 @@ export function AppLayout() {
   }, [pubKey, gun, user, userProfile]);
 
   return (
-    <div className="flex h-screen bg-black overflow-hidden relative">
+    <div className="flex h-[100dvh] bg-black overflow-hidden relative">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 

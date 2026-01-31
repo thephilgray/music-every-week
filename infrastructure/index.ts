@@ -81,7 +81,7 @@ const service = new gcp.cloudrunv2.Service("mew2-relay-service", {
                     memory: "512Mi",
                 },
             },
-            env: [
+            envs: [
                 { name: "R2_ACCOUNT_ID", value: r2AccountId },
                 { name: "R2_ACCESS_KEY_ID", value: r2AccessKeyId },
                 { name: "R2_SECRET_ACCESS_KEY", value: r2SecretAccessKey },

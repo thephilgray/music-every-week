@@ -380,44 +380,24 @@ export function RequestDetail() {
       }
   };
 
-  if (!request) {
-      return (
-        <div className="max-w-5xl mx-auto pb-20 p-4">
-            <div className="mb-6 pt-4">
-                <Skeleton className="h-5 w-32" />
-            </div>
-            
-            <div className="flex flex-col md:flex-row gap-8 mb-10">
-                <Skeleton className="w-48 h-48 rounded-lg flex-shrink-0" />
-                <div className="flex-1">
-                    <div className="flex items-start justify-between mb-4">
-                        <Skeleton className="h-10 w-2/3" />
-                        <Skeleton className="h-6 w-20 rounded-full" />
+    if (!request) {
+        return (
+            <div className="max-w-5xl mx-auto py-20 text-center p-4">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 md:p-12 inline-block shadow-2xl">
+                    <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertTriangle className="w-8 h-8 text-yellow-500" />
                     </div>
-                    
-                    <Skeleton className="h-6 w-full mb-2" />
-                    <Skeleton className="h-6 w-3/4 mb-4" />
-                    
-                    <div className="flex items-center gap-6 mb-6">
-                        <Skeleton className="h-5 w-40" />
-                        <Skeleton className="h-5 w-40" />
-                    </div>
-
-                    <Skeleton className="h-10 w-40 rounded-lg" />
+                    <h2 className="text-2xl font-bold text-white mb-2">Request Not Found</h2>
+                    <p className="text-gray-500 mb-8 max-w-md">
+                        This request may have been deleted by the host or does not exist.
+                    </p>
+                    <Link to="/" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center gap-2 justify-center">
+                        <ArrowLeft className="w-4 h-4" /> Return Home
+                    </Link>
                 </div>
             </div>
-            
-            <div className="border-t border-gray-800 pt-8">
-                <Skeleton className="h-8 w-48 mb-4" />
-                <div className="space-y-4">
-                    <Skeleton className="h-24 w-full rounded-lg" />
-                    <Skeleton className="h-24 w-full rounded-lg" />
-                </div>
-            </div>
-              </div>
-            );
-          }
-        
+        );
+    }        
           if (!request) {
               return (
                   <div className="max-w-5xl mx-auto py-20 text-center p-4">

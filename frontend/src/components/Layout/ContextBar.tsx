@@ -20,13 +20,13 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
   let statusTitle = "Online";
 
   if (!isInternetOnline) {
-      statusClass = "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]";
+      statusClass = "bg-gray-500";
       statusTitle = "Offline";
   } else if (isIdle) {
-      statusClass = "bg-gray-500";
+      statusClass = "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]";
       statusTitle = "Idle";
   } else if (!isConnected) {
-      statusClass = "bg-yellow-500";
+      statusClass = "bg-gray-500";
       statusTitle = "Disconnected";
   }
 

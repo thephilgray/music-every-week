@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, X, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePlayer } from '../../contexts/PlayerContext';
+import { SongDetailsModal } from '../SongDetailsModal'; // Import the new modal
 
 const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number, onSeek: (p: number) => void }) => {
   // Defensive check: ensure data is an array
@@ -35,7 +36,7 @@ const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number
 export function Player() {
   const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, context, volume, muted, setVolume, toggleMute } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
       seek(Number(e.target.value));
@@ -50,21 +51,10 @@ export function Player() {
 
   return (
     <>
-      {showLyrics && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowLyrics(false)}>
-           <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between items-center mb-4">
-                   <h3 className="text-xl font-bold text-white">Track Notes / Lyrics</h3>
-                   <button onClick={() => setShowLyrics(false)} className="text-gray-400 hover:text-white">
-                       <X className="w-5 h-5" />
-                   </button>
-               </div>
-               <div className="flex-1 overflow-y-auto bg-gray-950 p-4 rounded text-gray-300 whitespace-pre-wrap font-mono text-sm">
-                   {currentTrack?.lyrics || "No notes or lyrics available for this track."}
-               </div>
-           </div>
-        </div>
+      {showLyrics && currentTrack && (
+        <SongDetailsModal currentTrack={currentTrack} onClose={() => setShowLyrics(false)} />
       )}
+
 
       <div className={`${isMinimized ? 'h-16' : 'h-24'} bg-gray-900 border-t border-gray-800 px-6 flex items-center justify-between w-full flex-none transition-all duration-300 ease-in-out`}>
       {/* Track Info */}
@@ -171,7 +161,7 @@ export function Player() {
           
           <button 
             onClick={() => setIsMinimized(!isMinimized)}
-            className="p-2 text-gray-500 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
+            className="p-2 text-gray-500 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition hidden md:block"
             title={isMinimized ? "Expand Player" : "Minimize Player"}
           >
              {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}

@@ -104,13 +104,6 @@ export function Home() {
       ) : (
           <RequestList requests={visibleRequests} filter="active" />
       )}
-      
-      {!loading && visibleRequests.length === 0 && (
-          <div className="text-center py-20 text-gray-500 bg-gray-900/30 rounded-xl border border-gray-800/50">
-              <p>You haven't joined any requests yet.</p>
-              <p className="text-sm mt-2">Create one or check your Inbox for invites!</p>
-          </div>
-      )}
     </div>
   );
 }

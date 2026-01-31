@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
+import { X, Save, Trash2, Loader2, UserPlus, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { ConfirmModal } from './ui/ConfirmModal';
 
 interface EditRequestProps {

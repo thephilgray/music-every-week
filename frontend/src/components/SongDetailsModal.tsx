@@ -37,7 +37,15 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                        </div>
                        <div className="flex-1">
                            <h3 className="text-xl font-bold text-white leading-tight">{currentTrack.title}</h3>
-                           <p className="text-gray-400 text-sm leading-tight">{currentTrack.byline || `by ${currentTrack.uploaderPub?.substring(0, 6)}...`}</p>
+                           <p className="text-gray-400 text-sm leading-tight">
+                               {currentTrack.uploaderPub ? (
+                                   <Link to={`/profile/${currentTrack.uploaderPub}`} className="text-blue-400 hover:underline" onClick={onClose}>
+                                       {currentTrack.byline || `by ${currentTrack.uploaderPub.substring(0, 6)}...`}
+                                   </Link>
+                               ) : (
+                                   currentTrack.byline || 'by Unknown'
+                               )}
+                           </p>
                            {currentTrack.context && (
                                <Link to={currentTrack.context.link} className="text-blue-500 hover:underline text-xs flex items-center gap-1 mt-1">
                                    <span className="truncate">From: {currentTrack.context.name}</span>

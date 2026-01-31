@@ -32,6 +32,10 @@ const computeService = new gcp.projects.Service("compute-service", {
     service: "compute.googleapis.com",
     disableOnDestroy: false,
 });
+const cloudSchedulerService = new gcp.projects.Service("cloud-scheduler-service", {
+    service: "cloudscheduler.googleapis.com",
+    disableOnDestroy: false,
+});
 
 // 2. GCS Bucket for Persistence
 // This bucket acts as the filesystem for GunDB.
@@ -113,7 +117,24 @@ const iam = new gcp.cloudrunv2.ServiceIamMember("public-access", {
     member: "allUsers",
 });
 
+// 7. Cloud Scheduler Job to keep the Cloud Run service warm
+const cloudRunWarmer = new gcp.cloudscheduler.Job("cloud-run-warmer", {
+    name: "cloud-run-warmer",
+    description: "Keeps the Cloud Run service warm to reduce cold starts.",
+    schedule: "*/5 * * * *", // Every 5 minutes
+    timeZone: "America/Los_Angeles", // Adjust to your desired timezone
+    httpTarget: {
+        uri: service.uri,
+        httpMethod: "GET",
+        oidcToken: {
+            serviceAccountEmail: gcp.compute.getDefaultServiceAccount().then(sa => sa.email),
+            audience: service.uri,
+        },
+    },
+}, { dependsOn: [cloudSchedulerService, service] });
+
 // Exports
 export const relayUrl = service.uri;
 export const bucketName = bucket.name;
 export const repositoryUrl = repo.id;
+export const cloudSchedulerJobName = cloudRunWarmer.name;

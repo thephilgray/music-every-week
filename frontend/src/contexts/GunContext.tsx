@@ -134,20 +134,16 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Also check if already logged in (recalled from session)
     // @ts-ignore
     if (gunUser.is) {
-      setIsAuthLoading(false);
       // @ts-ignore
       const pub = gunUser.is.pub;
       if (pub) {
           setPubKey(pub);
           checkAuthorization(pub);
       }
+      setIsAuthLoading(false); // Auth process is complete whether authorized or not
     } else {
-      // If not immediately logged in, give it a moment to recall from session storage
-      // If 'auth' doesn't fire within a short window, assume strictly logged out.
-      const timer = setTimeout(() => {
-         setIsAuthLoading(false);
-      }, 500); 
-      return () => clearTimeout(timer);
+      // If not immediately logged in, we are done checking.
+      setIsAuthLoading(false);
     }
   }, []);
 

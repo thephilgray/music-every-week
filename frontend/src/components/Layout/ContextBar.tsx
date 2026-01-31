@@ -101,8 +101,8 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       <div className="relative flex items-center gap-3">
         {/* Status Indicator */}
         <div 
-            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`}
-            title={isConnected ? "Online" : "Offline (Idle)"}
+            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-500'}`}
+            title={isConnected ? "Online" : "Offline"}
         />
 
         <button 

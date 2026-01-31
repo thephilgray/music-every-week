@@ -7,7 +7,6 @@ import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
 import { CommentSection } from '../components/CommentSection';
 import { AddToPlaylist } from '../components/AddToPlaylist';
-import { Skeleton } from '../components/ui/Skeleton';
 import { EditRequest } from '../components/EditRequest';
 import type { FileRequest, Submission } from '../types';
 

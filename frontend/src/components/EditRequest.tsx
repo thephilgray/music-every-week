@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
+import { X, Save, Loader2, Trash2, UserPlus, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';

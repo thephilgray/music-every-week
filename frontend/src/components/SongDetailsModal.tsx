@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { CommentSection } from './CommentSection'; // Import CommentSection
 
 interface Track {
-    id: string; // Submission ID
+    id?: string; // Submission ID
     requestId: string;
     title: string;
     byline?: string;

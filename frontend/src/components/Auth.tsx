@@ -6,6 +6,7 @@ export function Auth() {
   const [alias, setAlias] = useState('');
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
   const [inviteCode, setInviteCode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('inviteCode') || params.get('requestInvite') || '';
@@ -66,6 +67,11 @@ export function Auth() {
     setError(null);
 
     if (isSignup) {
+      if (pass !== confirmPass) {
+          setError("Passwords do not match.");
+          return;
+      }
+
       // @ts-ignore
       const adminSecret = import.meta.env.VITE_ADMIN_SECRET || 'secret';
 
@@ -250,6 +256,22 @@ export function Auth() {
             required
           />
         </div>
+
+        {isSignup && (
+            <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Confirm Password</label>
+                <input
+                    type="password"
+                    value={confirmPass}
+                    onChange={(e) => setConfirmPass(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                />
+                <p className="text-xs text-yellow-500 mt-1">
+                    Warning: Passwords cannot be reset. Don't forget it!
+                </p>
+            </div>
+        )}
         
         {isSignup && (
           <div>
@@ -304,6 +326,7 @@ export function Auth() {
           onClick={() => {
               setIsSignup(!isSignup);
               setError(null);
+              setConfirmPass('');
           }}
           className="text-sm text-gray-400 hover:text-white transition"
         >

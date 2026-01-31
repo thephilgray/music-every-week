@@ -3,15 +3,7 @@ import { Auth } from '../components/Auth';
 export function LandingPage() {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center">
-      {/* Header / Nav */}
-      <header className="w-full max-w-5xl mx-auto p-6 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-           <img src="/mewlogo.png" alt="MEW" className="h-10 w-auto" />
-           <span className="font-bold text-2xl tracking-tight">MEW</span>
-        </div>
-        {/* Auth component will show Login/Signup forms */}
-      </header>
-
+      
       {/* Hero Section */}
       <main className="flex-1 w-full max-w-5xl mx-auto p-6 grid md:grid-cols-2 gap-12 items-center">
         

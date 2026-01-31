@@ -42,6 +42,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
   // Load data (Edit Mode or Defaults)
   useEffect(() => {
+    // Lock Body Scroll
+    document.body.style.overflow = 'hidden';
+    
     if (existingSubmission) {
         setTitle(existingSubmission.title);
         setByline(existingSubmission.byline || '');
@@ -55,6 +58,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             }
         });
     }
+    
+    return () => {
+        document.body.style.overflow = 'unset';
+    };
   }, [existingSubmission, user]);
 
   const searchUsers = (term: string) => {

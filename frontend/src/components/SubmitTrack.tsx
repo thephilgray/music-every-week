@@ -244,7 +244,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
         // 3. Save to Gun
         const submissionId = existingSubmission?.id || crypto.randomUUID();
-        console.log('Preparing submission object...', submissionId);
         
         // Convert collaborators array to Record<string, boolean>
         const collaboratorsMap: Record<string, boolean> = {};
@@ -274,22 +273,18 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             feedbackFocus: JSON.stringify(feedbackFocus) // Serialize array for GunDB
         };
 
-        console.log('Saving submission to GunDB...', submission);
-
         // Link submission to the Request
         // We'll store it under file_requests/ID/submissions/SUB_ID -> CHANGED TO request_submissions/ID
         // Securely: Store in User Graph, then Link
         const userSubNode = user.get('submissions').get(submissionId);
         userSubNode.put(submission, (ack: any) => {
             if (ack.err) console.error('Error saving to user graph:', ack.err);
-            else console.log('Saved to user graph:', ack);
         });
         
         // Use separate root node for submissions to allow public writes
         // STORE COPY INSTEAD OF REFERENCE for reliability
         gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
             if (ack.err) console.error('Error linking to request_submissions:', ack.err);
-            else console.log('Linked to request_submissions:', ack);
         });
 
         // Also link to user's public profile (Double-Linking)

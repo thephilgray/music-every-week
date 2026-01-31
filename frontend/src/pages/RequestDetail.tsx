@@ -125,10 +125,8 @@ export function RequestDetail() {
     // clearing submissions first to avoid dupes on re-mount if effect runs again
     setSubmissions([]); 
     
-    console.log("Subscribing to submissions for:", id);
     gun.get('request_submissions').get(id).map().on((data: any, key: string) => {
         if (data) {
-            console.log("Received submission data:", key, data);
             
             // Security Check for Submissions
             const soul = data._ && data._['#'];
@@ -167,7 +165,6 @@ export function RequestDetail() {
                 }
 
                 const safeData = { ...data, id: key, waveform: parsedWaveform, feedbackFocus: parsedFocus }; // ensure ID is present & parsed props
-                console.log("Processed safe submission:", safeData);
                 
                 const exists = prev.find(s => s.id === key);
                 if (exists) {

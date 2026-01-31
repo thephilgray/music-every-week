@@ -33,8 +33,24 @@ export function Home() {
         }
     });
     
+    
+    const updateRequests = () => {
+        setRequests(prev => {
+            // We need to filter based on CURRENT participation state + request data
+            // Since participation state updates separately, we might need a useEffect dependency or 
+            // just filter in render?
+            // Better: Store ALL requests in state (or a ref/map) and Filter in Render.
+            return Array.from(reqMap.values());
+        });
+        setLoading(false);
+    };
+    
+    // Fallback: If no requests found within 2s, stop loading
+    const timer = setTimeout(() => setLoading(false), 2000);
+    
     return () => {
         reqMap.clear();
+        clearTimeout(timer);
     };
   }, [user, pubKey, gun]);
 

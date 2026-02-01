@@ -45,6 +45,11 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
               No Artwork
             </div>
           )}
+          {request.accessMode === 'direct' && (
+            <div className="absolute top-2 left-2 px-2 py-1 bg-blue-600/90 text-white rounded text-xs font-bold border border-blue-400 shadow-md">
+              PUBLIC
+            </div>
+          )}
           {isClosed && (
             <div className="absolute bottom-2 right-2 px-2 py-1 bg-red-900/90 text-red-200 rounded text-xs font-bold border border-red-700">
               CLOSED

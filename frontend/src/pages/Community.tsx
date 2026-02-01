@@ -122,7 +122,7 @@ export function Community() {
                                         <Music className="w-4 h-4" />
                                     </div>
                                 )}
-                                <p className="text-gray-300 text-sm line-clamp-3 italic">"{item.text.replace('Submitted a new track: ', '')}"</p>
+                                <p className="text-gray-300 text-sm line-clamp-3 italic">{item.text.replace('Submitted a new track: ', '')}</p>
                             </div>
 
                             <div className="flex items-center gap-2 text-xs text-gray-500">

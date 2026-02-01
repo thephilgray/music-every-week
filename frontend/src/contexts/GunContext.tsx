@@ -1,10 +1,15 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import gun, { user as gunUser, PEERS } from '../lib/gun';
+import rootGun, { user as gunUser, PEERS } from '../lib/gun';
+import { APP_SCOPE } from '../config/appConfig';
 import type { IGunUserInstance } from 'gun';
 import type { UserProfile } from '../types';
 
+// Create the scoped instance
+// @ts-ignore
+const scopedGun = rootGun.get(APP_SCOPE);
+
 interface GunContextType {
-  gun: typeof gun;
+  gun: any; // Scoped instance is a chain, not the full root instance type
   user: IGunUserInstance;
   isLoggedIn: boolean;
   pubKey: string | undefined;
@@ -21,7 +26,7 @@ interface GunContextType {
 }
 
 const GunContext = createContext<GunContextType>({
-  gun,
+  gun: scopedGun,
   user: gunUser,
   isLoggedIn: false,
   pubKey: undefined,
@@ -54,6 +59,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasAuthorizedRef = useRef(false); // Ref to track authorization to prevent flapping
 
   useEffect(() => {
+    console.log(`Initializing GunDB Provider with App Scope: ${APP_SCOPE}`);
     const handleOnline = () => setIsInternetOnline(true);
     const handleOffline = () => setIsInternetOnline(false);
     window.addEventListener('online', handleOnline);
@@ -72,10 +78,10 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log('Disconnecting Gun peers...');
     setIsConnected(false);
     // @ts-ignore
-    gun.opt({ peers: [] });
+    rootGun.opt({ peers: [] });
     // Forcefully close existing connections if possible
     // @ts-ignore
-    const peers = gun._.opt.peers;
+    const peers = rootGun._.opt.peers;
     if (peers) {
         Object.values(peers).forEach((peer: any) => {
             if (peer.wire && peer.wire.close) {
@@ -89,12 +95,15 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log('Reconnecting Gun peers...');
     setIsConnected(true);
     // @ts-ignore
-    gun.opt({ peers: PEERS });
+    rootGun.opt({ peers: PEERS });
   };
 
   useEffect(() => {
     const checkAuthorization = (pub: string) => {
-      gun.get('all_users').get(pub).on((data: any) => {
+      let resolved = false;
+
+      const handleData = (data: any) => {
+        resolved = true;
         // If data exists, the user is in the directory
         if (data) {
           hasAuthorizedRef.current = true;
@@ -120,11 +129,27 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setUserProfile(null);
           }
         }
-      });
+      };
+
+      // 1. Subscribe to updates
+      const node = scopedGun.get('all_users').get(pub);
+      node.on(handleData);
+
+      // 2. Force a single fetch to handle empty/null cases faster
+      node.once(handleData);
+
+      // 3. Fallback timeout: If the node is completely empty (new namespace), Gun might not fire.
+      setTimeout(() => {
+          if (!resolved && !hasAuthorizedRef.current) {
+              console.warn(`Authorization check timed out for ${pub}. Defaulting to Unauthorized.`);
+              handleData(null);
+          }
+      }, 1500);
     };
 
     // Check authentication status on mount and when it changes
-    gun.on('auth', async (ack) => {
+    // Auth events are global on the root instance
+    rootGun.on('auth', async (ack) => {
       console.log('Authentication confirmed:', ack);
       setIsLoggedIn(true);
       setIsAuthLoading(false);
@@ -171,7 +196,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   return (
-    <GunContext.Provider value={{ gun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle }}>
+    <GunContext.Provider value={{ gun: scopedGun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle }}>
       {children}
     </GunContext.Provider>
   );

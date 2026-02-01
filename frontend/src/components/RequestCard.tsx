@@ -18,7 +18,7 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
     const submissionIds = new Set<string>();
     
     // Listen for submissions to this request
-    gun.get('file_requests').get(request.id).get('submissions').map().on((data, key) => {
+    gun.get('file_requests').get(request.id).get('submissions').map().on((data: any, key: any) => {
       if (data) {
         submissionIds.add(key);
         setSubmissionCount(submissionIds.size);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
-import { ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { ChevronUp, Users } from 'lucide-react';
 import { APP_SCOPE } from '../../config/appConfig';
 
 interface CollaboratorListProps {

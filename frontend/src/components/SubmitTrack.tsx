@@ -77,8 +77,23 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setTitle(existingSubmission.title);
         setByline(existingSubmission.byline || '');
         setLyrics(existingSubmission.lyrics || '');
-        setCollaborators(Object.keys(existingSubmission.collaborators || {}));
         setStage(existingSubmission.stage || 'First Draft / Demo');
+        
+        // Load Collaborators (Handle GunDB references)
+        const rawCollabs = existingSubmission.collaborators || {};
+        const directKeys = Object.keys(rawCollabs).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
+        
+        if (directKeys.length > 0) {
+            setCollaborators(directKeys);
+        } else if (existingSubmission.id) {
+            // If no direct keys, it might be a reference. Fetch from User Graph source.
+            user.get(APP_SCOPE).get('submissions').get(existingSubmission.id).get('collaborators').once((data: any) => {
+                if (data) {
+                    const fetchedKeys = Object.keys(data).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
+                    setCollaborators(fetchedKeys);
+                }
+            });
+        }
         
         let parsedFocus: string[] = [];
         if (existingSubmission.feedbackFocus) {
@@ -103,6 +118,22 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         if (root) root.style.visibility = 'visible';
     };
   }, [existingSubmission, user]);
+
+  // Fetch Aliases for Collaborators
+  useEffect(() => {
+      collaborators.forEach(pub => {
+          if (!knownAliases[pub]) {
+              gun.get('all_users').get(pub).once((u: any) => {
+                  if (u && (u.alias || u.displayName)) {
+                      setKnownAliases(prev => ({
+                          ...prev,
+                          [pub]: u.displayName || u.alias
+                      }));
+                  }
+              });
+          }
+      });
+  }, [collaborators, gun]);
 
   const searchUsers = (term: string) => {
     setSearchTerm(term);

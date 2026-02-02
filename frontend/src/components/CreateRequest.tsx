@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
@@ -262,14 +263,14 @@ export function CreateRequest() {
       console.log('Saving to GunDB...', request);
       
       // 1. Save to User Graph (Source of Truth - Secure Metadata)
-      const userReqNode = user.get('requests').get(requestId);
+      const userReqNode = user.get(APP_SCOPE).get('requests').get(requestId);
       userReqNode.put(request);
       
       // 2. Link Global Graph to User Graph (for discovery)
       gun.get('file_requests').get(requestId).put(userReqNode);
       
       // 3. Link to user's my_requests for local listing
-      user.get('my_requests').get(requestId).put(userReqNode);
+      user.get(APP_SCOPE).get('my_requests').get(requestId).put(userReqNode);
 
       // 4. Write Initial Participants to OPEN Graph Node
       // We use a separate root node 'request_participants' to allow public writes

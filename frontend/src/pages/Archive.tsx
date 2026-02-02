@@ -14,6 +14,7 @@ export function Archive() {
         </div>
       </div>
 
+      {/* Auto-fetches archived requests */}
       <RequestList filter="archived" />
     </div>
   );

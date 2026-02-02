@@ -1,151 +1,108 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
-import type { FileRequest } from '../types';
-import { Skeleton } from './ui/Skeleton';
+import { APP_SCOPE } from '../config/appConfig';
 import { RequestCard } from './RequestCard';
+import { Skeleton } from './ui/Skeleton';
+import type { FileRequest } from '../types';
+import { Music } from 'lucide-react';
 
 interface RequestListProps {
-  filter?: 'active' | 'archived' | 'all';
   requests?: FileRequest[];
   loading?: boolean;
+  filter?: 'active' | 'archived' | 'mine';
 }
 
-export function RequestList({ filter = 'all', requests: propRequests, loading: propLoading }: RequestListProps) {
-  const { gun, pubKey, user } = useGun();
+export function RequestList({ requests: propRequests, loading: propLoading, filter = 'active' }: RequestListProps) {
+  const { gun, user, pubKey } = useGun();
   const [internalRequests, setInternalRequests] = useState<FileRequest[]>([]);
   const [internalLoading, setInternalLoading] = useState(true);
-  const [myParticipation, setMyParticipation] = useState<Record<string, string>>({});
-  const [now] = useState(Date.now());
+  const [participation, setParticipation] = useState<Record<string, string>>({});
 
-  const requests = propRequests || internalRequests;
-  const isLoading = propLoading !== undefined ? propLoading : internalLoading;
-
-  // 1. Load User Participation Status (Only if fetching internally or needing status for display?)
-  // Actually, participation status is useful for rendering cards (e.g. showing "Accepted" badge), 
-  // so we keep this subscription active regardless.
   useEffect(() => {
-      if (!user || !pubKey) return;
+    if (!user) return;
+    
+    // Subscribe to participation statuses (Scoped)
+    user.get(APP_SCOPE).get('participation').map().on((status: any, reqId: string) => {
+        setParticipation(prev => ({ ...prev, [reqId]: status }));
+    });
+  }, [user]);
+
+  // Internal Fetch if no props provided
+  useEffect(() => {
+      if (propRequests) {
+          setInternalLoading(false);
+          return;
+      }
+
+      const reqMap = new Map<string, FileRequest>();
       
-      const participationMap: Record<string, string> = {};
-      user.get('participation').map().on((status: any, reqId: string) => {
-          if (status) {
-              participationMap[reqId] = status;
-              setMyParticipation({...participationMap});
+      gun.get('file_requests').map().on((data: any, key: string) => {
+          if (data && data.title) {
+              reqMap.set(key, { ...data, id: key });
+              setInternalRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+              setInternalLoading(false);
           }
       });
-  }, [user, pubKey]);
+      
+      const timer = setTimeout(() => setInternalLoading(false), 2000);
+      return () => clearTimeout(timer);
+  }, [gun, propRequests]);
 
-  useEffect(() => {
-    if (propRequests) return; // Skip internal fetch if props provided
+  const requestsToFilter = propRequests || internalRequests;
+  const isLoading = propLoading !== undefined ? propLoading : internalLoading;
 
-    // Subscribe to all file_requests
-    const requestsMap = new Map<string, FileRequest>();
-    const now = Date.now();
+  // Filter Logic based on deadline and status
+  const filtered = requestsToFilter.filter(req => {
+      const isExpired = req.deadline ? new Date(req.deadline).getTime() < Date.now() : false;
+      const myStatus = participation[req.id!];
+      const isOwner = req.ownerPub === pubKey;
+      const isDirect = req.accessMode === 'direct';
+      const isJoined = myStatus === 'accepted' || myStatus === 'joined';
 
-    const processRequest = (data: any, key: string) => {
-       if (!data || !data.title) return; // Basic validation
-       
-       const newRequest: FileRequest = {
-         id: key,
-         ...data,
-         // Parse JSON fields if they are strings
-         pending_emails: typeof data.pending_emails === 'string' ? JSON.parse(data.pending_emails) : data.pending_emails,
-         participants: typeof data.participants === 'string' ? JSON.parse(data.participants) : data.participants
-       };
-       
-       // --- STRICT PRIVACY LOGIC ---
-       if (!pubKey) return; // Must be logged in to see anything (per "If I wasn't invited... shouldn't see it")
+      // 1. Privacy Check: Must be Owner, Public, or Joined
+      // If requests are passed via props (e.g. from Home), they are already filtered by the parent?
+      // Home.tsx filters for "Active Requests" using similar logic.
+      // Archive.tsx does NOT filter. So we need this check here for Archive view security.
+      if (!isOwner && !isDirect && !isJoined) return false;
+      
+      if (filter === 'active') {
+          return !isExpired; 
+      }
+      if (filter === 'archived') {
+          return isExpired;
+      }
+      return true;
+  });
 
-       const isOwner = newRequest.ownerPub === pubKey;
-       const participants = newRequest.participants || {};
-       const isInvited = participants[pubKey];
+  if (isLoading && filtered.length === 0) {
+      return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-64 rounded-xl" />)}
+          </div>
+      );
+  }
 
-       // Rule 1: If not Owner AND not Invited, HIDE.
-       if (!isOwner && !isInvited) return;
-
-       // Rule 2: If Invited, check Access Mode & Status
-       if (!isOwner && isInvited) {
-           if (newRequest.accessMode === 'invite') {
-               // Must be ACCEPTED to show in feed.
-               // Check local participation status (User Graph) OR legacy participant list status
-               const localStatus = myParticipation[key];
-               const listStatus = isInvited.status;
-               
-               if (localStatus !== 'accepted' && listStatus !== 'accepted') return;
-           }
-           // 'direct' mode is auto-accepted/visible immediately if invited.
-       }
-       // -----------------------------
-
-       // Filter Logic
-       const GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000; // 7 days
-       const deadlineTime = newRequest.deadline ? new Date(newRequest.deadline).getTime() : Infinity;
-       
-       if (filter === 'active') {
-           // Show if deadline is in future OR within grace period
-           if (deadlineTime + GRACE_PERIOD < now) return; 
-       } else if (filter === 'archived') {
-           // Show only if deadline + grace period is past
-           if (deadlineTime + GRACE_PERIOD >= now) return;
-       }
-
-       requestsMap.set(key, newRequest);
-       
-       // Sort by Deadline (Active: soonest first, Archived: newest first)
-       const sorted = Array.from(requestsMap.values()).sort((a, b) => {
-           const dateA = a.deadline ? new Date(a.deadline).getTime() : 0;
-           const dateB = b.deadline ? new Date(b.deadline).getTime() : 0;
-           if (filter === 'active') return dateA - dateB; // Soonest deadline first
-           return dateB - dateA; // Newest archived first
-       });
-       
-       setInternalRequests(sorted);
-       setInternalLoading(false);
-    };
-
-    gun.get('file_requests').map().on(processRequest);
-    
-    const timer = setTimeout(() => setInternalLoading(false), 2000);
-    return () => clearTimeout(timer);
-  }, [gun, filter, pubKey, myParticipation, propRequests]); // Added propRequests dep
-
-  if (isLoading && requests.length === 0) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map(i => (
-              <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden h-full flex flex-col">
-                  <Skeleton className="aspect-video w-full bg-gray-700" />
-                  <div className="p-4 flex-1 flex flex-col gap-4">
-                      <Skeleton className="h-6 w-3/4" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-1/2" />
-                      <div className="mt-auto pt-4 border-t border-gray-700/50 flex justify-between">
-                          <Skeleton className="h-3 w-1/4" />
-                          <Skeleton className="h-3 w-1/4" />
-                      </div>
-                  </div>
-              </div>
-          ))}
-      </div>
-    );
+  if (filtered.length === 0) {
+      return (
+          <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
+              <Music className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+              <p className="text-gray-500">No {filter} requests found.</p>
+          </div>
+      );
   }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {requests.map(req => {
-        const isClosed = req.deadline && new Date(req.deadline).getTime() < now;
-        return (
-          <RequestCard key={req.id} request={req} isClosed={!!isClosed} />
-      )})}
-      
-      {requests.length === 0 && (
-        <div className="col-span-full text-center py-12 text-gray-500 bg-gray-900/50 border border-gray-800 border-dashed rounded-lg">
-           <p className="text-lg font-medium text-gray-300 mb-2">
-               {filter === 'active' ? 'No active requests' : 'No archived requests'}
-           </p>
-           {filter === 'active' && <p className="text-sm">Create a new request to get started!</p>}
-        </div>
-      )}
+      {filtered.map(req => {
+          const isClosed = req.deadline ? new Date(req.deadline).getTime() < Date.now() : false;
+          return (
+            <RequestCard 
+                key={req.id} 
+                request={req} 
+                isClosed={isClosed}
+            />
+          );
+      })}
     </div>
   );
 }

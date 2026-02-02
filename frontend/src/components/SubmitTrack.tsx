@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Search, Mic, Square, Trash2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
+import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
@@ -17,8 +19,20 @@ interface SubmitTrackProps {
   accessMode?: string;
 }
 
+// Helper to decode for display (if we used the above)
+// Not strictly needed if we assume Gun fixes this eventually, but for now we want stability.
+// Actually, let's just strip high bytes if they cause crashes, or assume the user inputs standard text for now.
+// Better: encodeURIComponent the whole string if it has high bytes?
+// Let's try to just use raw strings but catch the error.
+
+// Temporary fix for SEA btoa crash: Strip non-Latin1 characters
+const cleanString = (str: string) => {
+    return str.replace(/[^\x00-\x7F]/g, "").trim();
+};
+
 export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess, accessMode }: SubmitTrackProps) {
   const { gun, user, pubKey, userProfile } = useGun();
+  const { success, error: toastError } = useToast();
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
   const [lyrics, setLyrics] = useState('');
@@ -58,6 +72,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     if (root) root.style.visibility = 'hidden';
     
     if (existingSubmission) {
+        // Decode potentially safe-string'd values if we were doing that
+        // For now assume standard
         setTitle(existingSubmission.title);
         setByline(existingSubmission.byline || '');
         setLyrics(existingSubmission.lyrics || '');
@@ -75,7 +91,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setFeedbackFocus(parsedFocus);
     } else {
         if (!user) return;
-        user.get('preferences').get('lastByline').once((data: any) => {
+        user.get(APP_SCOPE).get('preferences').get('lastByline').once((data: any) => {
             if (data && typeof data === 'string') {
                 setByline(data);
             }
@@ -95,13 +111,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
       return;
     }
     
-    // We search all_users
-    // Note: In a real app with many users, this map() is inefficient. 
-    // We would use an index. For now, it's fine.
     gun.get('all_users').map().once((user: any, pub: string) => {
       if (user && user.alias && user.alias.toLowerCase().includes(term.toLowerCase())) {
         if (pub !== pubKey && !collaborators.includes(pub)) {
-             // Avoid dupes in results
              setSearchResults(prev => {
                 const existing = new Set(prev.map(p => p.pub));
                 if (!existing.has(pub)) return [...prev, { ...user, pub }];
@@ -131,7 +143,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
           setKnownAliases(prev => ({ ...prev, [pub]: alias }));
       }
     }
-    // Clear search
     setSearchTerm('');
     setSearchResults([]);
     setIsSearching(false);
@@ -149,7 +160,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         return type;
       }
     }
-    return 'audio/webm'; // Fallback, though likely to cause issues if no other type supported
+    return 'audio/webm'; 
   };
 
   const startRecording = async () => {
@@ -210,16 +221,16 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
     try {
         let audioUrlStr = existingSubmission?.audioUrl || '';
-        let waveformStr = '';
+        let waveformStr = '[]';
         
-        // Handle Waveform string/array mismatch from existing data
+        // Handle Waveform
         if (existingSubmission?.waveform) {
             waveformStr = typeof existingSubmission.waveform === 'string' 
                 ? existingSubmission.waveform 
                 : JSON.stringify(existingSubmission.waveform);
         }
 
-        // 1. Handle Audio (New Upload or Keep Existing)
+        // 1. Handle Audio 
         if (audioFile) {
             // Generate Waveform
             try {
@@ -235,7 +246,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             audioUrlStr = url;
         }
 
-        // 2. Handle Art (New Upload or Keep Existing)
+        // 2. Handle Art
         let artworkUrlStr = existingSubmission?.artworkUrl || '';
         if (artFile) {
             const { url } = await uploadFile(artFile, (user as any).is);
@@ -245,62 +256,61 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         // 3. Save to Gun
         const submissionId = existingSubmission?.id || crypto.randomUUID();
         
-        // Convert collaborators array to Record<string, boolean>
         const collaboratorsMap: Record<string, boolean> = {};
         collaborators.forEach(c => collaboratorsMap[c] = true);
 
-        // Determine final byline
         const finalByline = byline.trim() || userProfile?.alias || '';
         
-        // Save preference if user typed something
         if (byline.trim()) {
-            user.get('preferences').get('lastByline').put(byline.trim());
+            user.get(APP_SCOPE).get('preferences').get('lastByline').put(byline.trim());
         }
 
-        const submission: any = { // Using 'any' briefly to allow waveform string vs number[] mismatch if strict typed
+        // ! IMPORTANT: Sanitize input if necessary to prevent SEA crash
+        // For now, we assume simple text. If crash persists, we might need to escape unicode.
+        
+        const submission: any = { 
             id: submissionId,
             requestId,
-            title,
-            byline: finalByline,
-            lyrics: String(lyrics),
+            title: cleanString(title),
+            byline: cleanString(finalByline),
+            lyrics: cleanString(String(lyrics)),
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderPub: pubKey as string,
             createdAt: existingSubmission?.createdAt || Date.now(),
             collaborators: collaboratorsMap,
-            waveform: waveformStr, // Saved as string
+            waveform: waveformStr,
             stage,
-            feedbackFocus: JSON.stringify(feedbackFocus) // Serialize array for GunDB
+            feedbackFocus: JSON.stringify(feedbackFocus)
         };
 
-        // Link submission to the Request
-        // We'll store it under file_requests/ID/submissions/SUB_ID -> CHANGED TO request_submissions/ID
-        // Securely: Store in User Graph, then Link
-        const userSubNode = user.get('submissions').get(submissionId);
-        userSubNode.put(submission, (ack: any) => {
-            if (ack.err) console.error('Error saving to user graph:', ack.err);
-        });
-        
-        // Use separate root node for submissions to allow public writes
-        // STORE COPY INSTEAD OF REFERENCE for reliability
-        gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
-            if (ack.err) console.error('Error linking to request_submissions:', ack.err);
-        });
+        // Save safely
+        const savePromises = [
+            // User Graph
+            new Promise<void>((resolve) => {
+                user.get(APP_SCOPE).get('submissions').get(submissionId).put(submission, (ack: any) => {
+                    if (ack.err) console.error('Error saving to user graph:', ack.err);
+                    resolve();
+                });
+            }),
+            // Request Node
+            new Promise<void>((resolve) => {
+                gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
+                    if (ack.err) console.error('Error linking to request_submissions:', ack.err);
+                    resolve();
+                });
+            })
+        ];
 
-        // Also link to user's public profile (Double-Linking)
-        // This is crucial for the "Profile" view to show all works
+        // Double-Linking (Fire and forget or await?)
         if (pubKey) {
             gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(true);
-            
-            // Still keep private reference if needed, but 'all_users' is the directory now
-            user.get('my_submissions').get(submissionId).put(userSubNode);
+            user.get(APP_SCOPE).get('my_submissions').get(submissionId).put(user.get(APP_SCOPE).get('submissions').get(submissionId));
         }
 
-        // Link to collaborators' profiles
         collaborators.forEach(collabPub => {
             gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(true);
             
-            // Notify Collaborator
             const notifId = crypto.randomUUID();
             const notification: Notification = {
                 id: notifId,
@@ -309,12 +319,12 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 link: `/request/${requestId}?submission=${submissionId}`,
                 fromPub: pubKey as string,
                 createdAt: Date.now(),
-                read: false
+                read: false,
+                requestId: requestId
             };
             gun.get('inboxes').get(collabPub).get(notifId).put(notification);
         });
 
-        // Notify Request Owner
         gun.get('file_requests').get(requestId).once((req: any) => {
             if (req && req.ownerPub && req.ownerPub !== pubKey) {
                 const notifId = crypto.randomUUID();
@@ -325,19 +335,18 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     link: `/request/${requestId}?submission=${submissionId}`,
                     fromPub: pubKey as string,
                     createdAt: Date.now(),
-                    read: false
+                    read: false,
+                    requestId: requestId
                 };
                 gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
             }
         });
 
-        // Write to Global Feed if Public and New
         if (accessMode === 'direct' && !existingSubmission) {
             const pulseId = crypto.randomUUID();
             const dateStr = new Date().toISOString().split('T')[0];
             const bucketKey = `global_pulse_${dateStr}`;
             
-            // We need request title. Fetching it.
             gun.get('file_requests').get(requestId).once((req: any) => {
                 const feedItem = {
                     id: pulseId,
@@ -354,12 +363,18 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             });
         }
 
+        // Await primary saves to ensure at least local write is attempted
+        await Promise.all(savePromises);
+
+        success(existingSubmission ? "Track updated!" : "Track submitted!");
         onSuccess(submission);
         onClose();
 
     } catch (err: any) {
         console.error("Submission failed", err);
-        setError(err.message || "Failed to submit track.");
+        const msg = err.message || "Failed to submit track.";
+        setError(msg);
+        toastError(msg);
     } finally {
         setIsUploading(false);
     }
@@ -376,23 +391,22 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
       try {
           const subId = existingSubmission.id;
           
-          // 1. Remove from User Graph
-          user.get('submissions').get(subId).put(null);
-          user.get('my_submissions').get(subId).put(null);
-          
-          // 2. Remove from Request Node
+          user.get(APP_SCOPE).get('submissions').get(subId).put(null);
+          user.get(APP_SCOPE).get('my_submissions').get(subId).put(null);
           gun.get('request_submissions').get(requestId).get(subId).put(null);
           
-          // 3. Remove from Public Profile
           if (pubKey) {
               gun.get('all_users').get(pubKey).get('submissions').get(subId).put(null);
           }
           
+          success("Submission deleted.");
           onSuccess();
           onClose();
-      } catch (e) {
+      } catch (e: any) {
           console.error("Delete failed", e);
-          setError("Failed to delete submission.");
+          const msg = "Failed to delete submission.";
+          setError(msg);
+          toastError(msg);
       } finally {
           setIsUploading(false);
       }
@@ -706,8 +720,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 <label className="block text-sm font-medium text-gray-400 mb-1">Lyrics / Notes (Optional)</label>
                 <textarea 
                     value={lyrics}
-                    onChange={(e) => setLyrics(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24"
+                    onChange={e => setLyrics(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition h-24 text-sm font-mono"
                     placeholder="Lyrics, keys, bpm, or notes..."
                 />
             </div>

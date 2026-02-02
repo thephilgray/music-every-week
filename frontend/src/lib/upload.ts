@@ -31,13 +31,11 @@ export async function uploadFile(file: File, userPair: any): Promise<UploadResul
                           // Check if this session matches our pub key AND has a private key
                           if (parsed && parsed.sea && parsed.sea.pub === activePair.pub && parsed.sea.priv) {
                               activePair = parsed.sea;
-                              console.log("Recovered keys from sessionStorage (key: " + key + ")");
                               break;
                           }
                           // Sometimes stored directly
                           if (parsed && parsed.pub === activePair.pub && parsed.priv) {
                               activePair = parsed;
-                              console.log("Recovered keys from sessionStorage (direct key: " + key + ")");
                               break;
                           }
                       } catch (e) {
@@ -56,11 +54,30 @@ export async function uploadFile(file: File, userPair: any): Promise<UploadResul
       throw new Error("Authentication error: Session is read-only (missing private key). Please Log Out and Log In again to fix this.");
   }
 
+  // Debug Key Quality
+  if (typeof activePair.priv !== 'string') {
+      console.warn("Private key is not a string!", activePair.priv);
+  } else {
+      // Check for non-Latin1 chars in priv key which might crash SEA
+      // eslint-disable-next-line no-control-regex
+      if (/[^\x00-\x7F]/.test(activePair.priv)) {
+          console.error("CRITICAL: Private key contains invalid characters (non-Latin1). This will crash SEA.", activePair.priv.replace(/./g, '*'));
+          throw new Error("Critical Auth Error: Your private key appears corrupted. Please clear cache/storage and login again.");
+      }
+  }
+
   // 1. Prepare Auth Headers
   const timestamp = Date.now();
   const data = { timestamp };
-  console.log("Signing data:", data, "with pub:", activePair.pub);
-  const proof = await SEA.sign(data, activePair);
+  
+  let proof;
+  try {
+      proof = await SEA.sign(data, activePair);
+  } catch (err: any) {
+      console.error("SEA.sign failed:", err);
+      // Fallback: Check if SEA is available globally or differently
+      throw new Error(`Signing failed: ${err.message || err}`);
+  }
   const pub = activePair.pub;
 
   // 2. Get Presigned URL

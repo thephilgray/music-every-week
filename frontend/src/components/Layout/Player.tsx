@@ -2,36 +2,8 @@ import React, { useState } from 'react';
 import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePlayer } from '../../contexts/PlayerContext';
-import { SongDetailsModal } from '../SongDetailsModal'; // Import the new modal
-
-const Waveform = ({ data, progress, onSeek }: { data: number[], progress: number, onSeek: (p: number) => void }) => {
-  // Defensive check: ensure data is an array
-  const bars = Array.isArray(data) ? data : [];
-  
-  return (
-    <div 
-      className="flex items-center gap-0.5 h-8 w-full cursor-pointer group"
-      onClick={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const p = x / rect.width;
-        onSeek(Math.min(Math.max(p, 0), 1));
-      }}
-    >
-      {bars.map((val, i) => {
-        const barProgress = i / bars.length;
-        const isPlayed = barProgress < progress;
-        return (
-          <div 
-            key={i}
-            className={`flex-1 rounded-sm transition-colors ${isPlayed ? 'bg-blue-500' : 'bg-gray-700 group-hover:bg-gray-600'}`}
-            style={{ height: `${Math.max(val * 100, 15)}%` }}
-          />
-        );
-      })}
-    </div>
-  );
-};
+import { SongDetailsModal } from '../SongDetailsModal';
+import { Waveform } from '../ui/Waveform';
 
 export function Player() {
   const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, context, volume, muted, setVolume, toggleMute } = usePlayer();

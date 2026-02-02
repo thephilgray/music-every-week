@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Music, AlertCircle } from 'lucide-react';
 import { CreateRequest } from '../components/CreateRequest';
 import { RequestList } from '../components/RequestList';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import type { FileRequest } from '../types';
 
 export function Home() {
-  const { gun, user, pubKey } = useGun();
+  const { gun, user, pubKey, isInternetOnline } = useGun();
   const [showCreate, setShowCreate] = useState(false);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [participation, setParticipation] = useState<Record<string, string>>({});
@@ -15,14 +16,14 @@ export function Home() {
   useEffect(() => {
     if (!user || !pubKey) return;
 
-    // 1. Listen to Participation Status
-    user.get('participation').map().on((status: any, reqId: string) => {
+    // 1. Listen to Participation Status (Scoped)
+    user.get(APP_SCOPE).get('participation').map().on((status: any, reqId: string) => {
         setParticipation(prev => ({ ...prev, [reqId]: status }));
     });
 
     const reqMap = new Map<string, FileRequest>();
 
-    // 2. Listen to Global Requests
+    // 2. Listen to Global Requests (Public Scoped Graph via useGun)
     gun.get('file_requests').map().on((data: any, key: string) => {
         if (data && data.title) {
             reqMap.set(key, { ...data, id: key });
@@ -50,6 +51,7 @@ export function Home() {
       
       const myStatus = participation[req.id];
       
+      // Logic: Show if I created it, OR if it's public, OR if I have interacted with it (joined/invited)
       return isOwner || isDirect || myStatus === 'accepted' || myStatus === 'joined' || myStatus === 'invited';
   }).sort((a, b) => b.createdAt - a.createdAt);
 
@@ -57,7 +59,14 @@ export function Home() {
     <div className="max-w-5xl mx-auto space-y-8 pb-20 p-4">
       <div className="flex items-center justify-between">
         <div>
-           <h1 className="text-3xl font-bold text-white mb-2">Active Requests</h1>
+           <div className="flex items-center gap-3">
+               <h1 className="text-3xl font-bold text-white mb-2">Active Requests</h1>
+               {!isInternetOnline && (
+                  <span className="bg-red-900/50 text-red-200 text-xs px-2 py-1 rounded flex items-center gap-1 border border-red-800">
+                      <AlertCircle className="w-3 h-3" /> Offline
+                  </span>
+               )}
+           </div>
            <p className="text-gray-400">Manage your collaborative sessions</p>
         </div>
         <button 
@@ -76,11 +85,23 @@ export function Home() {
         </div>
       )}
 
-      <RequestList 
-          requests={visibleRequests} 
-          loading={loading} 
-          filter="active" 
-      />
+      {loading && visibleRequests.length === 0 ? (
+          <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
+              <p className="text-gray-500">Loading requests...</p>
+          </div>
+      ) : visibleRequests.length === 0 ? (
+          <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
+              <Music className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+              <p className="text-gray-500">No active requests found.</p>
+              <p className="text-sm text-gray-600 mt-2">Create one to get started!</p>
+          </div>
+      ) : (
+          <RequestList 
+              requests={visibleRequests} 
+              loading={loading} 
+              filter="active" 
+          />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import type { Playlist, Submission } from '../types';
 import { Play, Trash2, ListMusic, Loader2, Edit, X } from 'lucide-react';
@@ -13,7 +14,7 @@ export function Playlists() {
 
   useEffect(() => {
      setPlaylists([]);
-     user.get('playlists').map().on((data: any, key: string) => {
+     user.get(APP_SCOPE).get('playlists').map().on((data: any, key: string) => {
          if (data && data.title) {
              let tracks = [];
              if (typeof data.tracks === 'string') {
@@ -86,7 +87,7 @@ export function Playlists() {
 
   const deletePlaylist = (id: string) => {
       if(confirm('Delete this playlist?')) {
-          user.get('playlists').get(id).put(null);
+          user.get(APP_SCOPE).get('playlists').get(id).put(null);
       }
   };
 
@@ -97,7 +98,7 @@ export function Playlists() {
       const newTracks = [...selectedPlaylist.tracks];
       newTracks.splice(index, 1);
       
-      user.get('playlists').get(selectedPlaylist.id).put({
+      user.get(APP_SCOPE).get('playlists').get(selectedPlaylist.id).put({
           tracks: JSON.stringify(newTracks)
       });
       // State updates automatically via listener

@@ -114,7 +114,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             Log Out
         </button>
         <div className="text-xs text-gray-600 font-mono px-4 text-center">
-          TrackPeer v0.1-beta
+          Powered by TrackPeer
         </div>
       </div>
       

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, UserPlus, Copy, X } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
+import { APP_SCOPE } from '../../config/appConfig';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { gun, user, pubKey, userProfile, isConnected, isIdle, isInternetOnline } = useGun();
@@ -36,19 +37,18 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
   };
 
   const generateInvite = () => {
+      if (!pubKey) return;
       const code = crypto.randomUUID().substring(0, 8).toUpperCase();
+      
       // Save to global invites list
-      // We don't need strict validation on the invite code for now, just existence.
       gun.get('invites').get(code).put({
           from: pubKey,
           createdAt: Date.now(),
           status: 'active'
       });
       
-      // Link to user profile
-      if (pubKey) {
-          user.get('my_invites').get(code).put(true);
-      }
+      // Link to user profile (Scoped)
+      user.get(APP_SCOPE).get('my_invites').get(code).put(true);
       
       // Generate full URL
       const url = `${window.location.origin}/?inviteCode=${code}`;

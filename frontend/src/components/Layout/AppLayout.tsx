@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { ContextBar } from './ContextBar';
 import { Player } from './Player';
 import { useGun } from '../../contexts/GunContext';
+import { APP_SCOPE } from '../../config/appConfig';
 import { useToast } from '../../contexts/ToastContext';
 
 export function AppLayout() {
@@ -30,8 +31,8 @@ export function AppLayout() {
               } else {
                   success("You have successfully joined the request!");
                   
-                  // Local marker
-                  user.get('participation').get(pendingReqId).put('accepted');
+                  // Local marker (Scoped)
+                  user.get(APP_SCOPE).get('participation').get(pendingReqId).put('accepted');
               }
           });
       }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
@@ -147,7 +148,7 @@ export function Profile() {
           gun.get('all_users').get(pubKey as string).put(updates);
           
           // Update Private Profile (Auth) if needed, but 'all_users' is the source of truth for directory.
-          user.get('profile').put(updates); // Use proper 'profile' node structure
+          user.get(APP_SCOPE).get('profile').put(updates); // Use proper 'profile' node structure
           
           setIsEditing(false);
           setEditAvatar(null);
@@ -200,7 +201,7 @@ export function Profile() {
       ));
 
       // Update GunDB
-      user.get('submissions').get(sub.id).get('hiddenFromProfile').put(newValue);
+      user.get(APP_SCOPE).get('submissions').get(sub.id).get('hiddenFromProfile').put(newValue);
   };
 
   const handleToggleRequestVisibility = (e: React.MouseEvent, req: FileRequest) => {
@@ -226,7 +227,7 @@ export function Profile() {
       // So we must update the request object itself or the user's graph reference.
       // Since the query is `gun.get('file_requests').map()`, we update the request object.
       // Ideally, this should be a user-specific setting, but sticking to the current architecture:
-      user.get('requests').get(req.id).get('hiddenFromProfile').put(newValue);
+      user.get(APP_SCOPE).get('requests').get(req.id).get('hiddenFromProfile').put(newValue);
       gun.get('file_requests').get(req.id).get('hiddenFromProfile').put(newValue);
   };
 

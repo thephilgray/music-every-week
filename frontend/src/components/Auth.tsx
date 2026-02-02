@@ -152,6 +152,9 @@ export function Auth() {
                       verifyGlobalInvite(code);
                   }
               });
+          } else {
+              // Global Invite Check
+              verifyGlobalInvite(code);
           }
       } else {
           setError("Invite Code is required");

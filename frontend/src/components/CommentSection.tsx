@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Mic, Square, Trash2, Loader2, User } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { uploadFile } from '../lib/upload';
 import { CommentItem } from './CommentItem';
 import { MiniPlayer } from './ui/MiniPlayer';
@@ -16,7 +17,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle }: CommentSectionProps) {
-  const { gun, pubKey, user, userProfile } = useGun();
+  const { gun, pubKey, user, userProfile, isAuthorized } = useGun();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   
@@ -238,7 +239,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
             comment.audioUrl = audioUrl;
         }
 
-        const userCommentNode = user.get('comments').get(id);
+        const userCommentNode = user.get(APP_SCOPE).get('comments').get(id);
         userCommentNode.put(comment);
 
         // Write to Public Comments Node
@@ -269,13 +270,12 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                 gun.get(bucketKey).get(pulseId).put(feedItem);
                 
                 // Store pulseId & bucket ref in comment for future updates/deletes
-                user.get('comments').get(id).get('globalPulseId').put(pulseId);
-                user.get('comments').get(id).get('globalBucket').put(bucketKey);
+                user.get(APP_SCOPE).get('comments').get(id).get('globalPulseId').put(pulseId);
+                user.get(APP_SCOPE).get('comments').get(id).get('globalBucket').put(bucketKey);
             });
         }
 
         // Notify Submission Uploader
-        gun.get('request_submissions')
         gun.get('request_submissions')
         .get(requestId)
         .get(submissionId)
@@ -347,7 +347,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       setDeleteCandidateId(null);
 
       // Check for Global Pulse ID to delete from feed
-      user.get('comments').get(commentId).once((cData: any) => {
+      user.get(APP_SCOPE).get('comments').get(commentId).once((cData: any) => {
           if (cData && cData.globalPulseId) {
               const bucket = cData.globalBucket || 'global_pulse'; // Fallback for legacy
               gun.get(bucket).get(cData.globalPulseId).put(null as any);
@@ -358,15 +358,15 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       gun.get('submission_comments').get(submissionId).get(commentId).put(null);
       
       // Delete from User Graph (Actual Data)
-      user.get('comments').get(commentId).put(null);
+      user.get(APP_SCOPE).get('comments').get(commentId).put(null);
   };
 
   const handleEditComment = (commentId: string, newText: string) => {
       // Update User Graph (Source of Truth)
-      user.get('comments').get(commentId).get('text').put(newText);
+      user.get(APP_SCOPE).get('comments').get(commentId).get('text').put(newText);
       
       // Update Global Pulse if exists
-      user.get('comments').get(commentId).once((cData: any) => {
+      user.get(APP_SCOPE).get('comments').get(commentId).once((cData: any) => {
           if (cData && cData.globalPulseId) {
               const bucket = cData.globalBucket || 'global_pulse'; // Fallback
               (gun.get(bucket).get(cData.globalPulseId) as any).get('text').put(newText);
@@ -439,6 +439,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
            )}
 
            <div className="flex gap-2">
+               {isAuthorized ? (
+               <>
                <input 
                   ref={inputRef}
                   type="text" 
@@ -479,6 +481,12 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                >
                   {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                </button>
+               </>
+               ) : (
+                   <div className="text-gray-500 text-sm italic w-full text-center p-2 bg-gray-900 rounded">
+                       You must join this request to comment.
+                   </div>
+               )}
            </div>
        </form>
 

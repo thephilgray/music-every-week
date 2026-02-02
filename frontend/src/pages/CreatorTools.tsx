@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { EditRequest } from '../components/EditRequest';
 import { SubmitTrack } from '../components/SubmitTrack'; // For editing submissions
 import type { FileRequest, Submission } from '../types';
@@ -38,7 +39,7 @@ export function CreatorTools() {
   useEffect(() => {
     if (!user) return;
     const reqMap = new Map<string, FileRequest>();
-    user.get('my_requests').map().on((data: any, key: string) => {
+    user.get(APP_SCOPE).get('my_requests').map().on((data: any, key: string) => {
         if (data && data.title) { 
             // ... (keep parsing logic)
             let parsedParticipants = {};
@@ -73,7 +74,7 @@ export function CreatorTools() {
       const subMap = new Map<string, Submission>();
       
       // Listen to my_submissions (private reference) OR submissions (public reference, usually same data)
-      user.get('my_submissions').map().on((data: any, key: string) => {
+      user.get(APP_SCOPE).get('my_submissions').map().on((data: any, key: string) => {
           if (data && data.title) {
               subMap.set(key, { ...data, id: key });
               setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));

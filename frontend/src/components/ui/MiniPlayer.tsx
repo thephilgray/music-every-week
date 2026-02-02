@@ -70,6 +70,7 @@ export function MiniPlayer({ src }: MiniPlayerProps) {
     <div className="flex items-center gap-3 bg-gray-800 rounded-full px-3 py-2 mt-1 w-fit border border-gray-700 min-w-[180px]">
       <audio ref={audioRef} src={src} preload="metadata" />
       <button 
+        type="button"
         onClick={togglePlay}
         className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-500 transition flex-shrink-0"
       >

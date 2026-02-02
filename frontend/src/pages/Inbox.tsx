@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { Skeleton } from '../components/ui/Skeleton';
 import type { Notification } from '../types';
 
@@ -19,12 +20,12 @@ export function Inbox() {
     if (!user || !pubKey) return;
 
     // 1. Load Privacy Settings
-    user.get('settings').get('privacy').get('acceptUnsolicited').on((data: any) => {
+    user.get(APP_SCOPE).get('settings').get('privacy').get('acceptUnsolicited').on((data: any) => {
         setAcceptUnsolicited(data === false ? false : true);
     });
 
     // 2. Load Contacts
-    user.get('contacts').map().on((data: any, pub: string) => {
+    user.get(APP_SCOPE).get('contacts').map().on((data: any, pub: string) => {
         if (data) {
             setContacts(prev => new Set(prev).add(pub));
         }
@@ -111,11 +112,11 @@ export function Inbox() {
     if (!n.requestId || !pubKey) return;
     
     // Update status to accepted in User Graph
-    user.get('participation').get(n.requestId).put('accepted');
+    user.get(APP_SCOPE).get('participation').get(n.requestId).put('accepted');
     
     // Add sender to contacts (Implicit connection)
     if (n.fromPub) {
-        user.get('contacts').get(n.fromPub).put(true);
+        user.get(APP_SCOPE).get('contacts').get(n.fromPub).put(true);
     }
 
     markAsRead(n);
@@ -126,7 +127,7 @@ export function Inbox() {
     if (!n.requestId || !pubKey) return;
     
     // Update status to declined in User Graph
-    user.get('participation').get(n.requestId).put('declined');
+    user.get(APP_SCOPE).get('participation').get(n.requestId).put('declined');
     
     markAsRead(n);
   };

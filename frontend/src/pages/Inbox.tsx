@@ -10,6 +10,7 @@ export function Inbox() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment'>('all');
   
   // Privacy & Contacts
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
@@ -33,14 +34,17 @@ export function Inbox() {
     const notifsMap = new Map<string, Notification & { fromAlias?: string }>();
 
     const updateState = () => {
-        // Sort: Priority (Invite > Submission > Comment) then Date (Newest first)
+        // Sort: Priority (Invite > Comment > Submission) then Date (Newest first)
         const sorted = Array.from(notifsMap.values()).sort((a, b) => {
-            const priority = { invite: 3, submission: 2, comment: 1 };
+            const priority = { invite: 3, comment: 2, submission: 1 };
             const pA = priority[a.type as keyof typeof priority] || 0;
             const pB = priority[b.type as keyof typeof priority] || 0;
             
-            if (pA !== pB) return pB - pA; // Higher priority first
-            return b.createdAt - a.createdAt; // Then newest first
+            // 1. Sort by Priority (Higher is better)
+            if (pA !== pB) return pB - pA;
+            
+            // 2. Sort by Date (Newest is better)
+            return b.createdAt - a.createdAt; 
         });
         setNotifications(sorted);
         setLoading(false);
@@ -77,8 +81,12 @@ export function Inbox() {
 
   }, [user, pubKey, gun]);
 
-  // Filter Notifications based on Privacy
+  // Filter Notifications based on Privacy and Type
   const filteredNotifications = notifications.filter(n => {
+      // Type Filter
+      if (filterType !== 'all' && n.type !== filterType) return false;
+
+      // Privacy Filter
       if (n.type === 'invite' && !acceptUnsolicited) {
           // Only show if sender is a contact
           return contacts.has(n.fromPub);
@@ -171,6 +179,23 @@ export function Inbox() {
                   Mark all read
               </button>
           )}
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+          {(['all', 'invite', 'submission', 'comment'] as const).map(type => (
+              <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium border transition whitespace-nowrap capitalize ${
+                      filterType === type 
+                          ? 'bg-blue-600 border-blue-500 text-white' 
+                          : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700 hover:text-white'
+                  }`}
+              >
+                  {type === 'all' ? 'All' : `${type}s`}
+              </button>
+          ))}
       </div>
 
       {loading && filteredNotifications.length === 0 ? (

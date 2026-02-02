@@ -284,6 +284,28 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             feedbackFocus: JSON.stringify(feedbackFocus)
         };
 
+        console.log("Submitting:", submission);
+
+        // Ensure User has keys for signing (fix for 'hanging' put)
+        // @ts-ignore
+        if (user.is && !user.is.priv) {
+             console.warn("User instance missing private key. Attempting restoration...");
+             const stored = sessionStorage.getItem('pair'); // Try standard key
+             if (stored) {
+                 try {
+                     const pair = JSON.parse(stored);
+                     // @ts-ignore
+                     if (pair.priv) {
+                         // @ts-ignore
+                         user.is = { ...user.is, ...pair };
+                         // @ts-ignore
+                         user._.is = user.is;
+                         console.log("Restored private key to User instance.");
+                     }
+                 } catch(e) {}
+             }
+        }
+
         // Save safely
         const savePromises = [
             // User Graph
@@ -304,12 +326,12 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
         // Double-Linking (Fire and forget or await?)
         if (pubKey) {
-            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(true);
+            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(pubKey);
             user.get(APP_SCOPE).get('my_submissions').get(submissionId).put(user.get(APP_SCOPE).get('submissions').get(submissionId));
         }
 
         collaborators.forEach(collabPub => {
-            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(true);
+            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(pubKey);
             
             const notifId = crypto.randomUUID();
             const notification: Notification = {

@@ -12,7 +12,7 @@ export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { gun, user, pubKey, isAdmin } = useGun();
+  const { gun, rootGun, user, pubKey, isAdmin } = useGun();
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
   
@@ -78,8 +78,10 @@ export function Profile() {
     gun.get('all_users').get(targetPub).get('submissions').map().on((data: any, key: string) => {
         if (data) {
             const subId = key;
+            // data is uploaderPub (new) or true (legacy/self)
+            const uploader = (typeof data === 'string' && data.length > 1) ? data : targetPub;
             
-            gun.user(targetPub).get('submissions').get(subId).once((subData: any) => {
+            rootGun.user(uploader).get(APP_SCOPE).get('submissions').get(subId).once((subData: any) => {
                 if (subData && subData.title) {
                     // Fetch Request to check Access Mode for Default Visibility
                     gun.get('file_requests').get(subData.requestId).once((reqData: any) => {

@@ -9,7 +9,8 @@ import type { UserProfile } from '../types';
 const scopedGun = rootGun.get(APP_SCOPE);
 
 interface GunContextType {
-  gun: any; // Scoped instance is a chain, not the full root instance type
+  gun: any; // Scoped instance
+  rootGun: any; // Global instance
   user: IGunUserInstance;
   isLoggedIn: boolean;
   pubKey: string | undefined;
@@ -27,6 +28,7 @@ interface GunContextType {
 
 const GunContext = createContext<GunContextType>({
   gun: scopedGun,
+  rootGun: rootGun,
   user: gunUser,
   isLoggedIn: false,
   pubKey: undefined,
@@ -196,7 +198,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   return (
-    <GunContext.Provider value={{ gun: scopedGun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle }}>
+    <GunContext.Provider value={{ gun: scopedGun, rootGun: rootGun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle }}>
       {children}
     </GunContext.Provider>
   );

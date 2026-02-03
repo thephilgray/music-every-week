@@ -343,6 +343,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 });
             })
         ];
+        await Promise.all(savePromises);
 
         // Also link to user's public profile (Double-Linking)
         // This is crucial for the "Profile" view to show all works

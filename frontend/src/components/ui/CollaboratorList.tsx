@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
-import { ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface CollaboratorListProps {
   uploaderPub: string;
@@ -48,7 +48,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
           else if (collaborators) {
               // @ts-ignore
               const soul = collaborators['#'];
-              if (soul) {
+              if (typeof soul === 'string' && soul) { // Add type check
                   gun.get(soul).once((data: any) => {
                       if (data) {
                           const clean: Record<string, boolean> = {};
@@ -115,7 +115,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
                   title="Click to see connected profiles"
               >
                   {byline}
-                  <Users className="w-3 h-3 text-blue-400 opacity-70" />
+                  <ChevronDown className="w-3 h-3 text-blue-400 opacity-70" />
               </button>
           </div>
       );

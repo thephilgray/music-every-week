@@ -175,6 +175,4 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       {children}
     </GunContext.Provider>
   );
-};unContext.Provider>
-  );
 };

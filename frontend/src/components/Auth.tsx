@@ -324,7 +324,7 @@ export function Auth() {
           }}
           className="text-sm text-gray-400 hover:text-white transition"
         >
-          {isSignup ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+          {isSignup ? 'Already have an account? Log in' : "Have a signup code?"}
         </button>
       </div>
     </div>

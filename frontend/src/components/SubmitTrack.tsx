@@ -273,32 +273,56 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             feedbackFocus: JSON.stringify(feedbackFocus) // Serialize array for GunDB
         };
 
-        // Link submission to the Request
-        // We'll store it under file_requests/ID/submissions/SUB_ID -> CHANGED TO request_submissions/ID
-        // Securely: Store in User Graph, then Link
-        const userSubNode = user.get('submissions').get(submissionId);
-        userSubNode.put(submission, (ack: any) => {
-            if (ack.err) console.error('Error saving to user graph:', ack.err);
-        });
-        
-        // Use separate root node for submissions to allow public writes
-        // STORE COPY INSTEAD OF REFERENCE for reliability
-        gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
-            if (ack.err) console.error('Error linking to request_submissions:', ack.err);
-        });
+        console.log("Submitting:", submission);
+
+        // Ensure User has keys for signing (fix for 'hanging' put)
+        // @ts-ignore
+        if (user.is && !user.is.priv) {
+             console.warn("User instance missing private key. Attempting restoration...");
+             const stored = sessionStorage.getItem('pair'); // Try standard key
+             if (stored) {
+                 try {
+                     const pair = JSON.parse(stored);
+                     // @ts-ignore
+                     if (pair.priv) {
+                         // @ts-ignore
+                         user.is = { ...user.is, ...pair };
+                         // @ts-ignore
+                         user._.is = user.is;
+                         console.log("Restored private key to User instance.");
+                     }
+                 } catch(e) {}
+             }
+        }
+
+        // Save safely
+        const savePromises = [
+            // User Graph
+            new Promise<void>((resolve) => {
+                user.get('submissions').get(submissionId).put(submission, (ack: any) => {
+                    if (ack.err) console.error('Error saving to user graph:', ack.err);
+                    resolve();
+                });
+            }),
+            // Request Node
+            new Promise<void>((resolve) => {
+                gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
+                    if (ack.err) console.error('Error linking to request_submissions:', ack.err);
+                    resolve();
+                });
+            })
+        ];
 
         // Also link to user's public profile (Double-Linking)
         // This is crucial for the "Profile" view to show all works
         if (pubKey) {
-            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(true);
-            
-            // Still keep private reference if needed, but 'all_users' is the directory now
-            user.get('my_submissions').get(submissionId).put(userSubNode);
+            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(pubKey);
+            user.get('my_submissions').get(submissionId).put(user.get('submissions').get(submissionId));
         }
 
         // Link to collaborators' profiles
         collaborators.forEach(collabPub => {
-            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(true);
+            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(pubKey);
             
             // Notify Collaborator
             const notifId = crypto.randomUUID();

@@ -77,8 +77,10 @@ export function Profile() {
     gun.get('all_users').get(targetPub).get('submissions').map().on((data: any, key: string) => {
         if (data) {
             const subId = key;
+            // data is uploaderPub (new) or true (legacy/self)
+            const uploader = (typeof data === 'string' && data.length > 1) ? data : targetPub;
             
-            gun.user(targetPub).get('submissions').get(subId).once((subData: any) => {
+            gun.user(uploader).get('submissions').get(subId).once((subData: any) => {
                 if (subData && subData.title) {
                     // Fetch Request to check Access Mode for Default Visibility
                     gun.get('file_requests').get(subData.requestId).once((reqData: any) => {

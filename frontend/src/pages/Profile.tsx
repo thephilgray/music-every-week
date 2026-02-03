@@ -5,6 +5,7 @@ import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
+import { CollaboratorList } from '../components/ui/CollaboratorList';
 import type { UserProfile, Submission, FileRequest } from '../types';
 
 export function Profile() {
@@ -407,7 +408,13 @@ export function Profile() {
                              </div>
                              <div className="min-w-0">
                                  <h3 className="text-white font-medium truncate">{sub.title}</h3>
-                                 <p className="text-gray-500 text-xs truncate">{sub.byline || sub.uploaderPub?.substring(0,8)}</p>
+                                 <CollaboratorList 
+                                    uploaderPub={sub.uploaderPub!} 
+                                    submissionId={sub.id}
+                                    byline={sub.byline} 
+                                    collaborators={sub.collaborators} 
+                                    className="text-gray-500 text-xs truncate"
+                                 />
                              </div>
                         </div>
                     </div>

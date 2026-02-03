@@ -8,6 +8,8 @@ import { SubmitTrack } from '../components/SubmitTrack';
 import { CommentSection } from '../components/CommentSection';
 import { AddToPlaylist } from '../components/AddToPlaylist';
 import { EditRequest } from '../components/EditRequest';
+import { Waveform } from '../components/ui/Waveform';
+import { CollaboratorList } from '../components/ui/CollaboratorList';
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
@@ -585,12 +587,20 @@ export function RequestDetail() {
                                 <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
                                     {locked ? 'Hidden Track' : sub.title}
                                 </h4>
-                                <div className="text-gray-500 text-sm truncate">
-                                    by <Link to={`/profile/${sub.uploaderPub}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
-                                        {sub.byline || sub.uploaderPub?.substring(0,8)}
-                                    </Link>
-                                    {isMySubmission && <span className="ml-2 text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
+                                <div className="flex items-center gap-2">
+                                    <CollaboratorList 
+                                        uploaderPub={sub.uploaderPub!} 
+                                        submissionId={sub.id}
+                                        byline={sub.byline} 
+                                        collaborators={sub.collaborators} 
+                                    />
+                                    {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
                                 </div>
+                                {sub.waveform && sub.waveform.length > 0 && !locked && (
+                                     <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition">
+                                         <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
+                                     </div>
+                                 )}
                             </div>
 
                             <div className="flex items-center gap-2">

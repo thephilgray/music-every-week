@@ -438,7 +438,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         });
 
         // Notify Request Owner
-        gunPromises.push(new Promise<void>((resolve, reject) => {
+                    gunPromises.push(new Promise<void>((resolve) => {
             gun.get('file_requests').get(requestId).once((req: any) => {
                 if (req && req.ownerPub && req.ownerPub !== pubKey) {
                     const notifId = crypto.randomUUID();
@@ -471,7 +471,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             const dateStr = new Date().toISOString().split('T')[0];
             const bucketKey = `global_pulse_${dateStr}`;
             
-            gunPromises.push(new Promise<void>((resolve, reject) => {
+                        gunPromises.push(new Promise<void>((resolve) => {
                 gun.get('file_requests').get(requestId).once((req: any) => { // Using once to get req.title reliably
                     const feedItem = {
                         id: pulseId,

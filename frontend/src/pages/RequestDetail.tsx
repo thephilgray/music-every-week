@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
@@ -18,7 +17,7 @@ export function RequestDetail() {
   const [searchParams] = useSearchParams();
   const { gun, pubKey, user } = useGun();
   const { success, error } = useToast();
-  const { play, currentTrack, isPlaying, pause, currentTime, duration } = usePlayer();
+  const { play, currentTrack, isPlaying, pause } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [hostName, setHostName] = useState<string>('');
   const [participants, setParticipants] = useState<Record<string, any>>({});
@@ -41,7 +40,7 @@ export function RequestDetail() {
 
   useEffect(() => {
      if (user && id) {
-         user.get(APP_SCOPE).get('participation').get(id).on((data: any) => {
+         user.get('participation').get(id).on((data: any) => {
              setMyParticipationStatus(data);
          });
      }
@@ -250,7 +249,7 @@ export function RequestDetail() {
       if (!id || !user || !hasSubmitted || isPastDeadline || isOwner) return;
 
       // Check if we already have unlocks for this request
-      user.get(APP_SCOPE).get('unlocked_submissions').get(id).once((data: any) => {
+      user.get('unlocked_submissions').get(id).once((data: any) => {
           let currentIds: string[] = [];
           if (data) {
               try {
@@ -275,7 +274,7 @@ export function RequestDetail() {
                   const toAdd = shuffled.slice(0, needed);
                   
                   const newList = [...currentIds, ...toAdd];
-                  user.get(APP_SCOPE).get('unlocked_submissions').get(id).put(JSON.stringify(newList));
+                  user.get('unlocked_submissions').get(id).put(JSON.stringify(newList));
                   setUnlockedSubmissionIds(newList);
               } else {
                   // Just set what we have
@@ -370,7 +369,7 @@ export function RequestDetail() {
           await gun.get('request_participants').get(id).get(pubKey).put(partData);
           
           // Write to local participation
-          user.get(APP_SCOPE).get('participation').get(id).put('accepted');
+          user.get('participation').get(id).put('accepted');
           
           success("You have successfully joined the request!");
           setMyParticipationStatus('accepted');
@@ -384,7 +383,7 @@ export function RequestDetail() {
       if (!id || !pubKey) return;
       try {
           await gun.get('request_participants').get(id).get(pubKey).get('status').put('declined');
-          user.get(APP_SCOPE).get('participation').get(id).put('declined');
+          user.get('participation').get(id).put('declined');
           success("Invite declined.");
           setMyParticipationStatus('declined');
       } catch (e) {
@@ -598,15 +597,10 @@ export function RequestDetail() {
                                     {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
                                 </div>
                                 {sub.waveform && sub.waveform.length > 0 && !locked && (
-                                    <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition">
-                                        <Waveform 
-                                            data={sub.waveform} 
-                                            height="h-6" 
-                                            interactive={false}
-                                            progress={currentTrack?.id === sub.id && duration ? (currentTime / duration) : 0}
-                                        />
-                                    </div>
-                                )}
+                                     <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition">
+                                         <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
+                                     </div>
+                                 )}
                             </div>
 
                             <div className="flex items-center gap-2">

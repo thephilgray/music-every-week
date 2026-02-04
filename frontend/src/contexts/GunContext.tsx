@@ -1,19 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import rootGun, { user as gunUser, PEERS } from '../lib/gun';
-import { APP_SCOPE } from '../config/appConfig';
+import gun, { user as gunUser, PEERS } from '../lib/gun';
 import type { IGunUserInstance } from 'gun';
 import type { UserProfile } from '../types';
 
-// Create the scoped instance
-// @ts-ignore
-const scopedGun = rootGun.get(APP_SCOPE);
-
 interface GunContextType {
-  gun: any; // Scoped instance
-  rootGun: any; // Global instance
+  gun: typeof gun;
   user: IGunUserInstance;
   isLoggedIn: boolean;
   pubKey: string | undefined;
+  userPair: { pub: string, priv: string } | null; // Added userPair
   userProfile: UserProfile | null;
   isAuthorized: boolean | undefined;
   isAdmin: boolean;
@@ -27,11 +22,11 @@ interface GunContextType {
 }
 
 const GunContext = createContext<GunContextType>({
-  gun: scopedGun,
-  rootGun: rootGun,
+  gun,
   user: gunUser,
   isLoggedIn: false,
   pubKey: undefined,
+  userPair: null, // Initialized userPair
   userProfile: null,
   isAuthorized: undefined,
   isAdmin: false,
@@ -51,6 +46,9 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!gunUser.is);
   // @ts-ignore
   const [pubKey, setPubKey] = useState<string | undefined>(() => gunUser.is?.pub);
+  // Add userPair state
+  // @ts-ignore
+  const [userPair, setUserPair] = useState<{ pub: string, priv: string } | null>(() => (gunUser.is && gunUser.is.priv) ? { pub: gunUser.is.pub, priv: gunUser.is.priv } : null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean | undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -61,7 +59,6 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasAuthorizedRef = useRef(false); // Ref to track authorization to prevent flapping
 
   useEffect(() => {
-    console.log(`Initializing GunDB Provider with App Scope: ${APP_SCOPE}`);
     const handleOnline = () => setIsInternetOnline(true);
     const handleOffline = () => setIsInternetOnline(false);
     window.addEventListener('online', handleOnline);
@@ -80,10 +77,10 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log('Disconnecting Gun peers...');
     setIsConnected(false);
     // @ts-ignore
-    rootGun.opt({ peers: [] });
+    gun.opt({ peers: [] });
     // Forcefully close existing connections if possible
     // @ts-ignore
-    const peers = rootGun._.opt.peers;
+    const peers = gun._.opt.peers;
     if (peers) {
         Object.values(peers).forEach((peer: any) => {
             if (peer.wire && peer.wire.close) {
@@ -97,15 +94,12 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log('Reconnecting Gun peers...');
     setIsConnected(true);
     // @ts-ignore
-    rootGun.opt({ peers: PEERS });
+    gun.opt({ peers: PEERS });
   };
 
   useEffect(() => {
     const checkAuthorization = (pub: string) => {
-      let resolved = false;
-
-      const handleData = (data: any) => {
-        resolved = true;
+      gun.get('all_users').get(pub).on((data: any) => {
         // If data exists, the user is in the directory
         if (data) {
           hasAuthorizedRef.current = true;
@@ -131,74 +125,160 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setUserProfile(null);
           }
         }
-      };
+      });
+    };
 
-      // 1. Subscribe to updates
-      const node = scopedGun.get('all_users').get(pub);
-      node.on(handleData);
+    const resolveUserPairAndAuth = (ack?: any) => {
+        // We will determine final login state at the end
+        // setIsLoggedIn(true); // DON'T assume true yet
 
-      // 2. Force a single fetch to handle empty/null cases faster
-      node.once(handleData);
+        let resolvedPubKey: string | undefined;
+        let resolvedPrivKey: string | undefined;
+        let resolvedPair: { pub: string, priv: string } | null = null;
 
-      // 3. Fallback timeout: If the node is completely empty (new namespace), Gun might not fire.
-      setTimeout(() => {
-          if (!resolved && !hasAuthorizedRef.current) {
-              console.warn(`Authorization check timed out for ${pub}. Defaulting to Unauthorized.`);
-              handleData(null);
-          }
-      }, 1500);
+        // 1. Try to get from gunUser.is (most direct if already recalled)
+        // @ts-ignore
+        if (gunUser.is && gunUser.is.pub) {
+            // @ts-ignore
+            resolvedPubKey = gunUser.is.pub;
+            // @ts-ignore
+            resolvedPrivKey = gunUser.is.priv;
+            if (resolvedPrivKey) {
+                resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
+            }
+        } 
+        // 2. Fallback to ack object if provided (from auth event)
+        else if (ack) {
+            // @ts-ignore
+            if (ack.sea && ack.sea.pub && ack.sea.priv) {
+                // @ts-ignore
+                resolvedPubKey = ack.sea.pub;
+                // @ts-ignore
+                resolvedPrivKey = ack.sea.priv;
+                resolvedPair = { pub: ack.sea.pub as string, priv: ack.sea.priv as string };
+            } 
+            // @ts-ignore
+            else if (ack.pub && ack.priv) { // Direct pair in ack
+                resolvedPubKey = ack.pub;
+                resolvedPrivKey = ack.priv;
+                resolvedPair = { pub: ack.pub as string, priv: ack.priv as string };
+            }
+            // @ts-ignore
+            else if (ack.pub) { // Only pub in ack, might try other sources for priv
+                resolvedPubKey = ack.pub;
+            }
+        }
+
+        // 3. Fallback to localStorage if we are missing either key
+        // This is robust against partial loads or corrupted in-memory state
+        if (!resolvedPrivKey || !resolvedPubKey) { 
+            // 3a. Try explicit backup key (Added for reliability)
+            try {
+                const backup = localStorage.getItem('mew_user_session');
+                if (backup) {
+                    const sess = JSON.parse(backup);
+                    if (sess && sess.pub && sess.priv) {
+                         // Only use if it matches our partial load (or if we have nothing)
+                         if (!resolvedPubKey || resolvedPubKey === sess.pub) {
+                             resolvedPubKey = sess.pub;
+                             resolvedPrivKey = sess.priv;
+                             resolvedPair = { pub: sess.pub as string, priv: sess.priv as string };
+                             console.log("Recovered private key from explicit 'mew_user_session' backup.");
+                         }
+                    }
+                }
+            } catch (e) { console.warn("Backup session check failed", e); }
+
+            // 3b. Scan all storage if backup failed
+            if (!resolvedPair) {
+                try {
+                    // Iterate through localStorage to find the correct pair
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key) {
+                            const val = localStorage.getItem(key);
+                            if (val) {
+                                try {
+                                    const storedPair = JSON.parse(val);
+                                    // Determine potential keys from this item
+                                    const p = storedPair.sea ? storedPair.sea.pub : storedPair.pub;
+                                    const k = storedPair.sea ? storedPair.sea.priv : storedPair.priv;
+
+                                    if (p && k) {
+                                        // If we already have a pub key (partially loaded), this item MUST match it
+                                        if (resolvedPubKey && resolvedPubKey !== p) continue;
+
+                                        // Found a valid pair!
+                                        resolvedPubKey = p;
+                                        resolvedPrivKey = k;
+                                        resolvedPair = { pub: p as string, priv: k as string };
+                                        console.log("Recovered private key from localStorage scan.");
+                                        break; // Found the pair, no need to continue iterating
+                                    }
+                                } catch (e) {
+                                    // Not JSON, skip
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error attempting to retrieve pair from localStorage:", e);
+                }
+            }
+
+            // If we found a pair, re-hydrate gunUser.is
+            if (resolvedPair) {
+                 // @ts-ignore
+                 if (gunUser.is && (!gunUser.is.priv || !gunUser.is.pub)) {
+                    // @ts-ignore
+                    gunUser.is = { ...(gunUser.is || {}), ...resolvedPair };
+                    // @ts-ignore
+                    gunUser._.is = gunUser.is; // Internal update for Gun instance
+                    console.log("Re-hydrated gunUser.is with recovered pair.");
+                }
+            }
+        }
+
+        if (resolvedPubKey && resolvedPrivKey && resolvedPair) {
+            setIsLoggedIn(true);
+            setPubKey(resolvedPubKey);
+            setUserPair(resolvedPair);
+            checkAuthorization(resolvedPubKey);
+        } else if (resolvedPubKey) {
+            setIsLoggedIn(true);
+            setPubKey(resolvedPubKey);
+            setUserPair(null); // Explicitly null if priv is missing
+            console.warn("Authentication confirmed, but private key not fully available. User might be in a read-only state for some operations.");
+            checkAuthorization(resolvedPubKey);
+        } else {
+            // Failed to resolve a user.
+            setIsLoggedIn(false);
+            setPubKey(undefined);
+            setUserPair(null);
+            console.error("Authentication check failed: No public key found. Redirecting to login.");
+        }
+        
+        setIsAuthLoading(false);
     };
 
     // Check authentication status on mount and when it changes
-    // Auth events are global on the root instance
-    rootGun.on('auth', async (ack) => {
+    gun.on('auth', (ack) => {
       console.log('Authentication confirmed:', ack);
-      setIsLoggedIn(true);
-      setIsAuthLoading(false);
-      
-      // Robustly determine pub key
-      // @ts-ignore
-      let pub = gunUser.is?.pub;
-      
-      // Fallback to ack if user.is isn't populated yet (common timing issue)
-      if (!pub && ack) {
-          // @ts-ignore
-          if (ack.sea && ack.sea.pub) {
-              // @ts-ignore
-              pub = ack.sea.pub;
-          } else if (ack.pub) {
-              pub = ack.pub;
-          }
-      }
-
-      console.log('Detected Pub Key:', pub);
-
-      if (pub) {
-          setPubKey(pub);
-          checkAuthorization(pub);
-      } else {
-          console.error("Auth confirmed but no public key found in 'user.is' or 'ack'.");
-      }
+      resolveUserPairAndAuth(ack);
     });
 
     // Also check if already logged in (recalled from session)
     // @ts-ignore
     if (gunUser.is) {
-      // @ts-ignore
-      const pub = gunUser.is.pub;
-      if (pub) {
-          setPubKey(pub);
-          checkAuthorization(pub);
-      }
-      setIsAuthLoading(false); // Auth process is complete whether authorized or not
+      console.log('User session found on initial load.');
+      resolveUserPairAndAuth(); // Call without ack if checking initial load
     } else {
-      // If not immediately logged in, we are done checking.
       setIsAuthLoading(false);
     }
-  }, []);
+  }, []); // Depend on nothing to run once on mount
 
   return (
-    <GunContext.Provider value={{ gun: scopedGun, rootGun: rootGun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle }}>
+    <GunContext.Provider value={{ gun, user: gunUser, isLoggedIn, pubKey, userProfile, isAuthorized, isAdmin, disconnect, reconnect, isConnected, isAuthLoading, isIdle, isInternetOnline, setIdle, userPair }}>
       {children}
     </GunContext.Provider>
   );

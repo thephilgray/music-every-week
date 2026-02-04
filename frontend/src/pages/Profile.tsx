@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
@@ -13,7 +12,7 @@ export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { gun, rootGun, user, pubKey, isAdmin } = useGun();
+  const { gun, user, pubKey, isAdmin, userPair } = useGun(); // Destructure userPair
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
   
@@ -82,7 +81,7 @@ export function Profile() {
             // data is uploaderPub (new) or true (legacy/self)
             const uploader = (typeof data === 'string' && data.length > 1) ? data : targetPub;
             
-            rootGun.user(uploader).get(APP_SCOPE).get('submissions').get(subId).once((subData: any) => {
+            gun.user(uploader).get('submissions').get(subId).once((subData: any) => {
                 if (subData && subData.title) {
                     // Fetch Request to check Access Mode for Default Visibility
                     gun.get('file_requests').get(subData.requestId).once((reqData: any) => {
@@ -135,7 +134,14 @@ export function Profile() {
       try {
           let avatarUrl = profile?.avatarUrl;
           if (editAvatar) {
-              const res = await uploadFile(editAvatar, (user as any).is);
+              // Ensure userPair is available for signing operations
+              if (!userPair || !userPair.pub || !userPair.priv) {
+                  error("Authentication error: Please log in again to save profile changes.");
+                  console.error("Profile save failed: User pair (with private key) is not available.");
+                  setIsSaving(false);
+                  return;
+              }
+              const res = await uploadFile(editAvatar, userPair);
               avatarUrl = res.url;
           }
           
@@ -151,7 +157,7 @@ export function Profile() {
           gun.get('all_users').get(pubKey as string).put(updates);
           
           // Update Private Profile (Auth) if needed, but 'all_users' is the source of truth for directory.
-          user.get(APP_SCOPE).get('profile').put(updates); // Use proper 'profile' node structure
+          user.get('profile').put(updates); // Use proper 'profile' node structure
           
           setIsEditing(false);
           setEditAvatar(null);
@@ -204,7 +210,7 @@ export function Profile() {
       ));
 
       // Update GunDB
-      user.get(APP_SCOPE).get('submissions').get(sub.id).get('hiddenFromProfile').put(newValue);
+      user.get('submissions').get(sub.id).get('hiddenFromProfile').put(newValue);
   };
 
   const handleToggleRequestVisibility = (e: React.MouseEvent, req: FileRequest) => {
@@ -230,7 +236,7 @@ export function Profile() {
       // So we must update the request object itself or the user's graph reference.
       // Since the query is `gun.get('file_requests').map()`, we update the request object.
       // Ideally, this should be a user-specific setting, but sticking to the current architecture:
-      user.get(APP_SCOPE).get('requests').get(req.id).get('hiddenFromProfile').put(newValue);
+      user.get('requests').get(req.id).get('hiddenFromProfile').put(newValue);
       gun.get('file_requests').get(req.id).get('hiddenFromProfile').put(newValue);
   };
 

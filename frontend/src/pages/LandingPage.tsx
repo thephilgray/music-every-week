@@ -5,65 +5,46 @@ export function LandingPage() {
     <div className="min-h-screen bg-black text-white flex flex-col items-center">
       
       {/* Hero Section */}
-      <main className="flex-1 w-full max-w-5xl mx-auto p-6 grid md:grid-cols-2 gap-12 items-center">
+      <main className="flex-1 w-full max-w-6xl mx-auto p-6 flex flex-col items-center justify-center space-y-12">
         
-        {/* Left Column: Info */}
-        <div className="space-y-8">
-            <div>
-                <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                    Music Every Week
-                </h1>
-                <p className="text-xl text-gray-300 leading-relaxed">
-                    A music community and songwriting accountability group active since 2019. 
-                    We’ve written over 8,685 songs, and counting.
-                </p>
-            </div>
+        {/* Top Row: Logo and About Section */}
+        <div className="w-full text-center max-w-3xl">
+          <img src="/mewlogo.png" alt="MEW logo" className="w-48 mx-auto mb-6" />
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">ABOUT MUSIC EVERY WEEK</h1>
+          <p className="text-lg text-gray-300 leading-relaxed">MEW is a music community and songwriting accountability group that's been active since November 2019. We’ve written 8,685 songs as of May 2024, and more every week. The current session is open for registration until September 18th, and then we will close until January or February 2026.</p>
+        </div>
 
-            <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-800">
-                <h3 className="text-lg font-bold text-white mb-4 uppercase tracking-wider">The Rules</h3>
-                <ul className="space-y-3 text-gray-400">
-                    <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold">•</span>
-                        Write and record a new song every week.
-                    </li>
-                    <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold">•</span>
-                        Submit to unlock everyone else's tracks.
-                    </li>
-                    <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold">•</span>
-                        Optional themes, open to all genres & levels.
-                    </li>
-                    <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold">•</span>
-                        Free, forever.
-                    </li>
+        {/* Middle Row: Rules and Login */}
+        <div className="w-full grid md:grid-cols-2 gap-12 items-start max-w-5xl">
+            {/* Rules Column */}
+            <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-800 space-y-4">
+                <h2 className="text-xl font-bold text-white mb-2">These are the rules:</h2>
+                <ul className="list-disc list-inside text-gray-400 space-y-2">
+                    <li>Write and record a new song every week – or you’re out!</li>
+                    <li>When you submit a song, you can hear everyone else’s songs</li>
+                    <li>There are optional theme prompts each week, but it’s very open ended</li>
+                    <li>All genres and levels are welcome and encouraged!</li>
+                    <li>We have peer workshops and skill shares too sometimes, and a discord group to chat music and miscellany</li>
+                    <li>Everything is free, forever</li>
                 </ul>
             </div>
 
-            <div className="space-y-4 pt-4 border-t border-gray-800">
-                <p className="text-gray-400">
-                    <span className="text-white font-bold">You’re invited!</span> Join our next session.
-                </p>
-                <div className="flex flex-wrap gap-4">
-                    <a href="http://eepurl.com/hp04-9" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline">
-                        Newsletter / Updates
-                    </a>
-                    <a href="https://www.patreon.com/c/MusicEveryWeek" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline">
-                        Patreon
-                    </a>
+            {/* Login Column */}
+            <div className="flex flex-col items-center justify-center">
+                <div className="w-full max-w-md">
+                    <Auth />
                 </div>
-                <p className="text-xs text-gray-600">
-                    Questions? Email <a href="mailto:MEWisMusicEveryWeek@gmail.com" className="hover:text-white">MEWisMusicEveryWeek@gmail.com</a>
-                </p>
             </div>
         </div>
 
-        {/* Right Column: Auth / Action */}
-        <div className="flex flex-col items-center justify-center">
-            <div className="w-full max-w-md">
-                <Auth />
+        {/* Bottom Row: You're Invited */}
+        <div className="w-full text-center pt-6 border-t border-gray-800 max-w-3xl">
+            <p className="text-2xl font-bold text-white mb-6">You’re invited!</p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <a className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg" href="http://eepurl.com/hp04-9" target="_blank" rel="noopener noreferrer">Join the email list</a>
+                <a className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg" href="https://www.patreon.com/c/MusicEveryWeek" target="_blank" rel="noopener noreferrer">Support the project</a>
             </div>
+            <p className="text-sm text-gray-500 mt-8">Questions? Email <a href="mailto:MEWisMusicEveryWeek@gmail.com" className="text-blue-400 hover:underline">MEWisMusicEveryWeek@gmail.com</a>.</p>
         </div>
 
       </main>

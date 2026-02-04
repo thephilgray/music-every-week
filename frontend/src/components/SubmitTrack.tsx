@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Search, Mic, Square, Trash2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
-import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
 import type { Notification, UserProfile, Submission } from '../types';
+
+// Define a timeout for GunDB acknowledgments (e.g., 30 seconds)
+const GUN_ACK_TIMEOUT = 30000;
 
 interface SubmitTrackProps {
   requestId: string;
@@ -19,22 +20,11 @@ interface SubmitTrackProps {
   accessMode?: string;
 }
 
-// Helper to decode for display (if we used the above)
-// Not strictly needed if we assume Gun fixes this eventually, but for now we want stability.
-// Actually, let's just strip high bytes if they cause crashes, or assume the user inputs standard text for now.
-// Better: encodeURIComponent the whole string if it has high bytes?
-// Let's try to just use raw strings but catch the error.
-
-// Temporary fix for SEA btoa crash: Strip non-Latin1 characters
-const cleanString = (str: string) => {
-    return str.replace(/[^\x00-\x7F]/g, "").trim();
-};
-
 export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess, accessMode }: SubmitTrackProps) {
-  const { gun, user, pubKey, userProfile } = useGun();
-  const { success, error: toastError } = useToast();
+  const { gun, user, pubKey, userProfile, userPair } = useGun(); // Destructure userPair
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false); // Default: Not Anonymous (Linked)
   const [lyrics, setLyrics] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [artFile, setArtFile] = useState<File | null>(null);
@@ -72,23 +62,40 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     if (root) root.style.visibility = 'hidden';
     
     if (existingSubmission) {
-        // Decode potentially safe-string'd values if we were doing that
-        // For now assume standard
         setTitle(existingSubmission.title);
         setByline(existingSubmission.byline || '');
+        
+        // Load Anonymous state (Inverse of linkProfile)
+        if (existingSubmission.linkProfile !== undefined) {
+            setIsAnonymous(!existingSubmission.linkProfile);
+        } else {
+            setIsAnonymous(false); // Default to linked if undefined
+        }
+
         setLyrics(existingSubmission.lyrics || '');
         setStage(existingSubmission.stage || 'First Draft / Demo');
         
-        // Load Collaborators (Handle GunDB references)
-        const rawCollabs = existingSubmission.collaborators || {};
+        // Load Collaborators (Handle GunDB references or JSON string)
+        let rawCollabs = existingSubmission.collaborators || {};
+        
+        // Parse if it's a string (New flattened format)
+        if (typeof rawCollabs === 'string') {
+            try {
+                rawCollabs = JSON.parse(rawCollabs);
+            } catch (e) {
+                console.warn("Failed to parse collaborators JSON:", e);
+                rawCollabs = {};
+            }
+        }
+
         const directKeys = Object.keys(rawCollabs).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
         
         if (directKeys.length > 0) {
             setCollaborators(directKeys);
         } else if (existingSubmission.id) {
-            // If no direct keys, it might be a reference. Fetch from User Graph source.
-            user.get(APP_SCOPE).get('submissions').get(existingSubmission.id).get('collaborators').once((data: any) => {
-                if (data) {
+            // If no direct keys, it might be a reference (Old format). Fetch from User Graph source.
+            user.get('submissions').get(existingSubmission.id).get('collaborators').once((data: any) => {
+                if (data && typeof data === 'object') {
                     const fetchedKeys = Object.keys(data).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
                     setCollaborators(fetchedKeys);
                 }
@@ -106,7 +113,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setFeedbackFocus(parsedFocus);
     } else {
         if (!user) return;
-        user.get(APP_SCOPE).get('preferences').get('lastByline').once((data: any) => {
+        user.get('preferences').get('lastByline').once((data: any) => {
             if (data && typeof data === 'string') {
                 setByline(data);
             }
@@ -142,9 +149,13 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
       return;
     }
     
+    // We search all_users
+    // Note: In a real app with many users, this map() is inefficient. 
+    // We would use an index. For now, it's fine.
     gun.get('all_users').map().once((user: any, pub: string) => {
       if (user && user.alias && user.alias.toLowerCase().includes(term.toLowerCase())) {
         if (pub !== pubKey && !collaborators.includes(pub)) {
+             // Avoid dupes in results
              setSearchResults(prev => {
                 const existing = new Set(prev.map(p => p.pub));
                 if (!existing.has(pub)) return [...prev, { ...user, pub }];
@@ -174,6 +185,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
           setKnownAliases(prev => ({ ...prev, [pub]: alias }));
       }
     }
+    // Clear search
     setSearchTerm('');
     setSearchResults([]);
     setIsSearching(false);
@@ -191,7 +203,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         return type;
       }
     }
-    return 'audio/webm'; 
+    return 'audio/webm'; // Fallback, though likely to cause issues if no other type supported
   };
 
   const startRecording = async () => {
@@ -242,26 +254,34 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if ((!audioFile && !existingSubmission) || !title) {
         setError("Title and Audio file are required.");
         return;
     }
     
+    // Ensure userPair is available for signing operations
+    if (!userPair || !userPair.pub || !userPair.priv) {
+        setError("Authentication error: Please log in again to submit or update a track.");
+        console.error("SubmitTrack: Submission failed: User pair (with private key) is not available.");
+        return;
+    }
+
     setIsUploading(true);
     setError(null);
 
     try {
         let audioUrlStr = existingSubmission?.audioUrl || '';
-        let waveformStr = '[]';
+        let waveformStr = '';
         
-        // Handle Waveform
+        // Handle Waveform string/array mismatch from existing data
         if (existingSubmission?.waveform) {
             waveformStr = typeof existingSubmission.waveform === 'string' 
                 ? existingSubmission.waveform 
                 : JSON.stringify(existingSubmission.waveform);
         }
 
-        // 1. Handle Audio 
+        // 1. Handle Audio (New Upload or Keep Existing)
         if (audioFile) {
             // Generate Waveform
             try {
@@ -272,97 +292,131 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 waveformStr = '[]';
             }
 
-            // Upload
-            const { url } = await uploadFile(audioFile, (user as any).is);
+            // Upload using the reliable userPair
+            const { url } = await uploadFile(audioFile, userPair);
             audioUrlStr = url;
         }
 
-        // 2. Handle Art
+        // 2. Handle Art (New Upload or Keep Existing)
         let artworkUrlStr = existingSubmission?.artworkUrl || '';
         if (artFile) {
-            const { url } = await uploadFile(artFile, (user as any).is);
+            // Upload using the reliable userPair
+            const { url } = await uploadFile(artFile, userPair);
             artworkUrlStr = url;
         }
 
         // 3. Save to Gun
         const submissionId = existingSubmission?.id || crypto.randomUUID();
         
+        // Convert collaborators array to Record<string, boolean>
         const collaboratorsMap: Record<string, boolean> = {};
         collaborators.forEach(c => collaboratorsMap[c] = true);
 
-        const finalByline = byline.trim() || userProfile?.alias || '';
+        // Determine final byline
+        let finalByline = byline.trim();
+        if (isAnonymous) {
+            // If Anonymous and empty byline, use "Anonymous"
+            if (!finalByline) finalByline = 'Anonymous';
+        } else {
+            // If Linked and empty byline, use Alias
+            if (!finalByline) finalByline = userProfile?.alias || '';
+        }
         
+        // Save preference if user typed something (only if not anonymous?)
+        // Or should we always save the text they typed? Let's save it.
         if (byline.trim()) {
-            user.get(APP_SCOPE).get('preferences').get('lastByline').put(byline.trim());
+            user.get('preferences').get('lastByline').put(byline.trim());
         }
 
-        // ! IMPORTANT: Sanitize input if necessary to prevent SEA crash
-        // For now, we assume simple text. If crash persists, we might need to escape unicode.
-        
+        const linkProfile = !isAnonymous;
+
+        // Ensure no undefined values are passed to GunDB
         const submission: any = { 
             id: submissionId,
             requestId,
-            title: cleanString(title),
-            byline: cleanString(finalByline),
-            lyrics: cleanString(String(lyrics)),
+            title,
+            byline: finalByline,
+            linkProfile,
+            lyrics: String(lyrics || ''), // Ensure empty string if null/undefined
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderPub: pubKey as string,
             createdAt: existingSubmission?.createdAt || Date.now(),
-            collaborators: collaboratorsMap,
+            collaborators: JSON.stringify(collaboratorsMap), // Flattened as JSON string
             waveform: waveformStr,
             stage,
             feedbackFocus: JSON.stringify(feedbackFocus)
         };
 
-        console.log("Submitting:", submission);
+        const gunPromises: Promise<any>[] = [];
 
-        // Ensure User has keys for signing (fix for 'hanging' put)
-        // @ts-ignore
-        if (user.is && !user.is.priv) {
-             console.warn("User instance missing private key. Attempting restoration...");
-             const stored = sessionStorage.getItem('pair'); // Try standard key
-             if (stored) {
-                 try {
-                     const pair = JSON.parse(stored);
-                     // @ts-ignore
-                     if (pair.priv) {
-                         // @ts-ignore
-                         user.is = { ...user.is, ...pair };
-                         // @ts-ignore
-                         user._.is = user.is;
-                         console.log("Restored private key to User instance.");
-                     }
-                 } catch(e) {}
-             }
-        }
+        // Helper function to create a GunDB put promise with a timeout
+        const createGunPutPromise = (node: any, data: any, logMessage: string) => {
+            let timer: ReturnType<typeof setTimeout>;
+            return Promise.race([
+                new Promise<void>((resolve, reject) => {
+                    node.put(data, (ack: any) => {
+                        clearTimeout(timer);
+                        if (ack.err) {
+                            console.error(`SubmitTrack: ${logMessage} FAILED:`, ack.err);
+                            return reject(new Error(`${logMessage} failed: ${ack.err}`));
+                        }
+                        resolve();
+                    });
+                }),
+                new Promise<void>((_, reject) => {
+                    timer = setTimeout(() => {
+                        console.warn(`SubmitTrack: ${logMessage} TIMEOUT after ${GUN_ACK_TIMEOUT / 1000}s.`);
+                        reject(new Error(`${logMessage} timed out.`));
+                    }, GUN_ACK_TIMEOUT);
+                })
+            ]);
+        };
 
-        // Save safely
-        const savePromises = [
-            // User Graph
-            new Promise<void>((resolve) => {
-                user.get(APP_SCOPE).get('submissions').get(submissionId).put(submission, (ack: any) => {
-                    if (ack.err) console.error('Error saving to user graph:', ack.err);
-                    resolve();
-                });
-            }),
-            // Request Node
-            new Promise<void>((resolve) => {
-                gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
-                    if (ack.err) console.error('Error linking to request_submissions:', ack.err);
-                    resolve();
-                });
-            })
-        ];
+        // Save safely (User Graph and Request Node)
+        gunPromises.push(createGunPutPromise(
+            user.get('submissions').get(submissionId), 
+            submission, 
+            'Saved to user graph (submissions)'
+        ));
+        gunPromises.push(createGunPutPromise(
+            gun.get('request_submissions').get(requestId).get(submissionId), 
+            submission, 
+            'Linked to request_submissions'
+        ));
 
-        // Double-Linking (Fire and forget or await?)
+        // Also link to user's public profile (Double-Linking)
+        // This is crucial for the "Profile" view to show all works
         if (pubKey) {
-            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(pubKey);
-            user.get(APP_SCOPE).get('my_submissions').get(submissionId).put(user.get(APP_SCOPE).get('submissions').get(submissionId));
+            gunPromises.push(createGunPutPromise(
+                user.get('my_submissions').get(submissionId), 
+                user.get('submissions').get(submissionId), 
+                'Linked to my_submissions'
+            ));
+
+            if (linkProfile) {
+                gunPromises.push(createGunPutPromise(
+                    gun.get('all_users').get(pubKey).get('submissions').get(submissionId), 
+                    pubKey, 
+                    'Linked to all_users (public profile)'
+                ));
+            } else {
+                // If Anonymous, ensure we REMOVE any existing link if editing
+                gunPromises.push(createGunPutPromise(
+                    gun.get('all_users').get(pubKey).get('submissions').get(submissionId), 
+                    null, 
+                    'Unlinked from all_users (public profile)'
+                ));
+            }
         }
 
+        // Link to collaborators' profiles and Notify Collaborator
         collaborators.forEach(collabPub => {
-            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(pubKey);
+            gunPromises.push(createGunPutPromise(
+                gun.get('all_users').get(collabPub).get('submissions').get(submissionId), 
+                pubKey, 
+                `Linked to collaborator ${collabPub} profile`
+            ));
             
             const notifId = crypto.randomUUID();
             const notification: Notification = {
@@ -372,62 +426,83 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 link: `/request/${requestId}?submission=${submissionId}`,
                 fromPub: pubKey as string,
                 createdAt: Date.now(),
-                read: false,
-                requestId: requestId
+                read: false
             };
-            gun.get('inboxes').get(collabPub).get(notifId).put(notification);
+            gunPromises.push(createGunPutPromise(
+                gun.get('inboxes').get(collabPub).get(notifId), 
+                notification, 
+                `Sent notification to collaborator ${collabPub}`
+            ).catch(e => {
+                console.warn(`Failed to notify collaborator ${collabPub} (non-fatal):`, e);
+            }));
         });
 
-        gun.get('file_requests').get(requestId).once((req: any) => {
-            if (req && req.ownerPub && req.ownerPub !== pubKey) {
-                const notifId = crypto.randomUUID();
-                const notification: Notification = {
-                    id: notifId,
-                    type: 'submission',
-                    message: `New submission "${title}" on "${req.title}"`,
-                    link: `/request/${requestId}?submission=${submissionId}`,
-                    fromPub: pubKey as string,
-                    createdAt: Date.now(),
-                    read: false,
-                    requestId: requestId
-                };
-                gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
-            }
-        });
+        // Notify Request Owner
+        gunPromises.push(new Promise<void>((resolve, reject) => {
+            gun.get('file_requests').get(requestId).once((req: any) => {
+                if (req && req.ownerPub && req.ownerPub !== pubKey) {
+                    const notifId = crypto.randomUUID();
+                    const notification: Notification = {
+                        id: notifId,
+                        type: 'submission',
+                        message: `New submission "${title}" on "${req.title}"`,
+                        link: `/request/${requestId}?submission=${submissionId}`,
+                        fromPub: pubKey as string,
+                        createdAt: Date.now(),
+                        read: false
+                    };
+                    createGunPutPromise(
+                        gun.get('inboxes').get(req.ownerPub).get(notifId),
+                        notification,
+                        `Sent notification to request owner ${req.ownerPub}`
+                    ).then(resolve).catch((e) => {
+                        console.warn("Notification to request owner failed (non-fatal):", e);
+                        resolve();
+                    }); // Resolve anyway so submission succeeds
+                } else {
+                    resolve();
+                }
+            });
+        }));
 
-        if (accessMode === 'direct' && !existingSubmission) {
+        // Write to Global Feed if Public and New
+        if (accessMode === 'direct' && !existingSubmission && linkProfile) {
             const pulseId = crypto.randomUUID();
             const dateStr = new Date().toISOString().split('T')[0];
             const bucketKey = `global_pulse_${dateStr}`;
             
-            gun.get('file_requests').get(requestId).once((req: any) => {
-                const feedItem = {
-                    id: pulseId,
-                    type: 'submission',
-                    text: `Submitted a new track: "${title}"`,
-                    authorPub: pubKey as string,
-                    submissionId,
-                    requestId,
-                    submissionTitle: title,
-                    requestTitle: req?.title || 'Unknown Request',
-                    createdAt: Date.now()
-                };
-                gun.get(bucketKey).get(pulseId).put(feedItem);
-            });
+            gunPromises.push(new Promise<void>((resolve, reject) => {
+                gun.get('file_requests').get(requestId).once((req: any) => { // Using once to get req.title reliably
+                    const feedItem = {
+                        id: pulseId,
+                        type: 'submission',
+                        text: `Submitted a new track: "${title}"`,
+                        authorPub: pubKey as string,
+                        submissionId,
+                        requestId,
+                        submissionTitle: req?.title || 'Unknown Request',
+                        createdAt: Date.now()
+                    };
+                    createGunPutPromise(
+                        gun.get(bucketKey).get(pulseId),
+                        feedItem,
+                        'Wrote to global feed'
+                    ).then(resolve).catch((e) => {
+                        console.warn("Global feed update failed (non-fatal):", e);
+                        resolve();
+                    }); // Resolve anyway so submission succeeds
+                });
+            }));
         }
 
-        // Await primary saves to ensure at least local write is attempted
-        await Promise.all(savePromises);
+        await Promise.all(gunPromises);
 
-        success(existingSubmission ? "Track updated!" : "Track submitted!");
         onSuccess(submission);
         onClose();
 
     } catch (err: any) {
-        console.error("Submission failed", err);
-        const msg = err.message || "Failed to submit track.";
-        setError(msg);
-        toastError(msg);
+        console.error("SubmitTrack: Submission failed.", err);
+        setError(err.message || "Failed to submit track.");
     } finally {
         setIsUploading(false);
     }
@@ -444,22 +519,23 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
       try {
           const subId = existingSubmission.id;
           
-          user.get(APP_SCOPE).get('submissions').get(subId).put(null);
-          user.get(APP_SCOPE).get('my_submissions').get(subId).put(null);
+          // 1. Remove from User Graph
+          user.get('submissions').get(subId).put(null);
+          user.get('my_submissions').get(subId).put(null);
+          
+          // 2. Remove from Request Node
           gun.get('request_submissions').get(requestId).get(subId).put(null);
           
+          // 3. Remove from Public Profile
           if (pubKey) {
               gun.get('all_users').get(pubKey).get('submissions').get(subId).put(null);
           }
           
-          success("Submission deleted.");
           onSuccess();
           onClose();
-      } catch (e: any) {
+      } catch (e) {
           console.error("Delete failed", e);
-          const msg = "Failed to delete submission.";
-          setError(msg);
-          toastError(msg);
+          setError("Failed to delete submission.");
       } finally {
           setIsUploading(false);
       }
@@ -503,13 +579,30 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Byline (Optional)</label>
-                <input 
-                    type="text" 
-                    value={byline}
-                    onChange={(e) => setByline(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
-                    placeholder="e.g. The Band Name"
-                />
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                    <input 
+                        type="text" 
+                        value={byline}
+                        onChange={(e) => setByline(e.target.value)}
+                        className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                        placeholder="e.g. The Band Name"
+                    />
+                    
+                    {/* Anonymous Toggle */}
+                    <button
+                        type="button"
+                        onClick={() => setIsAnonymous(!isAnonymous)}
+                        className={`flex items-center gap-2 cursor-pointer select-none transition-colors p-2 rounded-lg border w-fit ${isAnonymous ? 'bg-blue-900/30 border-blue-500/50' : 'bg-gray-800 border-gray-700'}`}
+                        title="Submit anonymously?"
+                    >
+                        <div className={`w-10 h-5 rounded-full relative transition-colors ${isAnonymous ? 'bg-blue-500' : 'bg-gray-600'}`}>
+                            <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${isAnonymous ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </div>
+                        <span className={`text-sm ${isAnonymous ? 'text-blue-200' : 'text-gray-400'}`}>
+                            Anonymous
+                        </span>
+                    </button>
+                </div>
             </div>
 
             {/* Audio Section */}
@@ -773,8 +866,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 <label className="block text-sm font-medium text-gray-400 mb-1">Lyrics / Notes (Optional)</label>
                 <textarea 
                     value={lyrics}
-                    onChange={e => setLyrics(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition h-24 text-sm font-mono"
+                    onChange={(e) => setLyrics(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24"
                     placeholder="Lyrics, keys, bpm, or notes..."
                 />
             </div>

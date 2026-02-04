@@ -64,32 +64,44 @@ export function Auth() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Auth: handleSubmit initiated.");
     setError(null);
 
     if (isSignup) {
+      console.log("Auth: Entering Signup flow.");
       if (pass !== confirmPass) {
           setError("Passwords do not match.");
+          console.log("Auth: Signup validation failed - Passwords do not match.");
           return;
       }
 
       // @ts-ignore
       const adminSecret = import.meta.env.VITE_ADMIN_SECRET || 'secret';
+      console.log(`Auth: Signup with alias: ${alias}, email: ${email}, inviteCode: ${inviteCode}`);
 
       const proceedWithSignup = (isAdmin = false, inviterPub?: string, requestToJoinId?: string) => {
+        console.log("Auth: Calling user.create().");
         user.create(alias, pass, (ack: any) => {
+          console.log("Auth: user.create() ack received:", ack);
           if (ack.err) {
             setError(ack.err);
+            console.error("Auth: user.create() failed:", ack.err);
             return;
           }
+          console.log("Auth: user.create() successful. Auto-logging in.");
           // Auto login after signup
           user.auth(alias, pass, (authAck: any) => {
+            console.log("Auth: user.auth() (after create) authAck received:", authAck);
              if (authAck.err) {
                  setError(authAck.err);
+                 console.error("Auth: user.auth() (after create) failed:", authAck.err);
                  return;
              }
+             console.log("Auth: Auto-login successful after create.");
              // Add to Directory
              // @ts-ignore
              const pub = user.is?.pub || authAck?.sea?.pub || authAck?.pub;
+             console.log(`Auth: Detected Pub Key: ${pub}`);
              if (pub) {
                  gun.get('all_users').get(pub).put({
                      alias,
@@ -98,42 +110,60 @@ export function Auth() {
                      joinedAt: Date.now(),
                      isAdmin,
                      invitedBy: inviterPub || null
+                 }, (putAck: any) => {
+                     if (putAck.err) console.error("Auth: Error putting to all_users:", putAck.err);
+                     else console.log("Auth: User added to all_users directory.");
                  });
 
                  // Update Inviter's Invite Graph
                  if (inviterPub) {
-                     gun.get('all_users').get(inviterPub).get('invites').get(pub).put(true);
+                     gun.get('all_users').get(inviterPub).get('invites').get(pub).put(true, (putAck: any) => {
+                         if (putAck.err) console.error("Auth: Error updating inviter's graph:", putAck.err);
+                         else console.log(`Auth: Inviter ${inviterPub} graph updated.`);
+                     });
                  }
                  
                  // If invite used, consume it (unless admin/genesis)
                  if (!isAdmin && inviteCode) {
-                     gun.get('invites').get(inviteCode).put(null); 
+                     gun.get('invites').get(inviteCode).put(null, (putAck: any) => {
+                         if (putAck.err) console.error("Auth: Error consuming invite:", putAck.err);
+                         else console.log(`Auth: Invite code ${inviteCode} consumed.`);
+                     }); 
                  }
 
                  // Check for Auto-Join
                  if (requestToJoinId) {
+                     console.log(`Auth: Setting pendingJoinRequest in sessionStorage for request: ${requestToJoinId}`);
                      // Defer write to App.tsx to ensure session is fully ready and component doesn't unmount
                      sessionStorage.setItem('pendingJoinRequest', requestToJoinId);
                  } else if (email) {
+                     console.log("Auth: Checking pending invites based on email.");
                      checkPendingInvites(pub, email);
                  }
+             } else {
+                 console.error("Auth: Could not get pub key after successful create and auth.");
              }
           });
         });
       };
 
       const verifyGlobalInvite = (code: string) => {
+          console.log(`Auth: Verifying global invite code: ${code}`);
           gun.get('invites').get(code).once((data: any) => {
+              console.log(`Auth: Global invite code ${code} data received:`, data);
               if (data && data.status === 'active') {
                   const inviter = data.from || data.createdBy;
+                  console.log(`Auth: Global invite code ${code} is active. Inviter: ${inviter}`);
                   proceedWithSignup(false, inviter, data.forRequest);
               } else {
                   setError("Invalid or Expired Invite Code");
+                  console.error(`Auth: Global invite code ${code} invalid or expired.`);
               }
           });
       };
 
       if (inviteCode && inviteCode === adminSecret) {
+          console.log("Auth: Admin signup via inviteCode.");
           proceedWithSignup(true);
       } else if (inviteCode) {
           const code = inviteCode.trim();
@@ -141,70 +171,96 @@ export function Auth() {
           // Check if this is a Request-Specific invite (from URL)
           const match = window.location.pathname.match(/\/request\/([^/]+)/);
           const requestIdFromUrl = match ? match[1] : null;
+          console.log(`Auth: Invite code: ${code}. Request ID from URL: ${requestIdFromUrl}`);
 
           if (requestIdFromUrl) {
+              console.log(`Auth: Checking request-specific invite for request ID: ${requestIdFromUrl}`);
               gun.get('file_requests').get(requestIdFromUrl).once((req: any) => {
+                  console.log(`Auth: Request ${requestIdFromUrl} data for invite check:`, req);
                   if (req && req.inviteCode === code) {
                       // Valid!
+                      console.log(`Auth: Request-specific invite ${code} is valid.`);
                       proceedWithSignup(false, req.ownerPub, requestIdFromUrl);
                   } else {
                       // Fallback to global check
+                      console.log(`Auth: Request-specific invite ${code} invalid. Falling back to global check.`);
                       verifyGlobalInvite(code);
                   }
               });
           } else {
-              // Global Invite Check
-              verifyGlobalInvite(code);
+            verifyGlobalInvite(code);
           }
       } else {
           setError("Invite Code is required");
+          console.log("Auth: Signup validation failed - Invite Code is required.");
       }
 
     } else {
       // Login Flow
-      sessionStorage.clear();
+      console.log(`Auth: Entering Login flow for alias: ${alias}.`);
       
       user.auth(alias, pass, (ack: any) => {
+        console.log("Auth: user.auth() ack received:", ack);
         if (ack.err) {
           setError(ack.err);
+          console.error("Auth: user.auth() failed:", ack.err);
         } else {
+           console.log("Auth: user.auth() successful (ack.err is null).");
            console.log("Auth Ack:", ack);
            
            // Force injection if Gun failed to set it but Ack has it
            // @ts-ignore
            if ((!user.is || !user.is.priv) && ack.sea && ack.sea.priv) {
-               console.warn("Manually injecting keys from Ack into user.is");
+               console.warn("Auth: Manually injecting keys from Ack into user.is.");
                // @ts-ignore
                user.is = { ...user.is, ...ack.sea, alias };
                // @ts-ignore
                user._.is = user.is; // Gun internal reference
+               console.log("Auth: Injected keys, new user.is:", user.is);
            }
 
            // Verify Private Key Decryption
            // @ts-ignore
            if (!user.is || !user.is.priv) {
-               console.error("Login 'success' but private key missing. User state:", user.is, "Ack:", ack);
+               console.error("Auth: Login 'success' but private key missing. User state:", user.is, "Ack:", ack);
                setError("Login failed: Password correct but could not decrypt private key. Try clearing local data in Settings or creating a new account if the password was lost.");
                user.leave();
            } else {
                // Success path
-               console.log("Login successful with full key pair.");
+               console.log("Auth: Login successful with full key pair. Current user.is:", user.is);
                
+               // Explicitly persist session for robust recovery
+               try {
+                   localStorage.setItem('mew_user_session', JSON.stringify(user.is));
+                   console.log("Auth: Explicitly saved session to localStorage.");
+               } catch (e) {
+                   console.error("Auth: Failed to save session to localStorage:", e);
+               }
+
                // Ensure we write to Directory (robust pub check)
                // @ts-ignore
                const pub = user.is?.pub || ack?.sea?.pub || ack?.pub;
+               console.log(`Auth: Detected Pub Key for directory write: ${pub}`);
                
                if (pub) {
                    // On Login: Only ensure existence and update alias.
                    gun.get('all_users').get(pub).put({
                        alias,
                        pub
+                   }, (putAck: any) => {
+                       if (putAck.err) console.error("Auth: Error putting to all_users on login:", putAck.err);
+                       else console.log("Auth: User ensured in all_users directory on login.");
                    });
                    
                    // Check for Auto-Join
-                   checkPendingInvites(pub, email);
+                   if (email) { // only check if email is provided, otherwise no point
+                     console.log("Auth: Checking pending invites based on email.");
+                     checkPendingInvites(pub, email);
+                   } else {
+                     console.log("Auth: No email provided for pending invite check.");
+                   }
                } else {
-                   console.error("Could not write to Directory: Pub key missing despite success.");
+                   console.error("Auth: Could not write to Directory: Pub key missing despite successful login.");
                }
            }
         }
@@ -327,7 +383,7 @@ export function Auth() {
           }}
           className="text-sm text-gray-400 hover:text-white transition"
         >
-          {isSignup ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+          {isSignup ? 'Already have an account? Log in' : "Have an invite? Sign up"}
         </button>
       </div>
     </div>

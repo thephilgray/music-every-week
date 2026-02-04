@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
@@ -16,16 +15,16 @@ interface EditRequestProps {
 }
 
 export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
-  const { gun, user, pubKey } = useGun();
+  const { gun, user, pubKey, userPair } = useGun();
   const { success, error } = useToast();
   const navigate = useNavigate();
   
   const [title, setTitle] = useState(request.title);
-  const [description, setDescription] = useState(request.description);
+  const [desc, setDesc] = useState(request.description);
   const [deadline, setDeadline] = useState(request.deadline || '');
   const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(request.accessMode || 'direct');
   const [file, setFile] = useState<File | null>(null);
-  const [currentArtworkUrl] = useState(request.artworkUrl || ''); 
+  const [currentArtworkUrl] = useState(request.artworkUrl || ''); // Removed unused setter
   const [loading, setLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -56,7 +55,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   useEffect(() => {
     if (!user || !pubKey) return;
     const list: FileRequest[] = [];
-    user.get(APP_SCOPE).get('my_requests').map().once((data: any, id: string) => {
+    user.get('my_requests').map().once((data: any, id: string) => {
         if (data && data.title && id !== request.id) {
             list.push({ ...data, id });
             setExistingRequests([...list].sort((a, b) => b.createdAt - a.createdAt));
@@ -210,19 +209,41 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!request.id) return;
+    console.log("EditRequest: handleSave initiated.");
+    console.time("EditRequest_handleSave_total");
+
+    if (!request.id) {
+        console.log("EditRequest: Validation failed - No request ID.");
+        error("Cannot save: Request ID is missing.");
+        return;
+    }
+
+    // Ensure userPair is available for signing operations
+    if (!userPair || !userPair.pub || !userPair.priv) {
+        error("Authentication error: Please log in again to save changes.");
+        console.error("EditRequest: Save failed: User pair (with private key) is not available.");
+        return;
+    }
+
     setLoading(true);
+    console.log("EditRequest: Save process started, setLoading(true).");
 
     try {
       let artworkUrl = currentArtworkUrl;
       if (file) {
-        const res = await uploadFile(file, (user as any).is);
+        console.log("EditRequest: Artwork file detected. Starting upload.");
+        console.time("EditRequest_uploadArtwork");
+        const res = await uploadFile(file, userPair);
         artworkUrl = res.url;
+        console.timeEnd("EditRequest_uploadArtwork");
+        console.log(`EditRequest: Artwork uploaded. URL: ${artworkUrl}`);
+      } else {
+        console.log("EditRequest: No new artwork to upload, using existing.");
       }
 
       const updates: any = {
         title,
-        description,
+        description: desc,
         deadline,
         accessMode,
         artworkUrl,
@@ -230,12 +251,40 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true
       };
+      console.log("EditRequest: Constructed updates object:", updates);
 
+      console.log("EditRequest: Starting GunDB metadata updates.");
+      console.time("EditRequest_metadataUpdates");
       // Update Metadata
-      await user.get(APP_SCOPE).get('requests').get(request.id!).put(updates);
-      await gun.get('file_requests').get(request.id!).put(updates);
-      await user.get(APP_SCOPE).get('my_requests').get(request.id!).put(updates);
+      const metadataPromises: Promise<any>[] = [];
+      metadataPromises.push(new Promise<void>((resolve, reject) => {
+        user.get('requests').get(request.id!).put(updates, (ack: any) => {
+            if (ack.err) return reject(new Error(ack.err));
+            console.log('EditRequest: Metadata updated in user graph.');
+            resolve();
+        });
+      }));
+      metadataPromises.push(new Promise<void>((resolve, reject) => {
+        gun.get('file_requests').get(request.id!).put(updates, (ack: any) => {
+            if (ack.err) return reject(new Error(ack.err));
+            console.log('EditRequest: Metadata updated in file_requests global graph.');
+            resolve();
+        });
+      }));
+      metadataPromises.push(new Promise<void>((resolve, reject) => {
+        user.get('my_requests').get(request.id!).put(updates, (ack: any) => {
+            if (ack.err) return reject(new Error(ack.err));
+            console.log('EditRequest: Metadata updated in my_requests graph.');
+            resolve();
+        });
+      }));
+      await Promise.all(metadataPromises);
+      console.timeEnd("EditRequest_metadataUpdates");
+      console.log("EditRequest: All GunDB metadata updates resolved.");
 
+
+      console.log("EditRequest: Starting participants handling.");
+      console.time("EditRequest_participantsHandling");
       // Handle Participants (Graph Mode)
       const oldParticipants = request.participants || {};
       const newParticipants = { ...selectedParticipants };
@@ -244,21 +293,32 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       Object.keys(oldParticipants).forEach(key => {
           if (!newParticipants[key]) {
               newParticipants[key] = null;
+              console.log(`EditRequest: Marking participant ${key} for deletion.`);
           }
       });
       
       // Save participants node
       const participantsNode = gun.get('request_participants').get(request.id!);
+      const participantUpdatePromises: Promise<any>[] = [];
       Object.entries(newParticipants).forEach(([pub, data]) => {
-          participantsNode.get(pub).put(data);
+          participantUpdatePromises.push(new Promise<void>((resolve, reject) => {
+            participantsNode.get(pub).put(data, (ack: any) => {
+                if (ack.err) return reject(new Error(ack.err));
+                console.log(`EditRequest: Updated participant ${pub} data.`);
+                resolve();
+            });
+          }));
       });
-
+      await Promise.all(participantUpdatePromises);
+      console.log("EditRequest: All participant data updates resolved.");
+      
       // Notify New Participants
       const existingKeys = Object.keys(oldParticipants);
       const addedParticipants = Object.keys(selectedParticipants).filter(pub => !existingKeys.includes(pub));
       
+      const notificationPromises: Promise<any>[] = [];
       addedParticipants.forEach((partPub: string) => {
-          if (partPub === pubKey) return;
+          if (partPub === pubKey) return; // Don't notify self
           
           const notifId = crypto.randomUUID();
           const message = accessMode === 'direct' 
@@ -275,17 +335,30 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
               read: false,
               requestId: request.id!
           };
-          gun.get('inboxes').get(partPub).get(notifId).put(notification);
+          notificationPromises.push(new Promise<void>((resolve, reject) => {
+            gun.get('inboxes').get(partPub).get(notifId).put(notification, (ack: any) => {
+                if (ack.err) return reject(new Error(ack.err));
+                console.log(`EditRequest: Sent invite notification to ${partPub}.`);
+                resolve();
+            });
+          }));
       });
+      await Promise.all(notificationPromises);
+      console.timeEnd("EditRequest_participantsHandling");
+      console.log("EditRequest: All participant notifications resolved.");
 
       success("Request updated!");
       onUpdate();
       onClose();
-    } catch (err) {
-      console.error(err);
-      error("Failed to update request.");
+      console.log("EditRequest: success, onUpdate, onClose called. Save process complete.");
+
+    } catch (err: any) {
+      console.error("EditRequest: Save failed in catch block.", err);
+      error(err.message || "Failed to update request.");
     } finally {
       setLoading(false);
+      console.log("EditRequest: finally block executed. setLoading(false).");
+      console.timeEnd("EditRequest_handleSave_total");
     }
   };
 
@@ -300,8 +373,8 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       
       try {
           // Soft delete / nullify
-          await user.get(APP_SCOPE).get('requests').get(request.id!).put(null);
-          await user.get(APP_SCOPE).get('my_requests').get(request.id!).put(null);
+          await user.get('requests').get(request.id!).put(null);
+          await user.get('my_requests').get(request.id!).put(null);
           await gun.get('file_requests').get(request.id!).put(null);
           
           success("Request deleted.");
@@ -316,204 +389,209 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   };
 
   return createPortal(
-    <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
-        <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-gray-950/50 sticky top-0 z-10">
+    <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 bg-gray-950 backdrop-blur-none overscroll-none touch-none">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto overscroll-contain touch-auto">
+        <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-500 hover:text-white"
+        >
+            <X className="w-5 h-5" />
+        </button>
+
+        <div className="p-6 border-b border-gray-800">
             <h2 className="text-xl font-bold text-white">Edit Request</h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-white">
-                <X className="w-5 h-5" />
-            </button>
         </div>
 
-        <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0">
-            <div className="p-6 space-y-6 overflow-y-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="col-span-full">
-                        <label className="block text-sm text-gray-400 mb-1">Title</label>
-                        <input 
-                            value={title}
-                            onChange={e => setTitle(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white outline-none focus:border-blue-500"
-                        />
-                    </div>
-                    
-                    <div className="col-span-full">
-                        <label className="block text-sm text-gray-400 mb-1">Description</label>
-                        <textarea 
-                            value={description}
-                            onChange={e => setDescription(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white outline-none focus:border-blue-500 h-24"
-                        />
-                    </div>
+        <form onSubmit={handleSave} className="p-6 space-y-4">
+            <div>
+                <label className="block text-gray-400 text-sm mb-1">Title</label>
+                <input 
+                    type="text" 
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                    required
+                />
+            </div>
 
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-1">Deadline</label>
-                        <input 
-                            type="datetime-local" 
-                            value={deadline}
-                            onChange={e => setDeadline(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white outline-none focus:border-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
-                        <select 
-                            value={accessMode}
-                            onChange={(e: any) => setAccessMode(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
-                        >
-                            <option value="direct">Public (Participants auto-accepted)</option>
-                            <option value="invite">Private (Invite Only)</option>
-                            <option value="volunteer">Volunteer Pool</option>
-                        </select>
-                    </div>
-                </div>
+            <div>
+                <label className="block text-gray-400 text-sm mb-1">Description</label>
+                <textarea 
+                    value={desc}
+                    onChange={e => setDesc(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-32"
+                    required
+                />
+            </div>
 
-                {/* Volunteer Mode Settings */}
-                {accessMode === 'volunteer' && (
-                    <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
-                        <h4 className="text-sm font-semibold text-gray-300">Volunteer Settings</h4>
-                        
-                        <div className="flex items-center gap-4">
-                            <label className="text-gray-400 text-sm">Open Seats:</label>
-                            <input 
-                                type="number" 
-                                min={2} 
-                                value={poolSeats} 
-                                onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
-                                className="w-20 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <input 
-                                type="checkbox" 
-                                id="allowSubmissions"
-                                checked={allowSubmissions}
-                                onChange={e => setAllowSubmissions(e.target.checked)}
-                                className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
-                            />
-                            <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none">
-                                Allow volunteers to submit tracks
-                            </label>
-                        </div>
-                    </div>
-                )}
-
-                {/* Participants Management */}
-                {accessMode !== 'volunteer' && (
-                <div className="border-t border-gray-800 pt-4">
-                   <label className="block text-gray-400 text-sm mb-2 font-semibold flex items-center gap-2">
-                     <UserPlus className="w-4 h-4" />
-                     Manage Participants
-                   </label>
-                   
-                   {/* Import from previous */}
-                   <div className="flex gap-2 items-end mb-4">
-                    <div className="flex-1">
-                        <label className="block text-gray-500 text-xs mb-1">Import from Previous</label>
-                        <select
-                            value={selectedImportId}
-                            onChange={(e) => handleImportSelect(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
-                        >
-                            <option value="">-- Select --</option>
-                            {existingRequests.map(req => (
-                                <option key={req.id} value={req.id}>{req.title}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="w-1/3">
-                        <label className="block text-gray-500 text-xs mb-1">Filter</label>
-                        <select
-                            value={importFilter}
-                            onChange={(e: any) => setImportFilter(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
-                        >
-                            <option value="all">All</option>
-                            <option value="accepted">Accepted</option>
-                            <option value="submitted">Submitted</option>
-                        </select>
-                    </div>
-                   </div>
-                   
-                   {/* Search Directory */}
-                   <div className="relative mb-3">
-                     <input
-                       type="text"
-                       value={searchTerm}
-                       onChange={(e) => searchUsers(e.target.value)}
-                       className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
-                       placeholder="Add user from directory..."
-                     />
-                     {searchResults.length > 0 && (
-                       <div className="absolute z-10 w-full bg-gray-800 border border-gray-600 rounded mt-1 max-h-40 overflow-y-auto shadow-xl">
-                         {searchResults.map(user => (
-                           <div 
-                             key={user.pub}
-                             onClick={() => addParticipant(user)}
-                             className="p-2 hover:bg-gray-700 cursor-pointer text-white text-sm flex justify-between items-center"
-                           >
-                             <span>{user.alias}</span>
-                             <span className="text-xs text-gray-400">Add</span>
-                           </div>
-                         ))}
-                       </div>
-                     )}
-                   </div>
-
-                   {/* 3. Email Invites */}
-                   <div className="mb-3">
-                     <label className="block text-gray-500 text-xs mb-1">Invite by Email</label>
-                     <div className="flex gap-2 mb-2">
-                       <input 
-                         type="email" 
-                         value={emailInput}
-                         onChange={e => setEmailInput(e.target.value)}
-                         className="flex-1 bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
-                         placeholder="friend@example.com"
-                       />
-                       <button 
-                         onClick={addEmail}
-                         className="bg-gray-700 hover:bg-gray-600 px-4 rounded text-white text-sm font-semibold"
-                       >
-                         Add
-                       </button>
-                     </div>
-                   </div>
-
-                   {/* Selected List */}
-                   {(Object.keys(selectedParticipants).length > 0 || pendingEmails.length > 0) && (
-                      <div className="flex flex-wrap gap-2">
-                         {Object.entries(selectedParticipants).map(([pub, p]: [string, any]) => (
-                            <span key={pub} className="bg-indigo-900/50 text-indigo-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-indigo-500/30">
-                              <span title={pub}>{p.alias || 'User'}</span>
-                              <button type="button" onClick={() => removeParticipant(pub)} className="hover:text-white font-bold px-1">×</button>
-                            </span>
-                         ))}
-                         {pendingEmails.map(email => (
-                           <span key={email} className="bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-blue-500/30">
-                             {email}
-                             <button type="button" onClick={() => removeEmail(email)} className="hover:text-white font-bold px-1">×</button>
-                           </span>
-                         ))}
-                      </div>
-                   )}
-                </div>
-                )}
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1">Update Artwork (Optional)</label>
+                    <label className="block text-gray-400 text-sm mb-1">Deadline</label>
                     <input 
-                        type="file" 
-                        onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
-                        className="w-full text-gray-400 text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-                        accept="image/*"
+                        type="datetime-local" 
+                        value={deadline}
+                        onChange={e => setDeadline(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                     />
+                </div>
+                <div>
+                    <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
+                    <select 
+                        value={accessMode}
+                        onChange={(e: any) => setAccessMode(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                    >
+                        <option value="direct">Public (Participants auto-accepted)</option>
+                        <option value="invite">Private (Invite Only)</option>
+                        <option value="volunteer">Volunteer Pool</option>
+                    </select>
                 </div>
             </div>
 
-            <div className="p-6 border-t border-gray-800 bg-gray-950/50 flex justify-between items-center rounded-b-xl sticky bottom-0">
+            {/* Volunteer Mode Settings */}
+            {accessMode === 'volunteer' && (
+                <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-300">Volunteer Settings</h4>
+                    
+                    <div className="flex items-center gap-4">
+                        <label className="text-gray-400 text-sm">Open Seats:</label>
+                        <input 
+                            type="number" 
+                            min={2} 
+                            value={poolSeats} 
+                            onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
+                            className="w-20 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="checkbox" 
+                            id="allowSubmissions"
+                            checked={allowSubmissions}
+                            onChange={e => setAllowSubmissions(e.target.checked)}
+                            className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none">
+                            Allow volunteers to submit tracks
+                        </label>
+                    </div>
+                </div>
+            )}
+
+            {/* Participants Management */}
+            {accessMode !== 'volunteer' && (
+            <div className="border-t border-gray-800 pt-4">
+               <label className="block text-gray-400 text-sm mb-2 font-semibold flex items-center gap-2">
+                 <UserPlus className="w-4 h-4" />
+                 Manage Participants
+               </label>
+               
+               {/* Import from previous */}
+               <div className="flex gap-2 items-end mb-4">
+                <div className="flex-1">
+                    <label className="block text-gray-500 text-xs mb-1">Import from Previous</label>
+                    <select
+                        value={selectedImportId}
+                        onChange={(e) => handleImportSelect(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                    >
+                        <option value="">-- Select --</option>
+                        {existingRequests.map(req => (
+                            <option key={req.id} value={req.id}>{req.title}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="w-1/3">
+                    <label className="block text-gray-500 text-xs mb-1">Filter</label>
+                    <select
+                        value={importFilter}
+                        onChange={(e: any) => setImportFilter(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                    >
+                        <option value="all">All</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="submitted">Submitted</option>
+                    </select>
+                </div>
+               </div>
+               
+               {/* Search Directory */}
+               <div className="relative mb-3">
+                 <input
+                   type="text"
+                   value={searchTerm}
+                   onChange={(e) => searchUsers(e.target.value)}
+                   className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                   placeholder="Add user from directory..."
+                 />
+                 {searchResults.length > 0 && (
+                   <div className="absolute z-10 w-full bg-gray-800 border border-gray-600 rounded mt-1 max-h-40 overflow-y-auto shadow-xl">
+                     {searchResults.map(user => (
+                       <div 
+                         key={user.pub}
+                         onClick={() => addParticipant(user)}
+                         className="p-2 hover:bg-gray-700 cursor-pointer text-white text-sm flex justify-between items-center"
+                       >
+                         <span>{user.alias}</span>
+                         <span className="text-xs text-gray-400">Add</span>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </div>
+
+               {/* 3. Email Invites */}
+               <div className="mb-3">
+                 <label className="block text-gray-500 text-xs mb-1">Invite by Email</label>
+                 <div className="flex gap-2 mb-2">
+                   <input 
+                     type="email" 
+                     value={emailInput}
+                     onChange={e => setEmailInput(e.target.value)}
+                     className="flex-1 bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                     placeholder="friend@example.com"
+                   />
+                   <button 
+                     onClick={addEmail}
+                     className="bg-gray-700 hover:bg-gray-600 px-4 rounded text-white text-sm font-semibold"
+                   >
+                     Add
+                   </button>
+                 </div>
+               </div>
+
+               {/* Selected List */}
+               {(Object.keys(selectedParticipants).length > 0 || pendingEmails.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                     {Object.entries(selectedParticipants).map(([pub, p]: [string, any]) => (
+                        <span key={pub} className="bg-indigo-900/50 text-indigo-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-indigo-500/30">
+                          <span title={pub}>{p.alias || 'User'}</span>
+                          <button type="button" onClick={() => removeParticipant(pub)} className="hover:text-white font-bold px-1">×</button>
+                        </span>
+                     ))}
+                     {pendingEmails.map(email => (
+                       <span key={email} className="bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-blue-500/30">
+                         {email}
+                         <button type="button" onClick={() => removeEmail(email)} className="hover:text-white font-bold px-1">×</button>
+                       </span>
+                     ))}
+                  </div>
+               )}
+            </div>
+            )}
+
+            <div>
+                <label className="block text-gray-400 text-sm mb-1">Update Artwork (Optional)</label>
+                <input 
+                    type="file" 
+                    onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
+                    className="w-full text-gray-400 text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                    accept="image/*"
+                />
+            </div>
+
+            <div className="flex justify-between pt-4 border-t border-gray-800 mt-4">
                 <button
                     type="button"
                     onClick={handleDeleteClick}
@@ -536,7 +614,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     <button 
                         type="submit" 
                         disabled={loading || isDeleting}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition disabled:opacity-50"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center gap-2 disabled:opacity-50"
                     >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Save Changes

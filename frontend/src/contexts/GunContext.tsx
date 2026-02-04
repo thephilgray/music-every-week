@@ -143,7 +143,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             resolvedPubKey = gunUser.is.pub;
             // @ts-ignore
             resolvedPrivKey = gunUser.is.priv;
-            resolvedPair = { pub: resolvedPubKey, priv: resolvedPrivKey };
+            resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
         } 
         // 2. Fallback to ack object if provided (from auth event)
         else if (ack) {
@@ -153,13 +153,13 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 resolvedPubKey = ack.sea.pub;
                 // @ts-ignore
                 resolvedPrivKey = ack.sea.priv;
-                resolvedPair = { pub: ack.sea.pub, priv: ack.sea.priv };
+                resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
             } 
             // @ts-ignore
             else if (ack.pub && ack.priv) { // Direct pair in ack
                 resolvedPubKey = ack.pub;
                 resolvedPrivKey = ack.priv;
-                resolvedPair = { pub: ack.pub, priv: ack.priv };
+                resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
             }
             // @ts-ignore
             else if (ack.pub) { // Only pub in ack, might try other sources for priv
@@ -184,7 +184,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                                 if ((storedPair.sea && storedPair.sea.pub === resolvedPubKey && storedPair.sea.priv) ||
                                     (storedPair.pub === resolvedPubKey && storedPair.priv)) {
                                     resolvedPrivKey = storedPair.sea ? storedPair.sea.priv : storedPair.priv;
-                                    resolvedPair = { pub: resolvedPubKey, priv: resolvedPrivKey };
+                                    resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
                                     console.log("Recovered private key from localStorage.");
                                     
                                     // Crucially, re-assign to gunUser.is if it's currently incomplete

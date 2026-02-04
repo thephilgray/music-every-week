@@ -48,6 +48,7 @@ export interface Submission {
   createdAt: number;
   title: string;
   byline?: string; // Custom artist/project name
+  linkProfile?: boolean; // Whether to link to user profile
   collaborators?: Record<string, boolean>; // Map of user public keys
   waveform?: number[];
   hiddenFromProfile?: boolean;

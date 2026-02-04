@@ -7,7 +7,7 @@ interface CollaboratorListProps {
   uploaderPub: string;
   submissionId?: string;
   byline?: string;
-  collaborators?: Record<string, boolean>;
+  collaborators?: Record<string, boolean> | string; // Updated type definition to include string
   className?: string;
 }
 
@@ -19,12 +19,26 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
 
   useEffect(() => {
       let found = false;
-      // 1. Try Direct Prop
-      if (collaborators) {
-          const keys = Object.keys(collaborators).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
-          if (keys.length > 0) {
-              setLoadedCollaborators(collaborators);
-              found = true;
+      let rawCollabs = collaborators;
+
+      // 1. Try Direct Prop Parsing
+      if (rawCollabs) {
+          if (typeof rawCollabs === 'string') {
+              try {
+                  rawCollabs = JSON.parse(rawCollabs);
+              } catch (e) {
+                  // If parse fails, it might be a weird string or empty, treat as empty object or ignore
+                  rawCollabs = {}; 
+              }
+          }
+
+          if (rawCollabs && typeof rawCollabs === 'object') {
+              const keys = Object.keys(rawCollabs).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
+              if (keys.length > 0) {
+                  // @ts-ignore - we know it's an object now
+                  setLoadedCollaborators(rawCollabs);
+                  found = true;
+              }
           }
       }
 
@@ -33,22 +47,33 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
           // If we have submissionId, fetch from source (User Graph)
           if (submissionId && uploaderPub && gun) {
               gun.user(uploaderPub).get('submissions').get(submissionId).get('collaborators').once((data: any) => {
-                  if (data) {
+                  let cleanData = data;
+                  
+                  // Handle JSON string format (New Architecture)
+                  if (typeof data === 'string') {
+                      try {
+                          cleanData = JSON.parse(data);
+                      } catch (e) {
+                          cleanData = null;
+                      }
+                  }
+
+                  if (cleanData && typeof cleanData === 'object') {
                       const clean: Record<string, boolean> = {};
-                      Object.keys(data).forEach(k => {
+                      Object.keys(cleanData).forEach(k => {
                           if (k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#')) {
-                              clean[k] = data[k];
+                              clean[k] = cleanData[k];
                           }
                       });
                       setLoadedCollaborators(clean);
                   }
               });
           } 
-          // Fallback: Check for Soul in prop (Public Graph ref)
-          else if (collaborators) {
+          // Fallback: Check for Soul in prop (Public Graph ref) - Legacy support
+          else if (collaborators && typeof collaborators === 'object' && !Array.isArray(collaborators)) {
               // @ts-ignore
               const soul = collaborators['#'];
-              if (typeof soul === 'string' && soul) { // Add type check
+              if (typeof soul === 'string' && soul) { 
                   gun.get(soul).once((data: any) => {
                       if (data) {
                           const clean: Record<string, boolean> = {};

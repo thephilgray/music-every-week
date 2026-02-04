@@ -12,7 +12,7 @@ export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { gun, user, pubKey, isAdmin } = useGun();
+  const { gun, user, pubKey, isAdmin, userPair } = useGun(); // Destructure userPair
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
   
@@ -134,7 +134,14 @@ export function Profile() {
       try {
           let avatarUrl = profile?.avatarUrl;
           if (editAvatar) {
-              const res = await uploadFile(editAvatar, (user as any).is);
+              // Ensure userPair is available for signing operations
+              if (!userPair || !userPair.pub || !userPair.priv) {
+                  error("Authentication error: Please log in again to save profile changes.");
+                  console.error("Profile save failed: User pair (with private key) is not available.");
+                  setIsSaving(false);
+                  return;
+              }
+              const res = await uploadFile(editAvatar, userPair);
               avatarUrl = res.url;
           }
           

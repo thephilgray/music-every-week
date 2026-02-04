@@ -15,7 +15,7 @@ interface EditRequestProps {
 }
 
 export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
-  const { gun, user, pubKey } = useGun();
+  const { gun, user, pubKey, userPair } = useGun();
   const { success, error } = useToast();
   const navigate = useNavigate();
   
@@ -209,14 +209,36 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!request.id) return;
+    console.log("EditRequest: handleSave initiated.");
+    console.time("EditRequest_handleSave_total");
+
+    if (!request.id) {
+        console.log("EditRequest: Validation failed - No request ID.");
+        error("Cannot save: Request ID is missing.");
+        return;
+    }
+
+    // Ensure userPair is available for signing operations
+    if (!userPair || !userPair.pub || !userPair.priv) {
+        error("Authentication error: Please log in again to save changes.");
+        console.error("EditRequest: Save failed: User pair (with private key) is not available.");
+        return;
+    }
+
     setLoading(true);
+    console.log("EditRequest: Save process started, setLoading(true).");
 
     try {
       let artworkUrl = currentArtworkUrl;
       if (file) {
-        const res = await uploadFile(file, (user as any).is);
+        console.log("EditRequest: Artwork file detected. Starting upload.");
+        console.time("EditRequest_uploadArtwork");
+        const res = await uploadFile(file, userPair);
         artworkUrl = res.url;
+        console.timeEnd("EditRequest_uploadArtwork");
+        console.log(`EditRequest: Artwork uploaded. URL: ${artworkUrl}`);
+      } else {
+        console.log("EditRequest: No new artwork to upload, using existing.");
       }
 
       const updates: any = {
@@ -229,12 +251,40 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true
       };
+      console.log("EditRequest: Constructed updates object:", updates);
 
+      console.log("EditRequest: Starting GunDB metadata updates.");
+      console.time("EditRequest_metadataUpdates");
       // Update Metadata
-      await user.get('requests').get(request.id!).put(updates);
-      await gun.get('file_requests').get(request.id!).put(updates);
-      await user.get('my_requests').get(request.id!).put(updates);
+      const metadataPromises: Promise<any>[] = [];
+      metadataPromises.push(new Promise<void>((resolve, reject) => {
+        user.get('requests').get(request.id!).put(updates, (ack: any) => {
+            if (ack.err) return reject(new Error(ack.err));
+            console.log('EditRequest: Metadata updated in user graph.');
+            resolve();
+        });
+      }));
+      metadataPromises.push(new Promise<void>((resolve, reject) => {
+        gun.get('file_requests').get(request.id!).put(updates, (ack: any) => {
+            if (ack.err) return reject(new Error(ack.err));
+            console.log('EditRequest: Metadata updated in file_requests global graph.');
+            resolve();
+        });
+      }));
+      metadataPromises.push(new Promise<void>((resolve, reject) => {
+        user.get('my_requests').get(request.id!).put(updates, (ack: any) => {
+            if (ack.err) return reject(new Error(ack.err));
+            console.log('EditRequest: Metadata updated in my_requests graph.');
+            resolve();
+        });
+      }));
+      await Promise.all(metadataPromises);
+      console.timeEnd("EditRequest_metadataUpdates");
+      console.log("EditRequest: All GunDB metadata updates resolved.");
 
+
+      console.log("EditRequest: Starting participants handling.");
+      console.time("EditRequest_participantsHandling");
       // Handle Participants (Graph Mode)
       const oldParticipants = request.participants || {};
       const newParticipants = { ...selectedParticipants };
@@ -243,21 +293,32 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       Object.keys(oldParticipants).forEach(key => {
           if (!newParticipants[key]) {
               newParticipants[key] = null;
+              console.log(`EditRequest: Marking participant ${key} for deletion.`);
           }
       });
       
       // Save participants node
       const participantsNode = gun.get('request_participants').get(request.id!);
+      const participantUpdatePromises: Promise<any>[] = [];
       Object.entries(newParticipants).forEach(([pub, data]) => {
-          participantsNode.get(pub).put(data);
+          participantUpdatePromises.push(new Promise<void>((resolve, reject) => {
+            participantsNode.get(pub).put(data, (ack: any) => {
+                if (ack.err) return reject(new Error(ack.err));
+                console.log(`EditRequest: Updated participant ${pub} data.`);
+                resolve();
+            });
+          }));
       });
-
+      await Promise.all(participantUpdatePromises);
+      console.log("EditRequest: All participant data updates resolved.");
+      
       // Notify New Participants
       const existingKeys = Object.keys(oldParticipants);
       const addedParticipants = Object.keys(selectedParticipants).filter(pub => !existingKeys.includes(pub));
       
+      const notificationPromises: Promise<any>[] = [];
       addedParticipants.forEach((partPub: string) => {
-          if (partPub === pubKey) return;
+          if (partPub === pubKey) return; // Don't notify self
           
           const notifId = crypto.randomUUID();
           const message = accessMode === 'direct' 
@@ -274,17 +335,30 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
               read: false,
               requestId: request.id!
           };
-          gun.get('inboxes').get(partPub).get(notifId).put(notification);
+          notificationPromises.push(new Promise<void>((resolve, reject) => {
+            gun.get('inboxes').get(partPub).get(notifId).put(notification, (ack: any) => {
+                if (ack.err) return reject(new Error(ack.err));
+                console.log(`EditRequest: Sent invite notification to ${partPub}.`);
+                resolve();
+            });
+          }));
       });
+      await Promise.all(notificationPromises);
+      console.timeEnd("EditRequest_participantsHandling");
+      console.log("EditRequest: All participant notifications resolved.");
 
       success("Request updated!");
       onUpdate();
       onClose();
-    } catch (err) {
-      console.error(err);
-      error("Failed to update request.");
+      console.log("EditRequest: success, onUpdate, onClose called. Save process complete.");
+
+    } catch (err: any) {
+      console.error("EditRequest: Save failed in catch block.", err);
+      error(err.message || "Failed to update request.");
     } finally {
       setLoading(false);
+      console.log("EditRequest: finally block executed. setLoading(false).");
+      console.timeEnd("EditRequest_handleSave_total");
     }
   };
 

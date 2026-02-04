@@ -8,6 +8,9 @@ import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
 import type { Notification, UserProfile, Submission } from '../types';
 
+// Define a timeout for GunDB acknowledgments (e.g., 30 seconds)
+const GUN_ACK_TIMEOUT = 30000;
+
 interface SubmitTrackProps {
   requestId: string;
   participants?: Record<string, { status: 'pending' | 'accepted', alias?: string, email?: string }>;
@@ -18,7 +21,7 @@ interface SubmitTrackProps {
 }
 
 export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess, accessMode }: SubmitTrackProps) {
-  const { gun, user, pubKey, userProfile } = useGun();
+  const { gun, user, pubKey, userProfile, userPair } = useGun(); // Destructure userPair
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
   const [lyrics, setLyrics] = useState('');
@@ -63,16 +66,28 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setLyrics(existingSubmission.lyrics || '');
         setStage(existingSubmission.stage || 'First Draft / Demo');
         
-        // Load Collaborators (Handle GunDB references)
-        const rawCollabs = existingSubmission.collaborators || {};
+        // Load Collaborators (Handle GunDB references or JSON string)
+        let rawCollabs = existingSubmission.collaborators || {};
+        
+        // Parse if it's a string (New flattened format)
+        if (typeof rawCollabs === 'string') {
+            try {
+                rawCollabs = JSON.parse(rawCollabs);
+            } catch (e) {
+                console.warn("Failed to parse collaborators JSON:", e);
+                rawCollabs = {};
+            }
+        }
+
         const directKeys = Object.keys(rawCollabs).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
         
         if (directKeys.length > 0) {
             setCollaborators(directKeys);
         } else if (existingSubmission.id) {
-            // If no direct keys, it might be a reference. Fetch from User Graph source.
+            // If no direct keys, it might be a reference (Old format). Fetch from User Graph source.
+            // Note: If we migrated fully to JSON string, this fallback is for legacy data compatibility.
             user.get('submissions').get(existingSubmission.id).get('collaborators').once((data: any) => {
-                if (data) {
+                if (data && typeof data === 'object') {
                     const fetchedKeys = Object.keys(data).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
                     setCollaborators(fetchedKeys);
                 }
@@ -231,11 +246,19 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if ((!audioFile && !existingSubmission) || !title) {
         setError("Title and Audio file are required.");
         return;
     }
     
+    // Ensure userPair is available for signing operations
+    if (!userPair || !userPair.pub || !userPair.priv) {
+        setError("Authentication error: Please log in again to submit or update a track.");
+        console.error("SubmitTrack: Submission failed: User pair (with private key) is not available.");
+        return;
+    }
+
     setIsUploading(true);
     setError(null);
 
@@ -261,15 +284,16 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 waveformStr = '[]';
             }
 
-            // Upload
-            const { url } = await uploadFile(audioFile, (user as any).is);
+            // Upload using the reliable userPair
+            const { url } = await uploadFile(audioFile, userPair);
             audioUrlStr = url;
         }
 
         // 2. Handle Art (New Upload or Keep Existing)
         let artworkUrlStr = existingSubmission?.artworkUrl || '';
         if (artFile) {
-            const { url } = await uploadFile(artFile, (user as any).is);
+            // Upload using the reliable userPair
+            const { url } = await uploadFile(artFile, userPair);
             artworkUrlStr = url;
         }
 
@@ -288,75 +312,83 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             user.get('preferences').get('lastByline').put(byline.trim());
         }
 
-        const submission: any = { // Using 'any' briefly to allow waveform string vs number[] mismatch if strict typed
+        // Ensure no undefined values are passed to GunDB
+        const submission: any = { 
             id: submissionId,
             requestId,
             title,
             byline: finalByline,
-            lyrics: String(lyrics),
+            lyrics: String(lyrics || ''), // Ensure empty string if null/undefined
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderPub: pubKey as string,
             createdAt: existingSubmission?.createdAt || Date.now(),
-            collaborators: collaboratorsMap,
-            waveform: waveformStr, // Saved as string
+            collaborators: JSON.stringify(collaboratorsMap), // Flattened as JSON string
+            waveform: waveformStr,
             stage,
-            feedbackFocus: JSON.stringify(feedbackFocus) // Serialize array for GunDB
+            feedbackFocus: JSON.stringify(feedbackFocus)
         };
 
-        console.log("Submitting:", submission);
+        const gunPromises: Promise<any>[] = [];
 
-        // Ensure User has keys for signing (fix for 'hanging' put)
-        // @ts-ignore
-        if (user.is && !user.is.priv) {
-             console.warn("User instance missing private key. Attempting restoration...");
-             const stored = sessionStorage.getItem('pair'); // Try standard key
-             if (stored) {
-                 try {
-                     const pair = JSON.parse(stored);
-                     // @ts-ignore
-                     if (pair.priv) {
-                         // @ts-ignore
-                         user.is = { ...user.is, ...pair };
-                         // @ts-ignore
-                         user._.is = user.is;
-                         console.log("Restored private key to User instance.");
-                     }
-                 } catch(e) {}
-             }
-        }
+        // Helper function to create a GunDB put promise with a timeout
+        const createGunPutPromise = (node: any, data: any, logMessage: string) => {
+            let timer: ReturnType<typeof setTimeout>;
+            return Promise.race([
+                new Promise<void>((resolve, reject) => {
+                    node.put(data, (ack: any) => {
+                        clearTimeout(timer);
+                        if (ack.err) {
+                            console.error(`SubmitTrack: ${logMessage} FAILED:`, ack.err);
+                            return reject(new Error(`${logMessage} failed: ${ack.err}`));
+                        }
+                        resolve();
+                    });
+                }),
+                new Promise<void>((_, reject) => {
+                    timer = setTimeout(() => {
+                        console.warn(`SubmitTrack: ${logMessage} TIMEOUT after ${GUN_ACK_TIMEOUT / 1000}s.`);
+                        reject(new Error(`${logMessage} timed out.`));
+                    }, GUN_ACK_TIMEOUT);
+                })
+            ]);
+        };
 
-        // Save safely
-        const savePromises = [
-            // User Graph
-            new Promise<void>((resolve) => {
-                user.get('submissions').get(submissionId).put(submission, (ack: any) => {
-                    if (ack.err) console.error('Error saving to user graph:', ack.err);
-                    resolve();
-                });
-            }),
-            // Request Node
-            new Promise<void>((resolve) => {
-                gun.get('request_submissions').get(requestId).get(submissionId).put(submission, (ack: any) => {
-                    if (ack.err) console.error('Error linking to request_submissions:', ack.err);
-                    resolve();
-                });
-            })
-        ];
-        await Promise.all(savePromises);
+        // Save safely (User Graph and Request Node)
+        gunPromises.push(createGunPutPromise(
+            user.get('submissions').get(submissionId), 
+            submission, 
+            'Saved to user graph (submissions)'
+        ));
+        gunPromises.push(createGunPutPromise(
+            gun.get('request_submissions').get(requestId).get(submissionId), 
+            submission, 
+            'Linked to request_submissions'
+        ));
 
         // Also link to user's public profile (Double-Linking)
         // This is crucial for the "Profile" view to show all works
         if (pubKey) {
-            gun.get('all_users').get(pubKey).get('submissions').get(submissionId).put(pubKey);
-            user.get('my_submissions').get(submissionId).put(user.get('submissions').get(submissionId));
+            gunPromises.push(createGunPutPromise(
+                gun.get('all_users').get(pubKey).get('submissions').get(submissionId), 
+                pubKey, 
+                'Linked to all_users (public profile)'
+            ));
+            gunPromises.push(createGunPutPromise(
+                user.get('my_submissions').get(submissionId), 
+                user.get('submissions').get(submissionId), 
+                'Linked to my_submissions'
+            ));
         }
 
-        // Link to collaborators' profiles
+        // Link to collaborators' profiles and Notify Collaborator
         collaborators.forEach(collabPub => {
-            gun.get('all_users').get(collabPub).get('submissions').get(submissionId).put(pubKey);
+            gunPromises.push(createGunPutPromise(
+                gun.get('all_users').get(collabPub).get('submissions').get(submissionId), 
+                pubKey, 
+                `Linked to collaborator ${collabPub} profile`
+            ));
             
-            // Notify Collaborator
             const notifId = crypto.randomUUID();
             const notification: Notification = {
                 id: notifId,
@@ -367,25 +399,37 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 createdAt: Date.now(),
                 read: false
             };
-            gun.get('inboxes').get(collabPub).get(notifId).put(notification);
+            gunPromises.push(createGunPutPromise(
+                gun.get('inboxes').get(collabPub).get(notifId), 
+                notification, 
+                `Sent notification to collaborator ${collabPub}`
+            ));
         });
 
         // Notify Request Owner
-        gun.get('file_requests').get(requestId).once((req: any) => {
-            if (req && req.ownerPub && req.ownerPub !== pubKey) {
-                const notifId = crypto.randomUUID();
-                const notification: Notification = {
-                    id: notifId,
-                    type: 'submission',
-                    message: `New submission "${title}" on "${req.title}"`,
-                    link: `/request/${requestId}?submission=${submissionId}`,
-                    fromPub: pubKey as string,
-                    createdAt: Date.now(),
-                    read: false
-                };
-                gun.get('inboxes').get(req.ownerPub).get(notifId).put(notification);
-            }
-        });
+        gunPromises.push(new Promise<void>((resolve, reject) => {
+            gun.get('file_requests').get(requestId).once((req: any) => {
+                if (req && req.ownerPub && req.ownerPub !== pubKey) {
+                    const notifId = crypto.randomUUID();
+                    const notification: Notification = {
+                        id: notifId,
+                        type: 'submission',
+                        message: `New submission "${title}" on "${req.title}"`,
+                        link: `/request/${requestId}?submission=${submissionId}`,
+                        fromPub: pubKey as string,
+                        createdAt: Date.now(),
+                        read: false
+                    };
+                    createGunPutPromise(
+                        gun.get('inboxes').get(req.ownerPub).get(notifId),
+                        notification,
+                        `Sent notification to request owner ${req.ownerPub}`
+                    ).then(resolve).catch(reject); // Resolve/reject this promise based on the inner put
+                } else {
+                    resolve();
+                }
+            });
+        }));
 
         // Write to Global Feed if Public and New
         if (accessMode === 'direct' && !existingSubmission) {
@@ -393,28 +437,34 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             const dateStr = new Date().toISOString().split('T')[0];
             const bucketKey = `global_pulse_${dateStr}`;
             
-            // We need request title. Fetching it.
-            gun.get('file_requests').get(requestId).once((req: any) => {
-                const feedItem = {
-                    id: pulseId,
-                    type: 'submission',
-                    text: `Submitted a new track: "${title}"`,
-                    authorPub: pubKey as string,
-                    submissionId,
-                    requestId,
-                    submissionTitle: title,
-                    requestTitle: req?.title || 'Unknown Request',
-                    createdAt: Date.now()
-                };
-                gun.get(bucketKey).get(pulseId).put(feedItem);
-            });
+            gunPromises.push(new Promise<void>((resolve, reject) => {
+                gun.get('file_requests').get(requestId).once((req: any) => { // Using once to get req.title reliably
+                    const feedItem = {
+                        id: pulseId,
+                        type: 'submission',
+                        text: `Submitted a new track: "${title}"`,
+                        authorPub: pubKey as string,
+                        submissionId,
+                        requestId,
+                        submissionTitle: req?.title || 'Unknown Request',
+                        createdAt: Date.now()
+                    };
+                    createGunPutPromise(
+                        gun.get(bucketKey).get(pulseId),
+                        feedItem,
+                        'Wrote to global feed'
+                    ).then(resolve).catch(reject); // Resolve/reject this promise based on the inner put
+                });
+            }));
         }
+
+        await Promise.all(gunPromises);
 
         onSuccess(submission);
         onClose();
 
     } catch (err: any) {
-        console.error("Submission failed", err);
+        console.error("SubmitTrack: Submission failed.", err);
         setError(err.message || "Failed to submit track.");
     } finally {
         setIsUploading(false);

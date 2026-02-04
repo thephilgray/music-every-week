@@ -6,6 +6,9 @@ import type { FileRequest, UserProfile, Notification } from '../types';
 import { Check, Copy, ArrowRight, Filter } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+// Define a timeout for GunDB acknowledgments (e.g., 30 seconds)
+const GUN_ACK_TIMEOUT = 30000;
+
 export function CreateRequest() {
   const { gun, user, pubKey } = useGun();
   const { error } = useToast();
@@ -96,7 +99,7 @@ export function CreateRequest() {
     // Clear previous selection as requested
     setSelectedParticipants({}); 
 
-    if (!requestId) return;
+    if (!requestId) return; 
     
     console.log('Importing participants from:', requestId, 'Filter:', importFilter);
 
@@ -191,13 +194,24 @@ export function CreateRequest() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pubKey) return;
+    console.log("CreateRequest: handleSubmit initiated.");
+    console.time("CreateRequest_handleSubmit_total");
+
+    if (!pubKey) {
+      console.log("CreateRequest: Validation failed - pubKey is missing.");
+      error("Authentication required to create a request.");
+      setLoading(false); // Ensure loading is turned off
+      console.timeEnd("CreateRequest_handleSubmit_total");
+      return;
+    }
     setLoading(true);
+    console.log("CreateRequest: Request creation process started, setLoading(true).");
 
     try {
       // Process any lingering email input
       let finalEmails = [...emails];
       if (emailInput.trim()) {
+          console.log("CreateRequest: Processing lingering email input.");
           const lingering = emailInput
               .split(/[\n, ]+/)
               .map(s => s.trim())
@@ -206,41 +220,79 @@ export function CreateRequest() {
               finalEmails = Array.from(new Set([...finalEmails, ...lingering]));
               setEmails(finalEmails); // Update state for UI consistency (though we use var below)
               setEmailInput('');
+              console.log("CreateRequest: Lingering emails processed:", lingering);
           }
       }
 
       let artworkUrl = '';
       if (file) {
-        console.log('Uploading file...');
-        const result = await uploadFile(file, (user as any).is);
-        console.log('Upload complete:', result);
+        console.log('CreateRequest: Artwork file detected. Starting upload.');
+        console.time("CreateRequest_uploadArtwork");
+        // @ts-ignore
+        if (!user || !user.is || !user.is.pub || !user.is.priv) { 
+            error("Authentication error: Please log in again to upload artwork.");
+            console.error("CreateRequest: Upload failed: User pair (with private key) is not available.");
+            setLoading(false);
+            console.timeEnd("CreateRequest_handleSubmit_total");
+            return;
+        }
+        const result = await uploadFile(file, (user as any).is); // Using user.is from context
         artworkUrl = result.url;
+        console.timeEnd("CreateRequest_uploadArtwork");
+        console.log(`CreateRequest: Artwork uploaded. URL: ${artworkUrl}`);
+      } else {
+        console.log("CreateRequest: No new artwork file to upload, using null.");
       }
 
       const requestId = crypto.randomUUID();
+      console.log(`CreateRequest: Generated Request ID: ${requestId}`);
       
-      // Merge imported participants
       const finalParticipants = { ...selectedParticipants };
-
-      // Enforce status based on accessMode
       Object.keys(finalParticipants).forEach(pub => {
           finalParticipants[pub].status = accessMode === 'direct' ? 'accepted' : 'pending';
       });
+      console.log("CreateRequest: Final participants after status enforcement:", finalParticipants);
       
+      // Helper function to create a GunDB put promise with a timeout
+      const createGunPutPromise = (node: any, data: any, logMessage: string) => {
+        let timer: ReturnType<typeof setTimeout>;
+        return Promise.race([
+            new Promise<void>((resolve, reject) => {
+                node.put(data, (ack: any) => {
+                    clearTimeout(timer);
+                    if (ack.err) {
+                        console.error(`CreateRequest: ${logMessage} FAILED:`, ack.err, 'Full ACK:', ack);
+                        return reject(new Error(`${logMessage} failed: ${ack.err}`));
+                    }
+                    console.log(`CreateRequest: ${logMessage} SUCCESS. ACK:`, ack);
+                    resolve();
+                });
+            }),
+            new Promise<void>((_, reject) => {
+                timer = setTimeout(() => {
+                    console.warn(`CreateRequest: ${logMessage} TIMEOUT after ${GUN_ACK_TIMEOUT / 1000}s. No ACK received.`);
+                    reject(new Error(`${logMessage} timed out.`));
+                }, GUN_ACK_TIMEOUT);
+            })
+        ]);
+      };
+
       let inviteCode = '';
       if (finalEmails.length > 0) {
+          console.log("CreateRequest: Generating invite code for emails.");
           inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
-          // Create a reusable invite code for this request
-          gun.get('invites').get(inviteCode).put({
-              from: pubKey,
-              createdAt: Date.now(),
-              status: 'active',
-              forRequest: requestId
-          }, (ack: any) => {
-              if (ack.err) console.error("Invite write error:", ack.err);
-              else console.log("Invite write ack:", ack);
-          });
-          console.log('Created Invite Code for Request:', inviteCode);
+          
+          await createGunPutPromise(
+              gun.get('invites').get(inviteCode),
+              {
+                  from: pubKey,
+                  createdAt: Date.now(),
+                  status: 'active',
+                  forRequest: requestId
+              },
+              "Invite code write"
+          );
+          console.log('CreateRequest: Created Invite Code for Request:', inviteCode);
       }
 
       const request: any = {
@@ -253,63 +305,99 @@ export function CreateRequest() {
         ownerPub: pubKey,
         createdAt: Date.now(),
         pending_emails: JSON.stringify(finalEmails),
-        inviteCode: inviteCode || null, // Store on request for reference
+        inviteCode: inviteCode || null,
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
-        // participants: finalParticipants -- Managed as separate graph node
       };
 
-      console.log('Saving to GunDB...', request);
+      console.log('CreateRequest: Constructed request object:', request);
+      console.log('CreateRequest: Starting GunDB save operations for request metadata.');
+      console.time("CreateRequest_metadataSave");
       
-      // 1. Save to User Graph (Source of Truth - Secure Metadata)
-      const userReqNode = user.get('requests').get(requestId);
-      userReqNode.put(request);
-      
-      // 2. Link Global Graph to User Graph (for discovery)
-      gun.get('file_requests').get(requestId).put(userReqNode);
-      
-      // 3. Link to user's my_requests for local listing
-      user.get('my_requests').get(requestId).put(userReqNode);
+      const metadataSavePromises: Promise<any>[] = [];
 
-      // 4. Write Initial Participants to OPEN Graph Node
-      // We use a separate root node 'request_participants' to allow public writes
+      metadataSavePromises.push(createGunPutPromise(
+        user.get('requests').get(requestId), 
+        request, 
+        'Saved to user graph (requests)'
+      ));
+      metadataSavePromises.push(createGunPutPromise(
+        gun.get('file_requests').get(requestId), 
+        user.get('requests').get(requestId), 
+        'Linked to global file_requests'
+      ));
+      metadataSavePromises.push(createGunPutPromise(
+        user.get('my_requests').get(requestId), 
+        user.get('requests').get(requestId), 
+        'Linked to my_requests'
+      ));
+
+      await Promise.all(metadataSavePromises);
+      console.timeEnd("CreateRequest_metadataSave");
+      console.log("CreateRequest: All metadata save operations resolved.");
+
+      console.log("CreateRequest: Starting participant graph node updates.");
+      console.time("CreateRequest_participantsSave");
+      
       const participantsNode = gun.get('request_participants').get(requestId);
+      const participantPromises: Promise<any>[] = [];
       Object.entries(finalParticipants).forEach(([pPub, pData]) => {
-          participantsNode.get(pPub).put(pData);
+          participantPromises.push(createGunPutPromise(
+            participantsNode.get(pPub), 
+            pData, 
+            `Writing participant ${pPub} to participantsNode`
+          ));
       });
+      await Promise.all(participantPromises);
+      console.timeEnd("CreateRequest_participantsSave");
+      console.log("CreateRequest: All initial participant writes resolved.");
 
-      // 5. Handle Volunteer Pool Invites (Async)
       if (accessMode === 'volunteer') {
-          console.log("Scanning for volunteers...");
+          console.log("CreateRequest: Scanning for volunteers for volunteer pool (async).");
+          console.time("CreateRequest_volunteerScan");
           gun.get('all_users').map().once((u: any, uPub: string) => {
               if (u && u.isVolunteer && uPub !== pubKey && !finalParticipants[uPub]) {
-                  // Add as Invited
-                  participantsNode.get(uPub).put({
-                      alias: u.alias,
-                      status: 'invited',
-                      invitedAt: Date.now()
-                  });
+                  console.log(`CreateRequest: Found volunteer ${uPub}. Inviting.`);
                   
-                  // Notify
+                  // Add as Invited (Fire and Forget / Non-blocking)
+                  createGunPutPromise(
+                    participantsNode.get(uPub), 
+                    {
+                        alias: u.alias,
+                        status: 'invited',
+                        invitedAt: Date.now()
+                    }, 
+                    `Writing volunteer ${uPub} to participantsNode`
+                  ).catch(e => console.error(e));
+                  
+                  // Notify (Fire and Forget / Non-blocking)
                   const notifId = crypto.randomUUID();
                   const notification: Notification = {
                       id: notifId,
-                      type: 'invite', // Reuse invite type, or make 'pool_invite'
-                      message: `Volunteer Opportunity: "${title}" needs feedback!`,
+                      type: 'invite',
+                      message: `Volunteer Opportunity: "${title}" needs feedback!`, 
                       link: `/request/${requestId}`,
                       fromPub: pubKey as string,
                       createdAt: Date.now(),
                       read: false,
                       requestId: requestId
                   };
-                  gun.get('inboxes').get(uPub).get(notifId).put(notification);
+                  createGunPutPromise(
+                    gun.get('inboxes').get(uPub).get(notifId), 
+                    notification, 
+                    `Sending volunteer notification to ${uPub}`
+                  ).catch(e => console.error(e));
               }
           });
+          console.timeEnd("CreateRequest_volunteerScan");
+          console.log("CreateRequest: Volunteer scan initiated (async, non-blocking).");
       }
 
-      // Send Notifications to Participants
+      console.log("CreateRequest: Starting notifications to explicitly invited participants.");
+      console.time("CreateRequest_participantNotifications");
+      const participantNotificationPromises: Promise<any>[] = [];
       Object.keys(finalParticipants).forEach(partPub => {
-        if (partPub === pubKey) return; // Don't notify self
+        if (partPub === pubKey) return;
         
         const notifId = crypto.randomUUID();
         const message = accessMode === 'direct' 
@@ -327,10 +415,16 @@ export function CreateRequest() {
             requestId: requestId
         };
         
-        gun.get('inboxes').get(partPub).get(notifId).put(notification);
+        participantNotificationPromises.push(createGunPutPromise(
+            gun.get('inboxes').get(partPub).get(notifId), 
+            notification, 
+            `Sending notification to participant ${partPub}`
+        ));
       });
+      await Promise.all(participantNotificationPromises);
+      console.timeEnd("CreateRequest_participantNotifications");
+      console.log("CreateRequest: All explicit participant notifications resolved.");
 
-      // Prepare Success View
       let link = `${window.location.origin}/request/${requestId}`;
       if (inviteCode) {
           link += `?requestInvite=${inviteCode}`;
@@ -339,12 +433,15 @@ export function CreateRequest() {
       setInviteLink(link);
       setCreatedRequestId(requestId);
       setShowSuccess(true);
+      console.log("CreateRequest: Success view prepared.");
       
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("CreateRequest: Request creation failed in catch block.", err);
       error('Error creating request: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
+      console.log("CreateRequest: finally block executed. setLoading(false).");
+      console.timeEnd("CreateRequest_handleSubmit_total");
     }
   };
 
@@ -524,7 +621,7 @@ export function CreateRequest() {
                     >
                         <option value="all">All Invited</option>
                         <option value="accepted">Accepted Only</option>
-                        <option value="submitted">Submitted / Pass</option>
+                        <option value="submitted">Submitted</option>
                     </select>
                 </div>
             </div>
@@ -568,7 +665,7 @@ export function CreateRequest() {
                     
                     // Auto-process on paste or delimiter
                     if (val.includes(',') || val.includes('\n')) {
-                        const raw = val.split(/[\n,]+/);
+                        const raw = val.split(/[\n, ]+/);
                         const valid: string[] = [];
                         let remaining = '';
 
@@ -579,7 +676,7 @@ export function CreateRequest() {
                             // Check for internal spaces (invalid email)
                             const hasInternalSpace = trimmed.includes(' ');
 
-                            if (i === raw.length - 1 && !endsWithDelimiter) {
+                            if (i === raw.length - 1 && !endsWithDelimiter) { 
                                 remaining = s; 
                             } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !emails.includes(trimmed)) {
                                 valid.push(trimmed);

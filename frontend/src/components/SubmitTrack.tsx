@@ -432,7 +432,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 gun.get('inboxes').get(collabPub).get(notifId), 
                 notification, 
                 `Sent notification to collaborator ${collabPub}`
-            ));
+            ).catch(e => {
+                console.warn(`Failed to notify collaborator ${collabPub} (non-fatal):`, e);
+            }));
         });
 
         // Notify Request Owner
@@ -453,7 +455,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         gun.get('inboxes').get(req.ownerPub).get(notifId),
                         notification,
                         `Sent notification to request owner ${req.ownerPub}`
-                    ).then(resolve).catch(reject); // Resolve/reject this promise based on the inner put
+                    ).then(resolve).catch((e) => {
+                        console.warn("Notification to request owner failed (non-fatal):", e);
+                        resolve();
+                    }); // Resolve anyway so submission succeeds
                 } else {
                     resolve();
                 }
@@ -482,7 +487,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         gun.get(bucketKey).get(pulseId),
                         feedItem,
                         'Wrote to global feed'
-                    ).then(resolve).catch(reject); // Resolve/reject this promise based on the inner put
+                    ).then(resolve).catch((e) => {
+                        console.warn("Global feed update failed (non-fatal):", e);
+                        resolve();
+                    }); // Resolve anyway so submission succeeds
                 });
             }));
         }

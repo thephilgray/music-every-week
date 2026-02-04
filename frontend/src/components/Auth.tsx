@@ -229,6 +229,14 @@ export function Auth() {
                // Success path
                console.log("Auth: Login successful with full key pair. Current user.is:", user.is);
                
+               // Explicitly persist session for robust recovery
+               try {
+                   localStorage.setItem('mew_user_session', JSON.stringify(user.is));
+                   console.log("Auth: Explicitly saved session to localStorage.");
+               } catch (e) {
+                   console.error("Auth: Failed to save session to localStorage:", e);
+               }
+
                // Ensure we write to Directory (robust pub check)
                // @ts-ignore
                const pub = user.is?.pub || ack?.sea?.pub || ack?.pub;
@@ -375,7 +383,7 @@ export function Auth() {
           }}
           className="text-sm text-gray-400 hover:text-white transition"
         >
-          {isSignup ? 'Already have an account? Log in' : "Have a signup code?"}
+          {isSignup ? 'Already have an account? Log in' : "Have an invite? Sign up"}
         </button>
       </div>
     </div>

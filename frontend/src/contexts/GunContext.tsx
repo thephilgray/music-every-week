@@ -129,8 +129,8 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const resolveUserPairAndAuth = (ack?: any) => {
-        setIsLoggedIn(true); // Assume logged in if auth event fires or user.is exists
-        setIsAuthLoading(false);
+        // We will determine final login state at the end
+        // setIsLoggedIn(true); // DON'T assume true yet
 
         let resolvedPubKey: string | undefined;
         let resolvedPrivKey: string | undefined;
@@ -138,12 +138,14 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // 1. Try to get from gunUser.is (most direct if already recalled)
         // @ts-ignore
-        if (gunUser.is && gunUser.is.pub && gunUser.is.priv) {
+        if (gunUser.is && gunUser.is.pub) {
             // @ts-ignore
             resolvedPubKey = gunUser.is.pub;
             // @ts-ignore
             resolvedPrivKey = gunUser.is.priv;
-            resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
+            if (resolvedPrivKey) {
+                resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
+            }
         } 
         // 2. Fallback to ack object if provided (from auth event)
         else if (ack) {
@@ -153,13 +155,13 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 resolvedPubKey = ack.sea.pub;
                 // @ts-ignore
                 resolvedPrivKey = ack.sea.priv;
-                resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
+                resolvedPair = { pub: ack.sea.pub as string, priv: ack.sea.priv as string };
             } 
             // @ts-ignore
             else if (ack.pub && ack.priv) { // Direct pair in ack
                 resolvedPubKey = ack.pub;
                 resolvedPrivKey = ack.priv;
-                resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
+                resolvedPair = { pub: ack.pub as string, priv: ack.priv as string };
             }
             // @ts-ignore
             else if (ack.pub) { // Only pub in ack, might try other sources for priv
@@ -167,62 +169,96 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
         }
 
-        // 3. Fallback to localStorage if a complete pair is still not found
-        // This allows for persistent login across tabs and browser restarts.
-        if (!resolvedPrivKey && resolvedPubKey) { // Only search if we have a pub key but no priv
+        // 3. Fallback to localStorage if we are missing either key
+        // This is robust against partial loads or corrupted in-memory state
+        if (!resolvedPrivKey || !resolvedPubKey) { 
+            // 3a. Try explicit backup key (Added for reliability)
             try {
-                // Iterate through localStorage to find the correct pair
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key) {
-                        const val = localStorage.getItem(key);
-                        if (val) {
-                            try {
-                                const storedPair = JSON.parse(val);
-                                // Check if this session matches our pub key AND has a private key
-                                // Gun often stores the pair under a key like "pair" or a pub key hash
-                                if ((storedPair.sea && storedPair.sea.pub === resolvedPubKey && storedPair.sea.priv) ||
-                                    (storedPair.pub === resolvedPubKey && storedPair.priv)) {
-                                    resolvedPrivKey = storedPair.sea ? storedPair.sea.priv : storedPair.priv;
-                                    resolvedPair = { pub: resolvedPubKey as string, priv: resolvedPrivKey as string };
-                                    console.log("Recovered private key from localStorage.");
-                                    
-                                    // Crucially, re-assign to gunUser.is if it's currently incomplete
-                                    // @ts-ignore
-                                    if (gunUser.is && !gunUser.is.priv) {
-                                        // @ts-ignore
-                                        gunUser.is = { ...gunUser.is, ...resolvedPair };
-                                        // @ts-ignore
-                                        gunUser._.is = gunUser.is; // Internal update for Gun instance
-                                        console.log("Re-hydrated gunUser.is with private key from localStorage.");
+                const backup = localStorage.getItem('mew_user_session');
+                if (backup) {
+                    const sess = JSON.parse(backup);
+                    if (sess && sess.pub && sess.priv) {
+                         // Only use if it matches our partial load (or if we have nothing)
+                         if (!resolvedPubKey || resolvedPubKey === sess.pub) {
+                             resolvedPubKey = sess.pub;
+                             resolvedPrivKey = sess.priv;
+                             resolvedPair = { pub: sess.pub as string, priv: sess.priv as string };
+                             console.log("Recovered private key from explicit 'mew_user_session' backup.");
+                         }
+                    }
+                }
+            } catch (e) { console.warn("Backup session check failed", e); }
+
+            // 3b. Scan all storage if backup failed
+            if (!resolvedPair) {
+                try {
+                    // Iterate through localStorage to find the correct pair
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key) {
+                            const val = localStorage.getItem(key);
+                            if (val) {
+                                try {
+                                    const storedPair = JSON.parse(val);
+                                    // Determine potential keys from this item
+                                    const p = storedPair.sea ? storedPair.sea.pub : storedPair.pub;
+                                    const k = storedPair.sea ? storedPair.sea.priv : storedPair.priv;
+
+                                    if (p && k) {
+                                        // If we already have a pub key (partially loaded), this item MUST match it
+                                        if (resolvedPubKey && resolvedPubKey !== p) continue;
+
+                                        // Found a valid pair!
+                                        resolvedPubKey = p;
+                                        resolvedPrivKey = k;
+                                        resolvedPair = { pub: p as string, priv: k as string };
+                                        console.log("Recovered private key from localStorage scan.");
+                                        break; // Found the pair, no need to continue iterating
                                     }
-                                    break; // Found the pair, no need to continue iterating
+                                } catch (e) {
+                                    // Not JSON, skip
                                 }
-                            } catch (e) {
-                                // Not JSON, skip
                             }
                         }
                     }
+                } catch (e) {
+                    console.error("Error attempting to retrieve pair from localStorage:", e);
                 }
-            } catch (e) {
-                console.error("Error attempting to retrieve pair from localStorage:", e);
+            }
+
+            // If we found a pair, re-hydrate gunUser.is
+            if (resolvedPair) {
+                 // @ts-ignore
+                 if (gunUser.is && (!gunUser.is.priv || !gunUser.is.pub)) {
+                    // @ts-ignore
+                    gunUser.is = { ...(gunUser.is || {}), ...resolvedPair };
+                    // @ts-ignore
+                    gunUser._.is = gunUser.is; // Internal update for Gun instance
+                    console.log("Re-hydrated gunUser.is with recovered pair.");
+                }
             }
         }
 
         if (resolvedPubKey && resolvedPrivKey && resolvedPair) {
+            setIsLoggedIn(true);
             setPubKey(resolvedPubKey);
             setUserPair(resolvedPair);
             checkAuthorization(resolvedPubKey);
         } else if (resolvedPubKey) {
+            setIsLoggedIn(true);
             setPubKey(resolvedPubKey);
             setUserPair(null); // Explicitly null if priv is missing
             console.warn("Authentication confirmed, but private key not fully available. User might be in a read-only state for some operations.");
             checkAuthorization(resolvedPubKey);
         } else {
+            // Failed to resolve a user.
+            setIsLoggedIn(false);
             setPubKey(undefined);
             setUserPair(null);
-            console.error("Authentication confirmed but no public key found.");
+            console.error("Authentication check failed: No public key found. Redirecting to login.");
         }
+        
+        setIsAuthLoading(false);
     };
 
     // Check authentication status on mount and when it changes

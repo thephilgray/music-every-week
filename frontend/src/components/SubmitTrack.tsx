@@ -6,6 +6,7 @@ import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { Tooltip } from './ui/Tooltip';
 import type { Notification, UserProfile, Submission } from '../types';
 
 // Define a timeout for GunDB acknowledgments (e.g., 30 seconds)
@@ -438,7 +439,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         });
 
         // Notify Request Owner
-                    gunPromises.push(new Promise<void>((resolve) => {
+        gunPromises.push(new Promise<void>((resolve) => {
             gun.get('file_requests').get(requestId).once((req: any) => {
                 if (req && req.ownerPub && req.ownerPub !== pubKey) {
                     const notifId = crypto.randomUUID();
@@ -471,7 +472,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             const dateStr = new Date().toISOString().split('T')[0];
             const bucketKey = `global_pulse_${dateStr}`;
             
-                        gunPromises.push(new Promise<void>((resolve) => {
+            gunPromises.push(new Promise<void>((resolve) => {
                 gun.get('file_requests').get(requestId).once((req: any) => { // Using once to get req.title reliably
                     const feedItem = {
                         id: pulseId,
@@ -578,7 +579,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Byline (Optional)</label>
+                <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2">
+                    Byline (Optional)
+                    <Tooltip content="The artist name displayed for this track. If 'Anonymous' is enabled, this is hidden from your profile and defaults to 'Anonymous' if left blank." icon />
+                </label>
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                     <input 
                         type="text" 
@@ -730,7 +734,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             {/* Collaborators */}
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2 justify-between">
-                    <span className="flex items-center gap-2"><Users className="w-4 h-4" /> Collaborators</span>
+                    <span className="flex items-center gap-2">
+                        <Users className="w-4 h-4" /> Collaborators
+                        <Tooltip content="Add others who worked on this track. They will be notified, and this track will appear on their profile (unless anonymous)." icon />
+                    </span>
                     <button 
                         type="button" 
                         onClick={() => setIsSearching(!isSearching)}
@@ -810,7 +817,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             {/* Stage & Feedback */}
             <div className="grid grid-cols-1 gap-4">
                 <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">Completion Stage</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2">
+                        Completion Stage
+                        <Tooltip content="Set the completion status of your track to help reviewers set their expectations." icon />
+                    </label>
                     <select 
                         value={stage}
                         onChange={(e) => setStage(e.target.value)}
@@ -825,8 +835,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
                 <details className="group border border-gray-700 rounded bg-gray-800/30">
                     <summary className="p-3 cursor-pointer text-sm font-medium text-gray-300 hover:text-white flex justify-between items-center select-none">
-                        <span>
+                        <span className="flex items-center gap-2">
                             Feedback Focus
+                            <Tooltip content="Select specific areas you want feedback on. This guides the reviewers." icon />
                             {feedbackFocus.length > 0 && <span className="ml-2 text-blue-400 text-xs">({feedbackFocus.length} selected)</span>}
                         </span>
                         <span className="text-gray-500 text-xs group-open:rotate-180 transition-transform">▼</span>
@@ -861,7 +872,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     </div>
                 </details>
             </div>
-
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Lyrics / Notes (Optional)</label>
                 <textarea 

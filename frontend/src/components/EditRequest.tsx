@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { Tooltip } from './ui/Tooltip';
 
 interface EditRequestProps {
   request: FileRequest;
@@ -426,7 +427,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1">Deadline</label>
+                    <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                        Deadline
+                        <Tooltip content="The cut-off time for new submissions. Comments and interactions will remain open after this time." icon />
+                    </label>
                     <input 
                         type="datetime-local" 
                         value={deadline}
@@ -435,7 +439,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     />
                 </div>
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
+                    <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                        Access Mode
+                        <Tooltip content="Public: Invited users are automatically added (no acceptance needed). Private: Invited users must accept the invite. Volunteer Pool: Open to anyone to claim a limited seat." icon />
+                    </label>
                     <select 
                         value={accessMode}
                         onChange={(e: any) => setAccessMode(e.target.value)}
@@ -451,7 +458,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
             {/* Volunteer Mode Settings */}
             {accessMode === 'volunteer' && (
                 <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
-                    <h4 className="text-sm font-semibold text-gray-300">Volunteer Settings</h4>
+                    <h4 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                        Volunteer Settings
+                        <Tooltip content="Limit the number of people who can claim a spot. This encourages commitment and prevents overwhelming feedback." icon />
+                    </h4>
                     
                     <div className="flex items-center gap-4">
                         <label className="text-gray-400 text-sm">Open Seats:</label>
@@ -472,8 +482,9 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                             onChange={e => setAllowSubmissions(e.target.checked)}
                             className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
                         />
-                        <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none">
+                        <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none flex items-center gap-2">
                             Allow volunteers to submit tracks
+                            <Tooltip content="Uncheck this if you only want feedback on YOUR tracks. If checked, volunteers can upload their own work." icon />
                         </label>
                     </div>
                 </div>
@@ -485,12 +496,16 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                <label className="block text-gray-400 text-sm mb-2 font-semibold flex items-center gap-2">
                  <UserPlus className="w-4 h-4" />
                  Manage Participants
+                 <Tooltip content="Build your invite list here. Users must be invited to see this request (unless Volunteer Mode is on)." icon />
                </label>
                
                {/* Import from previous */}
                <div className="flex gap-2 items-end mb-4">
                 <div className="flex-1">
-                    <label className="block text-gray-500 text-xs mb-1">Import from Previous</label>
+                    <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                        Import from Previous
+                        <Tooltip content="Quickly copy the participant list from a past request." icon />
+                    </label>
                     <select
                         value={selectedImportId}
                         onChange={(e) => handleImportSelect(e.target.value)}
@@ -503,7 +518,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     </select>
                 </div>
                 <div className="w-1/3">
-                    <label className="block text-gray-500 text-xs mb-1">Filter</label>
+                    <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                        Filter
+                        <Tooltip content="Choose which users to copy: All invited, only those who accepted, or only those who submitted tracks." icon />
+                    </label>
                     <select
                         value={importFilter}
                         onChange={(e: any) => setImportFilter(e.target.value)}
@@ -543,7 +561,10 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
                {/* 3. Email Invites */}
                <div className="mb-3">
-                 <label className="block text-gray-500 text-xs mb-1">Invite by Email</label>
+                 <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                     Invite by Email
+                     <Tooltip content="Add external users. They will need the invite link to join." icon />
+                 </label>
                  <div className="flex gap-2 mb-2">
                    <input 
                      type="email" 

@@ -5,6 +5,7 @@ import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
 import { Check, Copy, ArrowRight, Filter } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Tooltip } from './ui/Tooltip';
 
 // Define a timeout for GunDB acknowledgments (e.g., 30 seconds)
 const GUN_ACK_TIMEOUT = 30000;
@@ -512,7 +513,10 @@ export function CreateRequest() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-gray-400 text-sm mb-1">Deadline</label>
+            <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                Deadline
+                <Tooltip content="The cut-off time for new submissions. Comments and interactions will remain open after this time." icon />
+            </label>
             <input 
               type="datetime-local" 
               value={deadline}
@@ -522,7 +526,10 @@ export function CreateRequest() {
             />
           </div>
           <div>
-             <label className="block text-gray-400 text-sm mb-1">Access Mode</label>
+             <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                 Access Mode
+                 <Tooltip content="Public: Invited users are automatically added (no acceptance needed). Private: Invited users must accept the invite. Volunteer Pool: Open to anyone to claim a limited seat." icon />
+             </label>
              <select 
                value={accessMode}
                onChange={(e: any) => {
@@ -551,7 +558,10 @@ export function CreateRequest() {
         {/* Volunteer Mode Settings */}
         {accessMode === 'volunteer' && (
             <div className="bg-gray-900 border border-gray-600 rounded p-4 space-y-3">
-                <h4 className="text-sm font-semibold text-gray-300">Volunteer Settings</h4>
+                <h4 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                    Volunteer Settings
+                    <Tooltip content="Limit the number of people who can claim a spot. This encourages commitment and prevents overwhelming feedback." icon />
+                </h4>
                 
                 <div className="flex items-center gap-4">
                     <label className="text-gray-400 text-sm">Open Seats:</label>
@@ -573,8 +583,9 @@ export function CreateRequest() {
                         onChange={e => setAllowSubmissions(e.target.checked)}
                         className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
                     />
-                    <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none">
-                        Allow volunteers to submit tracks (Uncheck for Feedback-Only request)
+                    <label htmlFor="allowSubmissions" className="text-gray-400 text-sm cursor-pointer select-none flex items-center gap-2">
+                        Allow volunteers to submit tracks
+                        <Tooltip content="Uncheck this if you only want feedback on YOUR tracks. If checked, volunteers can upload their own work." icon />
                     </label>
                 </div>
             </div>
@@ -593,12 +604,18 @@ export function CreateRequest() {
         {/* Participants Management (Hidden if Volunteer Pool is active) */}
         {(accessMode !== 'volunteer') && (
         <div className="border-t border-gray-700 pt-4 space-y-4">
-          <label className="block text-gray-400 text-sm mb-1 font-semibold">Manage Participants</label>
+          <label className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-2">
+              Manage Participants
+              <Tooltip content="Build your invite list here. Users must be invited to see this request (unless Volunteer Mode is on)." icon />
+          </label>
           
           {/* 1. Import from previous */}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-                <label className="block text-gray-500 text-xs mb-1">Import from Previous Request</label>
+                <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                    Import from Previous Request
+                    <Tooltip content="Quickly copy the participant list from a past request." icon />
+                </label>
                 <select
                     value={selectedImportId}
                     onChange={(e) => handleImportSelect(e.target.value)}
@@ -611,7 +628,10 @@ export function CreateRequest() {
                 </select>
             </div>
             <div className="w-1/3">
-                <label className="block text-gray-500 text-xs mb-1">Filter</label>
+                <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                    Filter
+                    <Tooltip content="Choose which users to copy: All invited, only those who accepted, or only those who submitted tracks." icon />
+                </label>
                 <div className="relative">
                     <Filter className="w-4 h-4 absolute left-2 top-2.5 text-gray-500" />
                     <select
@@ -655,7 +675,10 @@ export function CreateRequest() {
 
           {/* 3. Email Invites */}
           <div>
-            <label className="block text-gray-500 text-xs mb-1">Invite by Email (Comma or newline separated)</label>
+            <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                Invite by Email (Comma or newline separated)
+                <Tooltip content="Add external users. They will need the invite link (generated after creation) to join." icon />
+            </label>
             <div className="flex flex-col gap-2">
               <textarea 
                 value={emailInput}

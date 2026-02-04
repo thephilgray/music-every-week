@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users, Loader2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -37,6 +37,7 @@ export function RequestDetail() {
 
   // Access Mode Logic
   const [myParticipationStatus, setMyParticipationStatus] = useState<'pending' | 'accepted' | 'declined' | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
      if (user && id) {
@@ -61,9 +62,17 @@ export function RequestDetail() {
 
   useEffect(() => {
     if (!id) return;
+    setIsLoading(true);
+
+    // Fallback timeout for "Not Found" state
+    const timer = setTimeout(() => {
+        setIsLoading(false);
+    }, 2000);
 
     // Fetch Request Details
     gun.get('file_requests').get(id).on((data: any) => {
+        clearTimeout(timer);
+        setIsLoading(false);
         if (data) {
             // Security Verification
             const soul = data._ && data._['#'];
@@ -390,6 +399,14 @@ export function RequestDetail() {
           error("Error declining invite");
       }
   };
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center items-center h-[50vh] text-gray-500">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            </div>
+        );
+    }
 
     if (!request) {
         return (

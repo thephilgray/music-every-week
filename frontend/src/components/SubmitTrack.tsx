@@ -24,7 +24,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const { gun, user, pubKey, userProfile, userPair } = useGun(); // Destructure userPair
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
-  const [linkProfile, setLinkProfile] = useState(true); // New State: Default to Linked
+  const [isAnonymous, setIsAnonymous] = useState(false); // Default: Not Anonymous (Linked)
   const [lyrics, setLyrics] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [artFile, setArtFile] = useState<File | null>(null);
@@ -64,8 +64,14 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     if (existingSubmission) {
         setTitle(existingSubmission.title);
         setByline(existingSubmission.byline || '');
-        // Load linkProfile state, defaulting to true if undefined (legacy data is usually linked)
-        setLinkProfile(existingSubmission.linkProfile !== undefined ? existingSubmission.linkProfile : true);
+        
+        // Load Anonymous state (Inverse of linkProfile)
+        if (existingSubmission.linkProfile !== undefined) {
+            setIsAnonymous(!existingSubmission.linkProfile);
+        } else {
+            setIsAnonymous(false); // Default to linked if undefined
+        }
+
         setLyrics(existingSubmission.lyrics || '');
         setStage(existingSubmission.stage || 'First Draft / Demo');
         
@@ -88,7 +94,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             setCollaborators(directKeys);
         } else if (existingSubmission.id) {
             // If no direct keys, it might be a reference (Old format). Fetch from User Graph source.
-            // Note: If we migrated fully to JSON string, this fallback is for legacy data compatibility.
             user.get('submissions').get(existingSubmission.id).get('collaborators').once((data: any) => {
                 if (data && typeof data === 'object') {
                     const fetchedKeys = Object.keys(data).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
@@ -308,12 +313,22 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         collaborators.forEach(c => collaboratorsMap[c] = true);
 
         // Determine final byline
-        const finalByline = byline.trim() || userProfile?.alias || '';
+        let finalByline = byline.trim();
+        if (isAnonymous) {
+            // If Anonymous and empty byline, use "Anonymous"
+            if (!finalByline) finalByline = 'Anonymous';
+        } else {
+            // If Linked and empty byline, use Alias
+            if (!finalByline) finalByline = userProfile?.alias || '';
+        }
         
-        // Save preference if user typed something
+        // Save preference if user typed something (only if not anonymous?)
+        // Or should we always save the text they typed? Let's save it.
         if (byline.trim()) {
             user.get('preferences').get('lastByline').put(byline.trim());
         }
+
+        const linkProfile = !isAnonymous;
 
         // Ensure no undefined values are passed to GunDB
         const submission: any = { 
@@ -321,7 +336,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             requestId,
             title,
             byline: finalByline,
-            linkProfile, // Store preference
+            linkProfile,
             lyrics: String(lyrics || ''), // Ensure empty string if null/undefined
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
@@ -370,16 +385,15 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             'Linked to request_submissions'
         ));
 
-        // Link to user's public profile (Double-Linking) - ONLY IF LINKED
+        // Also link to user's public profile (Double-Linking)
+        // This is crucial for the "Profile" view to show all works
         if (pubKey) {
-            // Always link to my_submissions (for dashboard)
             gunPromises.push(createGunPutPromise(
                 user.get('my_submissions').get(submissionId), 
                 user.get('submissions').get(submissionId), 
                 'Linked to my_submissions'
             ));
 
-            // Conditionally link to public profile
             if (linkProfile) {
                 gunPromises.push(createGunPutPromise(
                     gun.get('all_users').get(pubKey).get('submissions').get(submissionId), 
@@ -387,8 +401,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     'Linked to all_users (public profile)'
                 ));
             } else {
-                // If previously linked (edit mode), we might want to ensure it's removed.
-                // Writing null removes the key.
+                // If Anonymous, ensure we REMOVE any existing link if editing
                 gunPromises.push(createGunPutPromise(
                     gun.get('all_users').get(pubKey).get('submissions').get(submissionId), 
                     null, 
@@ -398,23 +411,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         }
 
         // Link to collaborators' profiles and Notify Collaborator
-        // Note: Collaborators should probably always be notified, but maybe not linked publicly?
-        // Requirement: "byline should not be linked to their profile (or that of any collaborators)"
-        // This implies visual linking in UI. But usually collaborators want the track on their profile too.
-        // If "Anonymous" implies "I don't want this on my profile", collaborators might still want it.
-        // But if the Uploader is anonymous, the collaborator link might reveal them? 
-        // Collaborator logic: we link to *collaborator's* profile.
-        // If Uploader is Anon, does he want to hide Collaborators? 
-        // User said: "byline should not be linked to their profile (or that of any collaborators)".
-        // This suggests strictly UI behavior for the byline text.
-        // BUT "track should not appear on their profile".
-        // Let's assume collaborators are still linked normally unless we want a deep "Incognito" mode.
-        // However, if the user unchecks "Link to MY profile", it mainly affects the Uploader.
-        // If we want to hide it from Collaborators' profiles too, we should skip this loop or put null.
-        // Let's assume standard behavior for collaborators for now, but respect "Link to MY profile" for the uploader.
-        // Actually, if the uploader is "Anonymous", usually the whole project is kinda secretive.
-        // Let's stick to the Uploader's profile for now based on the checkbox label "Link to MY profile".
-        
         collaborators.forEach(collabPub => {
             gunPromises.push(createGunPutPromise(
                 gun.get('all_users').get(collabPub).get('submissions').get(submissionId), 
@@ -465,9 +461,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         }));
 
         // Write to Global Feed if Public and New
-        // If Anonymous, maybe don't write to Global Feed? Or write without author link?
-        // User didn't specify Global Feed, but "hidden from others" implies maybe skipping this too.
-        // "hidden from others by default" -> implies it shouldn't be broadcasted.
         if (accessMode === 'direct' && !existingSubmission && linkProfile) {
             const pulseId = crypto.randomUUID();
             const dateStr = new Date().toISOString().split('T')[0];
@@ -578,7 +571,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Byline (Optional)</label>
-                <div className="flex gap-3 items-center">
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                     <input 
                         type="text" 
                         value={byline}
@@ -586,15 +579,21 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                         placeholder="e.g. The Band Name"
                     />
-                    <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-                        <input 
-                            type="checkbox" 
-                            checked={linkProfile} 
-                            onChange={e => setLinkProfile(e.target.checked)}
-                            className="rounded bg-gray-900 border-gray-600 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="whitespace-nowrap">Link to my profile</span>
-                    </label>
+                    
+                    {/* Anonymous Toggle */}
+                    <button
+                        type="button"
+                        onClick={() => setIsAnonymous(!isAnonymous)}
+                        className={`flex items-center gap-2 cursor-pointer select-none transition-colors p-2 rounded-lg border w-fit ${isAnonymous ? 'bg-blue-900/30 border-blue-500/50' : 'bg-gray-800 border-gray-700'}`}
+                        title="Submit anonymously?"
+                    >
+                        <div className={`w-10 h-5 rounded-full relative transition-colors ${isAnonymous ? 'bg-blue-500' : 'bg-gray-600'}`}>
+                            <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${isAnonymous ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </div>
+                        <span className={`text-sm ${isAnonymous ? 'text-blue-200' : 'text-gray-400'}`}>
+                            Anonymous
+                        </span>
+                    </button>
                 </div>
             </div>
 

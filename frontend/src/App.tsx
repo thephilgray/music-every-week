@@ -21,8 +21,25 @@ function App() {
 
   if (isAuthLoading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gray-900 text-white">
+      <div className="flex flex-col justify-center items-center h-screen bg-gray-900 text-white gap-4">
         <Loader2 className="animate-spin h-12 w-12 text-blue-500" />
+        <button 
+            type="button"
+            onClick={async () => {
+                if (confirm("This will delete ALL local data (IndexedDB, LocalStorage) to fix corruption. Continue?")) {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    const dbs = await window.indexedDB.databases();
+                    for (const db of dbs) {
+                        if (db.name) window.indexedDB.deleteDatabase(db.name);
+                    }
+                    window.location.reload();
+                }
+            }}
+            className="text-xs text-red-500 hover:text-red-400 underline mt-4"
+          >
+              Troubleshoot: Hard Reset / Clear Data
+          </button>
       </div>
     );
   }
@@ -37,8 +54,25 @@ function App() {
 
   if (isAuthorized === undefined) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gray-900 text-white">
+      <div className="flex flex-col justify-center items-center h-screen bg-gray-900 text-white gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+        <button 
+            type="button"
+            onClick={async () => {
+                if (confirm("This will delete ALL local data (IndexedDB, LocalStorage) to fix corruption. Continue?")) {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    const dbs = await window.indexedDB.databases();
+                    for (const db of dbs) {
+                        if (db.name) window.indexedDB.deleteDatabase(db.name);
+                    }
+                    window.location.reload();
+                }
+            }}
+            className="text-xs text-red-500 hover:text-red-400 underline mt-4"
+          >
+              Troubleshoot: Hard Reset / Clear Data
+          </button>
       </div>
     );
   }

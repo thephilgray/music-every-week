@@ -166,6 +166,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                         Edit Profile
                     </button>
 
+                    {userProfile?.isHost && (
                     <button 
                         onClick={generateInvite}
                         className="w-full text-left px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 hover:text-blue-300 flex items-center gap-2"
@@ -173,6 +174,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                         <UserPlus className="w-4 h-4" />
                         Invite a Friend
                     </button>
+                    )}
 
                     <div className="border-t border-gray-700 my-1"></div>
                     

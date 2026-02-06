@@ -114,6 +114,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             email: data.email,
             isAdmin: !!data.isAdmin,
             isVolunteer: !!data.isVolunteer,
+            isHost: !!data.isHost,
             submissions: data.submissions,
           });
         } else {

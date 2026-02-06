@@ -65,7 +65,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         </button>
       </div>
 
-      <nav className="flex-1 px-4 py-4 space-y-2">
+      <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -113,9 +113,6 @@ export function Sidebar({ onClose }: SidebarProps) {
             <LogOut className="w-5 h-5" />
             Log Out
         </button>
-        <div className="text-xs text-gray-600 font-mono px-4 text-center">
-          Powered by TrackPeer
-        </div>
       </div>
       
       {showBugReport && <BugReportModal onClose={() => setShowBugReport(false)} />}

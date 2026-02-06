@@ -21,6 +21,7 @@ export function Settings() {
 
   // Privacy State
   const [isVolunteer, setIsVolunteer] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   const [showRequestsOnProfile, setShowRequestsOnProfile] = useState(true);
   const [showSubmissionsOnProfile, setShowSubmissionsOnProfile] = useState(true);
 
@@ -57,6 +58,7 @@ export function Settings() {
       setLinks(userProfile.links || []);
       setCurrentAvatarUrl(userProfile.avatarUrl || '');
       setIsVolunteer(!!userProfile.isVolunteer);
+      setIsHost(!!userProfile.isHost);
     }
 
     // Load Public Visibility Settings (Direct Fetch to be sure)
@@ -88,6 +90,7 @@ export function Settings() {
         location,
         links,
         isVolunteer,
+        isHost,
         avatarUrl: avatarUrl || ''
       };
 
@@ -147,22 +150,18 @@ export function Settings() {
       if (!pubKey) return;
       const newValue = !isVolunteer;
       setIsVolunteer(newValue); 
-      // Save immediately? Or wait for "Save" button? 
-      // The Volunteer toggle is separate in UI. Let's keep it separate or consolidate.
-      // Current UI has a toggle button next to text.
-      // Better to make it controlled by state and saved via the main Save button?
-      // No, toggle UI implies immediate action usually.
-      // But the privacy section has a "Save" button? No, it has a toggle button for "Accept Unsolicited".
-      
-      // Let's look at the UI I added in Step 2.
-      // I added checkboxes for the new settings, and a "Save Privacy Settings" button?
-      // No, I added the JSX but didn't wire the button yet (the previous `handleSavePrivacy` failed).
-      
-      // I will implement `handleSavePrivacySettings` and wire it to the button I added.
-      // And I will leave `handleToggleVolunteer` alone for now or integrate it.
       
       gun.get('all_users').get(pubKey).get('isVolunteer').put(newValue);
       user.get(APP_SCOPE).get('profile').get('isVolunteer').put(newValue);
+  };
+
+  const handleToggleHost = () => {
+      if (!pubKey) return;
+      const newValue = !isHost;
+      setIsHost(newValue); 
+      
+      gun.get('all_users').get(pubKey).get('isHost').put(newValue);
+      user.get(APP_SCOPE).get('profile').get('isHost').put(newValue);
   };
 
   const handleClearData = async () => {
@@ -384,6 +383,22 @@ export function Settings() {
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isVolunteer ? 'bg-purple-600' : 'bg-gray-600'}`}
             >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isVolunteer ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800 mt-4">
+            <div>
+                <h3 className="text-white font-medium mb-1">Host Requests</h3>
+                <p className="text-sm text-gray-500 max-w-md">
+                    Enable the ability to create new requests and invite others. 
+                    Turn this on if you want to host collaborative sessions.
+                </p>
+            </div>
+            <button 
+                onClick={handleToggleHost}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isHost ? 'bg-purple-600' : 'bg-gray-600'}`}
+            >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isHost ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
         </div>
       </section>

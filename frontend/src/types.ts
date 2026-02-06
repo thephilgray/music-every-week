@@ -9,6 +9,7 @@ export interface UserProfile {
   links?: { label: string; url: string }[];
   isAdmin?: boolean;
   isVolunteer?: boolean; // Opt-in for random feedback requests
+  isHost?: boolean; // Opt-in to host requests and invite users
   submissions?: Record<string, boolean>; // Linked to Submission IDs
   invitedBy?: string; // Pub key of inviter
   invites?: Record<string, boolean>; // List of invited pub keys

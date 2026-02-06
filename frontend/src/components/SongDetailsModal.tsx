@@ -10,6 +10,7 @@ interface Track {
     lyrics?: string;
     artworkUrl?: string;
     uploaderPub?: string;
+    linkProfile?: boolean;
     context?: {
         name: string;
         link: string;
@@ -37,7 +38,7 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                        <div className="flex-1">
                            <h3 className="text-xl font-bold text-white leading-tight">{currentTrack.title}</h3>
                            <p className="text-gray-400 text-sm leading-tight">
-                               {currentTrack.uploaderPub ? (
+                               {currentTrack.uploaderPub && currentTrack.linkProfile !== false ? (
                                    <Link to={`/profile/${currentTrack.uploaderPub}`} className="text-blue-400 hover:underline" onClick={onClose}>
                                        {currentTrack.byline || `by ${currentTrack.uploaderPub.substring(0, 6)}...`}
                                    </Link>

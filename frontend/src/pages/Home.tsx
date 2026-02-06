@@ -7,7 +7,7 @@ import { APP_SCOPE } from '../config/appConfig';
 import type { FileRequest } from '../types';
 
 export function Home() {
-  const { gun, user, pubKey, isInternetOnline } = useGun();
+  const { gun, user, pubKey, isInternetOnline, userProfile } = useGun();
   const [showCreate, setShowCreate] = useState(false);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [participation, setParticipation] = useState<Record<string, string>>({});
@@ -69,6 +69,7 @@ export function Home() {
            </div>
            <p className="text-gray-400">Manage your collaborative sessions</p>
         </div>
+        {userProfile?.isHost && (
         <button 
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-blue-900/20"
@@ -77,6 +78,7 @@ export function Home() {
           <span className="md:hidden">{showCreate ? 'Cancel' : 'New'}</span>
           <span className="hidden md:inline">{showCreate ? 'Cancel' : 'New Request'}</span>
         </button>
+        )}
       </div>
 
       {showCreate && (

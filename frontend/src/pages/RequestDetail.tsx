@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users, Loader2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
@@ -41,11 +42,23 @@ export function RequestDetail() {
 
   useEffect(() => {
      if (user && id) {
-         user.get('participation').get(id).on((data: any) => {
+         user.get(APP_SCOPE).get('participation').get(id).on((data: any) => {
              setMyParticipationStatus(data);
          });
      }
   }, [user, id]);
+
+  // Auto-Sync Participation (Migration Fix)
+  useEffect(() => {
+      if (!id || !pubKey || !participants || !user) return;
+      
+      const globalStatus = participants[pubKey]?.status;
+      // If globally accepted but locally missing/different, sync it.
+      if (globalStatus === 'accepted' && myParticipationStatus !== 'accepted') {
+          console.log("Auto-syncing participation status to APP_SCOPE...");
+          user.get(APP_SCOPE).get('participation').get(id).put('accepted');
+      }
+  }, [id, pubKey, participants, myParticipationStatus, user]);
 
   // Peer Review Logic
   const [unlockedSubmissionIds, setUnlockedSubmissionIds] = useState<string[]>([]);
@@ -378,7 +391,7 @@ export function RequestDetail() {
           await gun.get('request_participants').get(id).get(pubKey).put(partData);
           
           // Write to local participation
-          user.get('participation').get(id).put('accepted');
+          user.get(APP_SCOPE).get('participation').get(id).put('accepted');
           
           success("You have successfully joined the request!");
           setMyParticipationStatus('accepted');
@@ -392,7 +405,7 @@ export function RequestDetail() {
       if (!id || !pubKey) return;
       try {
           await gun.get('request_participants').get(id).get(pubKey).get('status').put('declined');
-          user.get('participation').get(id).put('declined');
+          user.get(APP_SCOPE).get('participation').get(id).put('declined');
           success("Invite declined.");
           setMyParticipationStatus('declined');
       } catch (e) {

@@ -121,7 +121,11 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
   
   // Render Uploader Name (Link or Text based on isLinked)
   const renderUploader = () => {
-      const name = names[uploaderPub] || uploaderPub.substring(0, 8);
+      const displayPub = uploaderPub || 'unknown';
+      const name = names[displayPub] || displayPub.substring(0, 8);
+      
+      if (!uploaderPub) return <span className="text-gray-400">Unknown</span>;
+
       if (isLinked) {
           return (
               <Link to={`/profile/${uploaderPub}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
@@ -180,16 +184,19 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
 
   // Case 3: Expanded OR No Byline -> Show Full List
   // If !isLinked, we just show names as text.
+  const displayPub = uploaderPub || 'unknown';
+  const uploaderName = names[displayPub] || displayPub.substring(0, 8);
+
   return (
       <div className={className}>
           <span className="flex items-center gap-1 flex-wrap">
               by 
-              {isLinked ? (
+              {isLinked && uploaderPub ? (
                   <Link to={`/profile/${uploaderPub}`} className="hover:text-white hover:underline ml-1 relative z-10" onClick={e => e.stopPropagation()}>
-                      {names[uploaderPub] || uploaderPub.substring(0, 8)}
+                      {uploaderName}
                   </Link>
               ) : (
-                  <span className="text-gray-400 ml-1">{names[uploaderPub] || uploaderPub.substring(0, 8)}</span>
+                  <span className="text-gray-400 ml-1">{uploaderName}</span>
               )}
               
               {collabPubs.map((pub) => (

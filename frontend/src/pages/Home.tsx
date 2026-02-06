@@ -26,6 +26,7 @@ export function Home() {
     // 2. Listen to Global Requests (Public Scoped Graph via useGun)
     gun.get('file_requests').map().on((data: any, key: string) => {
         if (data && data.title) {
+            // console.log("Fetched Global Request:", key, data.title, data.ownerPub);
             reqMap.set(key, { ...data, id: key });
             
             // Debounce/Batch update

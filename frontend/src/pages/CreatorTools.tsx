@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { APP_SCOPE } from '../config/appConfig';
+import { useToast } from '../contexts/ToastContext';
 import { EditRequest } from '../components/EditRequest';
 import { SubmitTrack } from '../components/SubmitTrack'; // For editing submissions
 import type { FileRequest, Submission } from '../types';
@@ -19,6 +20,7 @@ interface ParticipantRow {
 
 export function CreatorTools() {
   const { gun, user, pubKey } = useGun();
+  const { success, error } = useToast();
   
   // Tabs
   const [activeTab, setActiveTab] = useState<'requests' | 'submissions'>('requests');
@@ -292,6 +294,67 @@ export function CreatorTools() {
       document.body.removeChild(link);
   };
 
+  const handleRepublish = async () => {
+      if (!selectedRequest || !selectedRequest.id) return;
+      
+      try {
+          // Construct clean object
+          const reqData: any = { 
+              ...selectedRequest,
+              ownerPub: pubKey, // Enforce current ownership
+              // Ensure arrays are stringified for GunDB
+              pending_emails: Array.isArray(selectedRequest.pending_emails) 
+                  ? JSON.stringify(selectedRequest.pending_emails) 
+                  : selectedRequest.pending_emails
+          };
+          delete reqData.participants; 
+          delete reqData._; 
+          
+          // Re-write to global node
+          await gun.get('file_requests').get(selectedRequest.id).put(reqData);
+          
+          // Also ensure it is in my_requests (self-healing local scope)
+          user.get(APP_SCOPE).get('my_requests').get(selectedRequest.id).put(reqData);
+          
+          success("Request republished to global feed!");
+      } catch (e) {
+          console.error("Republish failed", e);
+          error("Failed to republish request.");
+      }
+  };
+
+  const handleRepublishSubmission = async (subToPublish: Submission | null = selectedSubmission) => {
+      if (!subToPublish || !subToPublish.id || !subToPublish.requestId || !pubKey) return;
+      
+      try {
+          const subData: any = { ...subToPublish };
+          delete subData._;
+          
+          // Safety: Stringify arrays if they aren't already
+          if (Array.isArray(subData.waveform)) subData.waveform = JSON.stringify(subData.waveform);
+          if (Array.isArray(subData.feedbackFocus)) subData.feedbackFocus = JSON.stringify(subData.feedbackFocus);
+          if (typeof subData.collaborators === 'object') subData.collaborators = JSON.stringify(subData.collaborators);
+          
+          // 1. Write to Request Node (Global)
+          await gun.get('request_submissions').get(subToPublish.requestId).get(subToPublish.id).put(subData);
+          
+          // 2. Write to User Root Graph (Public Profile Source)
+          await user.get('submissions').get(subToPublish.id).put(subData);
+          
+          // 3. Link to All Users (Global Directory)
+          await gun.get('all_users').get(pubKey).get('submissions').get(subToPublish.id).put(pubKey);
+          
+          if (subToPublish === selectedSubmission) {
+              success("Submission republished to all public feeds!");
+          }
+      } catch (e) {
+          console.error("Republish submission failed", e);
+          if (subToPublish === selectedSubmission) {
+              error("Failed to republish submission.");
+          }
+      }
+  };
+
   if (!pubKey) return <div className="text-center py-20 text-gray-500">Please login to access Creator Tools.</div>;
 
   return (
@@ -313,7 +376,9 @@ export function CreatorTools() {
                     <Music className="w-4 h-4" /> Submissions
                 </button>
             </div>
-
+            
+            {/* Sync Button - REMOVED (Migration Tool) */}
+            
             <div className="p-4 space-y-1 flex-1 overflow-y-auto">
                 {activeTab === 'requests' ? (
                     <>
@@ -381,6 +446,13 @@ export function CreatorTools() {
                                     title="Edit Request"
                                 >
                                     <Edit className="w-5 h-5" />
+                                </button>
+                                <button 
+                                    onClick={handleRepublish}
+                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                    title="Republish to Global Feed (Fix Missing)"
+                                >
+                                    <RotateCw className="w-5 h-5" />
                                 </button>
                             </div>
                             <p className="text-gray-400">Manage participants and exports</p>
@@ -507,6 +579,13 @@ export function CreatorTools() {
                                     title="Edit Submission"
                                 >
                                     <Edit className="w-5 h-5" />
+                                </button>
+                                <button 
+                                    onClick={() => handleRepublishSubmission(selectedSubmission)}
+                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                    title="Republish Submission (Fix Missing)"
+                                >
+                                    <RotateCw className="w-5 h-5" />
                                 </button>
                             </div>
                             <p className="text-gray-400 text-sm">

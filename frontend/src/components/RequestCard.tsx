@@ -17,8 +17,8 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
 
     const submissionIds = new Set<string>();
     
-    // Listen for submissions to this request
-    gun.get('file_requests').get(request.id).get('submissions').map().on((data: any, key: any) => {
+    // Listen for submissions to this request (Global Node)
+    gun.get('request_submissions').get(request.id).map().on((data: any, key: any) => {
       if (data) {
         submissionIds.add(key);
         setSubmissionCount(submissionIds.size);
@@ -26,11 +26,8 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
     });
 
     return () => {
-        // Cleanup subscription is hard with .map().on(), usually we just let it be or use an abort controller if gun supports it (it doesn't really).
-        // Standard Gun practice for components is often just letting it run or using .off() if possible, but .map().off() is tricky.
-        // For now, given the scale, we'll rely on React unmounting. 
-        // Ideally we would store the subscription and call .off() on the specific node.
-        gun.get('file_requests').get(request.id!).get('submissions').off();
+        // Cleanup subscription
+        gun.get('request_submissions').get(request.id!).off();
     };
   }, [gun, request.id]);
 

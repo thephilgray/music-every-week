@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useGun } from './contexts/GunContext';
@@ -18,11 +19,18 @@ import { LandingPage } from './pages/LandingPage';
 
 function App() {
   const { isLoggedIn, isAuthorized, user, isAuthLoading } = useGun();
+  const [showReset, setShowReset] = useState(false);
+
+  useEffect(() => {
+      const timer = setTimeout(() => setShowReset(true), 3000);
+      return () => clearTimeout(timer);
+  }, []);
 
   if (isAuthLoading) {
     return (
       <div className="flex flex-col justify-center items-center h-screen bg-gray-900 text-white gap-4">
         <Loader2 className="animate-spin h-12 w-12 text-blue-500" />
+        {showReset && (
         <button 
             type="button"
             onClick={async () => {
@@ -40,6 +48,7 @@ function App() {
           >
               Troubleshoot: Hard Reset / Clear Data
           </button>
+        )}
       </div>
     );
   }
@@ -56,6 +65,7 @@ function App() {
     return (
       <div className="flex flex-col justify-center items-center h-screen bg-gray-900 text-white gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+        {showReset && (
         <button 
             type="button"
             onClick={async () => {
@@ -73,6 +83,7 @@ function App() {
           >
               Troubleshoot: Hard Reset / Clear Data
           </button>
+        )}
       </div>
     );
   }

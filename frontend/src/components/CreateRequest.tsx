@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
+import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
@@ -328,7 +329,7 @@ export function CreateRequest() {
         'Linked to global file_requests'
       ));
       metadataSavePromises.push(createGunPutPromise(
-        user.get('my_requests').get(requestId), 
+        user.get(APP_SCOPE).get('my_requests').get(requestId), 
         user.get('requests').get(requestId), 
         'Linked to my_requests'
       ));

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut, Globe } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 import { BugReportModal } from '../BugReportModal';
 
@@ -10,6 +10,7 @@ interface SidebarProps {
 
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, pubKey, gun } = useGun();
   const [unreadCount, setUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
@@ -49,10 +50,16 @@ export function Sidebar({ onClose }: SidebarProps) {
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
+  const handleNavigation = (path: string) => {
+      if (onClose) onClose();
+      // Small delay to ensure sidebar close animation starts/state clears before heavy routing
+      setTimeout(() => navigate(path), 50);
+  };
+
   return (
     <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
       <div className="p-6 flex justify-between items-center">
-        <Link to="/" className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3" onClick={onClose}>
           <img src="/mewlogo.png" alt="MEW" className="h-8 w-auto" />
           <span className="font-bold text-xl tracking-tight text-white">MEW</span>
         </Link>
@@ -69,13 +76,13 @@ export function Sidebar({ onClose }: SidebarProps) {
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
-            <Link
+            <button
               key={item.path}
-              to={item.path}
-              onClick={onClose}
-              className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+              type="button"
+              onClick={() => handleNavigation(item.path)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors text-left ${
                 isActive 
-                  ? 'bg-blue-600/10 text-blue-500' 
+                  ? 'bg-blue-600/10 text-blue-500'  
                   : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
               }`}
             >
@@ -88,7 +95,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                       {item.badge > 99 ? '99+' : item.badge}
                   </span>
               )}
-            </Link>
+            </button>
           );
         })}
       </nav>

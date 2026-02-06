@@ -50,8 +50,8 @@ export function AppLayout() {
 
       {/* Sidebar - Responsive */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 transform transition-transform duration-300 ease-in-out border-r border-gray-800
-        md:relative md:translate-x-0 md:border-r-0
+        fixed inset-y-0 left-0 z-[100] w-64 bg-gray-900 transform transition-transform duration-300 ease-in-out border-r border-gray-800
+        md:relative md:translate-x-0 md:border-r-0 md:z-30
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <Sidebar onClose={() => setSidebarOpen(false)} />

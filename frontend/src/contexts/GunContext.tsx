@@ -110,6 +110,8 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             alias: data.alias || 'Unknown',
             displayName: data.displayName,
             bio: data.bio,
+            location: data.location,
+            links: typeof data.links === 'string' ? JSON.parse(data.links) : data.links,
             avatarUrl: data.avatarUrl,
             email: data.email,
             isAdmin: !!data.isAdmin,

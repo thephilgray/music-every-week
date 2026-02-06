@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { APP_SCOPE } from '../config/appConfig';
@@ -18,6 +18,7 @@ export function Settings() {
   const [avatar, setAvatar] = useState<File | null>(null);
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const isDirty = useRef(false);
 
   // Privacy State
   const [isVolunteer, setIsVolunteer] = useState(false);
@@ -51,17 +52,22 @@ export function Settings() {
         });
     }
 
-    if (userProfile) {
-      setDisplayName(userProfile.displayName || userProfile.alias || '');
-      setBio(userProfile.bio || '');
-      setLocation(userProfile.location || '');
-      setLinks(userProfile.links || []);
-      setCurrentAvatarUrl(userProfile.avatarUrl || '');
+    if (userProfile && !isDirty.current) {
+      if (userProfile.displayName) setDisplayName(userProfile.displayName);
+      else if (userProfile.alias) setDisplayName(userProfile.alias);
+      
+      if (userProfile.bio) setBio(userProfile.bio);
+      if (userProfile.location) setLocation(userProfile.location);
+      if (userProfile.links && userProfile.links.length > 0) setLinks(userProfile.links);
+      if (userProfile.avatarUrl) setCurrentAvatarUrl(userProfile.avatarUrl);
+      
       setIsVolunteer(!!userProfile.isVolunteer);
       setIsHost(!!userProfile.isHost);
     }
+  }, [userProfile, pubKey, user]);
 
-    // Load Public Visibility Settings (Direct Fetch to be sure)
+  // Load Public Visibility Settings (Separate Effect to avoid re-subscription loop)
+  useEffect(() => {
     if (pubKey) {
         gun.get('all_users').get(pubKey).once((data: any) => {
             if (data) {
@@ -70,7 +76,7 @@ export function Settings() {
             }
         });
     }
-  }, [userProfile, pubKey, user]);
+  }, [pubKey, gun]);
 
   const handleSaveProfile = async () => {
     if (!user || !pubKey) return;
@@ -88,7 +94,7 @@ export function Settings() {
         displayName, // Only update display name
         bio,
         location,
-        links,
+        links: JSON.stringify(links), // GunDB doesn't support arrays
         isVolunteer,
         isHost,
         avatarUrl: avatarUrl || ''
@@ -118,16 +124,19 @@ export function Settings() {
 
   const handleAddLink = () => {
       setLinks([...links, { label: '', url: '' }]);
+      isDirty.current = true;
   };
 
   const handleRemoveLink = (index: number) => {
       setLinks(links.filter((_, i) => i !== index));
+      isDirty.current = true;
   };
 
   const handleLinkChange = (index: number, field: 'label' | 'url', value: string) => {
       const newLinks = [...links];
       newLinks[index] = { ...newLinks[index], [field]: value };
       setLinks(newLinks);
+      isDirty.current = true;
   };
 
   const handleToggleRequestsVisibility = () => {
@@ -254,7 +263,7 @@ export function Settings() {
                     type="file" 
                     accept="image/*"
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                    onChange={e => setAvatar(e.target.files?.[0] || null)}
+                    onChange={e => { setAvatar(e.target.files?.[0] || null); isDirty.current = true; }}
                     />
                     {avatar ? (
                         <img src={URL.createObjectURL(avatar)} className="w-full h-full object-cover" />
@@ -289,7 +298,7 @@ export function Settings() {
                     <input 
                         type="text" 
                         value={displayName}
-                        onChange={e => setDisplayName(e.target.value)}
+                        onChange={e => { setDisplayName(e.target.value); isDirty.current = true; }}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
                         placeholder="e.g. CryptoMusician"
                     />
@@ -298,7 +307,7 @@ export function Settings() {
                     <label className="block text-sm text-gray-400 mb-1">Bio</label>
                     <textarea 
                         value={bio}
-                        onChange={e => setBio(e.target.value)}
+                        onChange={e => { setBio(e.target.value); isDirty.current = true; }}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition h-24"
                         placeholder="Tell us about yourself..."
                     />
@@ -309,7 +318,7 @@ export function Settings() {
                     <input 
                         type="text" 
                         value={location}
-                        onChange={e => setLocation(e.target.value)}
+                        onChange={e => { setLocation(e.target.value); isDirty.current = true; }}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
                         placeholder="e.g. Nashville, TN"
                     />

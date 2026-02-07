@@ -39,9 +39,11 @@ export function CreatorTools() {
 
   // Fetch Requests
   useEffect(() => {
-    if (!user) return;
+    if (!user || !pubKey) return;
     const reqMap = new Map<string, FileRequest>();
-    user.get(APP_SCOPE).get('my_requests').map().on((data: any, key: string) => {
+    const requestsNode = user.get(APP_SCOPE).get('my_requests');
+
+    requestsNode.map().on((data: any, key: string) => {
         if (data && data.title) { 
             // ... (keep parsing logic)
             let parsedParticipants = {};
@@ -68,15 +70,20 @@ export function CreatorTools() {
             setMyRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
         }
     });
-  }, [user]);
+
+    return () => {
+        requestsNode.off();
+    };
+  }, [user, pubKey]);
 
   // Fetch Submissions
   useEffect(() => {
-      if (!user) return;
+      if (!user || !pubKey) return;
       const subMap = new Map<string, Submission>();
+      const submissionsNode = user.get(APP_SCOPE).get('my_submissions');
       
       // Listen to my_submissions (private reference) OR submissions (public reference, usually same data)
-      user.get(APP_SCOPE).get('my_submissions').map().on((data: any, key: string) => {
+      submissionsNode.map().on((data: any, key: string) => {
           if (data && data.title) {
               subMap.set(key, { ...data, id: key });
               setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));
@@ -86,7 +93,11 @@ export function CreatorTools() {
               setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));
           }
       });
-  }, [user]);
+
+      return () => {
+          submissionsNode.off();
+      };
+  }, [user, pubKey]);
 
   // ... (Keep existing fetch logic for selectedRequest)
   useEffect(() => {
@@ -94,6 +105,7 @@ export function CreatorTools() {
 
       const reqId = selectedRequest.id;
       const reqNode = gun.get('file_requests').get(reqId);
+      const participantsNode = gun.get('request_participants').get(reqId);
 
       // Subscribe to Root Metadata
       reqNode.on((data: any) => {
@@ -121,7 +133,7 @@ export function CreatorTools() {
       });
 
       // Subscribe to Participants Node (Separate Root)
-      gun.get('request_participants').get(reqId).map().on((data: any, pub: string) => {
+      participantsNode.map().on((data: any, pub: string) => {
           if (data) {
               setSelectedRequest(prev => {
                   if (!prev || prev.id !== reqId) return prev;
@@ -138,6 +150,11 @@ export function CreatorTools() {
               });
           }
       });
+
+      return () => {
+          reqNode.off();
+          participantsNode.off();
+      };
   }, [selectedRequest?.id, gun]);
 
   // 2. Process Data into Rows

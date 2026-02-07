@@ -48,8 +48,12 @@ export function Profile() {
     setSubmissions([]);
     setRequests([]);
 
+    const profileNode = gun.get('all_users').get(targetPub);
+    const submissionsNode = gun.get('all_users').get(targetPub).get('submissions');
+    const requestsNode = gun.get('file_requests');
+
     // 1. Fetch Profile
-    gun.get('all_users').get(targetPub).on((data: any) => {
+    profileNode.on((data: any) => {
         if (data) {
             let parsedLinks = [];
             if (typeof data.links === 'string') {
@@ -75,7 +79,7 @@ export function Profile() {
     });
 
     // 2. Fetch Submissions (from user's public list)
-    gun.get('all_users').get(targetPub).get('submissions').map().on((data: any, key: string) => {
+    submissionsNode.map().on((data: any, key: string) => {
         if (data) {
             const subId = key;
             // data is uploaderPub (new) or true (legacy/self)
@@ -115,7 +119,7 @@ export function Profile() {
     });
 
     // 3. Fetch Requests (Global Scan - Filter by Owner)
-    gun.get('file_requests').map().on((data: any, key: string) => {
+    requestsNode.map().on((data: any, key: string) => {
         if (data && data.ownerPub === targetPub) {
             setRequests(prev => {
                 const exists = prev.find(r => r.id === key);
@@ -124,6 +128,12 @@ export function Profile() {
             });
         }
     });
+
+    return () => {
+        profileNode.off();
+        submissionsNode.off();
+        requestsNode.off();
+    };
 
   }, [targetPub, gun]);
 

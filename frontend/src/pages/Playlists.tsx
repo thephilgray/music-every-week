@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import type { Playlist, Submission } from '../types';
 import { Play, Trash2, ListMusic, Loader2, Edit, X } from 'lucide-react';
@@ -14,7 +13,7 @@ export function Playlists() {
 
   useEffect(() => {
      setPlaylists([]);
-     user.get(APP_SCOPE).get('playlists').map().on((data: any, key: string) => {
+     user.get('playlists').map().on((data: any, key: string) => {
          if (data && data.title) {
              let tracks = [];
              if (typeof data.tracks === 'string') {
@@ -46,28 +45,36 @@ export function Playlists() {
   }, [user, selectedPlaylist?.id]);
 
   const handlePlay = async (playlist: Playlist, startIndex = 0) => {
+      console.log("handlePlay initiated for playlist:", playlist.id);
       if (!playlist.tracks || playlist.tracks.length === 0) return;
       setLoadingId(playlist.id);
       
-      // Fetch audioUrl for each track
+      // Fetch audioUrl for each track with timeout
       const promises = playlist.tracks.map(track => {
-          return new Promise<Submission | null>((resolve) => {
-              gun.get('file_requests')
-                 .get(track.requestId)
-                 .get('submissions')
-                 .get(track.submissionId)
-                 .once((data: any) => {
-                     if (data && data.audioUrl) {
-                        resolve({ ...data, id: track.submissionId });
-                     } else {
-                        resolve(null);
-                     }
-                 });
-          });
+          return Promise.race([
+              new Promise<Submission | null>((resolve) => {
+                  gun.get('request_submissions')
+                     .get(track.requestId)
+                     .get(track.submissionId)
+                     .once((data: any) => {
+                         if (data && data.audioUrl) {
+                            let parsedWaveform = data.waveform;
+                            if (typeof data.waveform === 'string') {
+                                try { parsedWaveform = JSON.parse(data.waveform); } catch (e) { parsedWaveform = []; }
+                            }
+                            resolve({ ...data, id: track.submissionId, waveform: parsedWaveform });
+                         } else {
+                            resolve(null);
+                         }
+                     });
+              }),
+              new Promise<Submission | null>((resolve) => setTimeout(() => resolve(null), 2000))
+          ]);
       });
       
       const results = await Promise.all(promises);
       const validTracks = results.filter(t => t !== null) as Submission[];
+      console.log(`Loaded ${validTracks.length} valid tracks out of ${playlist.tracks.length}`);
       
       if (validTracks.length > 0) {
           // Adjust validTracks start index based on original playlist index if valid
@@ -87,7 +94,7 @@ export function Playlists() {
 
   const deletePlaylist = (id: string) => {
       if(confirm('Delete this playlist?')) {
-          user.get(APP_SCOPE).get('playlists').get(id).put(null);
+          user.get('playlists').get(id).put(null);
       }
   };
 
@@ -98,7 +105,7 @@ export function Playlists() {
       const newTracks = [...selectedPlaylist.tracks];
       newTracks.splice(index, 1);
       
-      user.get(APP_SCOPE).get('playlists').get(selectedPlaylist.id).put({
+      user.get('playlists').get(selectedPlaylist.id).put({
           tracks: JSON.stringify(newTracks)
       });
       // State updates automatically via listener

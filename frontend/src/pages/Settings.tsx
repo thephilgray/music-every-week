@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 
@@ -109,7 +108,7 @@ export function Settings() {
       });
       
       // Update User Node
-      user.get(APP_SCOPE).get('profile').put(updates);
+      user.get('profile').put(updates);
 
       // Reset file input
       setAvatar(null);
@@ -161,7 +160,7 @@ export function Settings() {
       setIsVolunteer(newValue); 
       
       gun.get('all_users').get(pubKey).get('isVolunteer').put(newValue);
-      user.get(APP_SCOPE).get('profile').get('isVolunteer').put(newValue);
+      user.get('profile').get('isVolunteer').put(newValue);
   };
 
   const handleToggleHost = () => {
@@ -170,7 +169,7 @@ export function Settings() {
       setIsHost(newValue); 
       
       gun.get('all_users').get(pubKey).get('isHost').put(newValue);
-      user.get(APP_SCOPE).get('profile').get('isHost').put(newValue);
+      user.get('profile').get('isHost').put(newValue);
   };
 
   const handleClearData = async () => {

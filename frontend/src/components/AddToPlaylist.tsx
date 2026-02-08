@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Music, Check, Loader2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import type { Playlist, Submission } from '../types';
 
@@ -23,7 +22,7 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
     if (!user) return;
     const plMap = new Map<string, Playlist>();
     
-    user.get(APP_SCOPE).get('playlists').map().on((data: any, key: string) => {
+    user.get('playlists').map().on((data: any, key: string) => {
         if (data && data.title) {
             let tracks = [];
             if (typeof data.tracks === 'string') {
@@ -58,7 +57,7 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
       
       // 1. Save New Playlist
       await new Promise<void>(resolve => {
-          user.get(APP_SCOPE).get('playlists').get(id).put({
+          user.get('playlists').get(id).put({
               ...playlist,
               tracks: JSON.stringify([])
           }, () => resolve());
@@ -92,7 +91,7 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
       const updatedTracks = [...playlist.tracks, trackEntry];
       
       // Update
-      user.get(APP_SCOPE).get('playlists').get(playlist.id).get('tracks').put(JSON.stringify(updatedTracks));
+      user.get('playlists').get(playlist.id).get('tracks').put(JSON.stringify(updatedTracks));
       
       success(`Added to "${playlist.title}"`);
       onClose();

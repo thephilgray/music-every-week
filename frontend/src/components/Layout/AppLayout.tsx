@@ -4,12 +4,11 @@ import { Sidebar } from './Sidebar';
 import { ContextBar } from './ContextBar';
 import { Player } from './Player';
 import { useGun } from '../../contexts/GunContext';
-import { APP_SCOPE } from '../../config/appConfig';
 import { useToast } from '../../contexts/ToastContext';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { gun, user, pubKey, userProfile } = useGun();
+  const { gun, user, pubKey, userProfile, isConnected, isInternetOnline } = useGun();
   const { success, error } = useToast();
 
   useEffect(() => {
@@ -32,7 +31,7 @@ export function AppLayout() {
                   success("You have successfully joined the request!");
                   
                   // Local marker (Scoped)
-                  user.get(APP_SCOPE).get('participation').get(pendingReqId).put('accepted');
+                  user.get('participation').get(pendingReqId).put('accepted');
               }
           });
       }
@@ -60,6 +59,14 @@ export function AppLayout() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 w-full">
         <ContextBar onToggleSidebar={() => setSidebarOpen(true)} />
+        
+        {/* Connection Status Banner */}
+        {isInternetOnline && !isConnected && (
+            <div className="bg-yellow-600/20 border-b border-yellow-600/50 px-4 py-2 text-yellow-200 text-xs flex items-center justify-center gap-2 animate-pulse">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full" />
+                Connecting to Relay Server... (This may take a moment on cold start)
+            </div>
+        )}
         
         {/* Scrollable Stage */}
         <main className="flex-1 overflow-y-auto bg-black p-4 md:p-8 relative w-full">

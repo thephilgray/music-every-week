@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { User as UserIcon, MoreVertical, Trash2, Edit2, X, Check } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
@@ -19,8 +20,7 @@ export function CommentItem({ comment, onDelete, onEdit }: CommentItemProps) {
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(comment.text);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
 
   const isAuthor = pubKey && comment.authorPub === pubKey;
 
@@ -34,23 +34,26 @@ export function CommentItem({ comment, onDelete, onEdit }: CommentItemProps) {
     });
   }, [comment.authorPub, gun]);
 
-  // Click outside to close menu
-  useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-          if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-              setIsMenuOpen(false);
-          }
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const handleSaveEdit = () => {
       if (editedText.trim() !== comment.text) {
           onEdit?.(comment.id, editedText);
       }
       setIsEditing(false);
-      setIsMenuOpen(false);
+      setMenuPos(null);
+  };
+
+  const toggleMenu = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (menuPos) {
+          setMenuPos(null);
+      } else {
+          const rect = e.currentTarget.getBoundingClientRect();
+          // w-24 is 6rem (96px). We align right edge of menu with right edge of button.
+          setMenuPos({ 
+              top: rect.bottom + 4, 
+              left: rect.right - 96 
+          });
+      }
   };
 
   return (
@@ -74,28 +77,39 @@ export function CommentItem({ comment, onDelete, onEdit }: CommentItemProps) {
                 </div>
                 
                 {isAuthor && !isEditing && (
-                    <div className="relative" ref={menuRef}>
+                    <div className="relative">
                         <button 
-                            onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition p-1"
+                            onClick={toggleMenu}
+                            className={`text-gray-500 hover:text-white transition p-1 ${menuPos ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                         >
                             <MoreVertical className="w-3 h-3" />
                         </button>
-                        {isMenuOpen && (
-                            <div className="absolute right-0 top-full mt-1 w-24 bg-gray-800 border border-gray-700 rounded shadow-xl z-10 py-1">
-                                <button 
-                                    onClick={() => { setIsEditing(true); setIsMenuOpen(false); }}
-                                    className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 flex items-center gap-2"
+                        
+                        {menuPos && createPortal(
+                            <>
+                                <div 
+                                    className="fixed inset-0 z-[9998]" 
+                                    onClick={(e) => { e.stopPropagation(); setMenuPos(null); }}
+                                />
+                                <div 
+                                    className="fixed z-[9999] w-24 bg-gray-800 border border-gray-700 rounded shadow-xl py-1"
+                                    style={{ top: menuPos.top, left: menuPos.left }}
                                 >
-                                    <Edit2 className="w-3 h-3" /> Edit
-                                </button>
-                                <button 
-                                    onClick={() => { onDelete?.(comment.id); setIsMenuOpen(false); }}
-                                    className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700 flex items-center gap-2"
-                                >
-                                    <Trash2 className="w-3 h-3" /> Delete
-                                </button>
-                            </div>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setIsEditing(true); setMenuPos(null); }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 flex items-center gap-2"
+                                    >
+                                        <Edit2 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onDelete?.(comment.id); setMenuPos(null); }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700 flex items-center gap-2"
+                                    >
+                                        <Trash2 className="w-3 h-3" /> Delete
+                                    </button>
+                                </div>
+                            </>,
+                            document.body
                         )}
                     </div>
                 )}

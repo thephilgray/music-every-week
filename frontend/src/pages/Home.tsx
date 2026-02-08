@@ -3,7 +3,6 @@ import { Plus, Music, AlertCircle } from 'lucide-react';
 import { CreateRequest } from '../components/CreateRequest';
 import { RequestList } from '../components/RequestList';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import type { FileRequest } from '../types';
 
 export function Home() {
@@ -17,7 +16,7 @@ export function Home() {
     if (!user || !pubKey) return;
 
     // 1. Listen to Participation Status (Scoped)
-    user.get(APP_SCOPE).get('participation').map().on((status: any, reqId: string) => {
+    user.get('participation').map().on((status: any, reqId: string) => {
         setParticipation(prev => ({ ...prev, [reqId]: status }));
     });
 

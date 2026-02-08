@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, UserPlus, Copy, X } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
-import { APP_SCOPE } from '../../config/appConfig';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { gun, user, pubKey, userProfile, isConnected, isIdle, isInternetOnline } = useGun();
@@ -48,7 +47,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       });
       
       // Link to user profile (Scoped)
-      user.get(APP_SCOPE).get('my_invites').get(code).put(true);
+      user.get('my_invites').get(code).put(true);
       
       // Generate full URL
       const url = `${window.location.origin}/?inviteCode=${code}`;

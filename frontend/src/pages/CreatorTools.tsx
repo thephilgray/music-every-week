@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { EditRequest } from '../components/EditRequest';
 import { SubmitTrack } from '../components/SubmitTrack'; // For editing submissions
@@ -41,7 +40,7 @@ export function CreatorTools() {
   useEffect(() => {
     if (!user || !pubKey) return;
     const reqMap = new Map<string, FileRequest>();
-    const requestsNode = user.get(APP_SCOPE).get('my_requests');
+    const requestsNode = user.get('requests');
 
     requestsNode.map().on((data: any, key: string) => {
         if (data && data.title) { 
@@ -80,7 +79,7 @@ export function CreatorTools() {
   useEffect(() => {
       if (!user || !pubKey) return;
       const subMap = new Map<string, Submission>();
-      const submissionsNode = user.get(APP_SCOPE).get('my_submissions');
+      const submissionsNode = user.get('my_submissions');
       
       // Listen to my_submissions (private reference) OR submissions (public reference, usually same data)
       submissionsNode.map().on((data: any, key: string) => {
@@ -331,7 +330,7 @@ export function CreatorTools() {
           await gun.get('file_requests').get(selectedRequest.id).put(reqData);
           
           // Also ensure it is in my_requests (self-healing local scope)
-          user.get(APP_SCOPE).get('my_requests').get(selectedRequest.id).put(reqData);
+          user.get('requests').get(selectedRequest.id).put(reqData);
           
           success("Request republished to global feed!");
       } catch (e) {

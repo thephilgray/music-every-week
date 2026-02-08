@@ -1,8 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users, Loader2, FileText } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
@@ -28,6 +27,7 @@ export function RequestDetail() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
+  const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
   const [addToPlaylistSubmission, setAddToPlaylistSubmission] = useState<Submission | null>(null);
   const subscribedSubmissions = useRef(new Set<string>());
   const [copied, setCopied] = useState(false);
@@ -42,7 +42,7 @@ export function RequestDetail() {
 
   useEffect(() => {
      if (user && id) {
-         user.get(APP_SCOPE).get('participation').get(id).on((data: any) => {
+         user.get('participation').get(id).on((data: any) => {
              setMyParticipationStatus(data);
          });
      }
@@ -55,8 +55,8 @@ export function RequestDetail() {
       const globalStatus = participants[pubKey]?.status;
       // If globally accepted but locally missing/different, sync it.
       if (globalStatus === 'accepted' && myParticipationStatus !== 'accepted') {
-          console.log("Auto-syncing participation status to APP_SCOPE...");
-          user.get(APP_SCOPE).get('participation').get(id).put('accepted');
+          console.log("Auto-syncing participation status...");
+          user.get('participation').get(id).put('accepted');
       }
   }, [id, pubKey, participants, myParticipationStatus, user]);
 
@@ -144,12 +144,19 @@ export function RequestDetail() {
              }));
         }
     });
+    
+  }, [id, gun]);
 
-    // Fetch Submissions
+  // Separate Effect for Submissions to ensure clean subscription/unsubscription
+  useEffect(() => {
+    if (!id) return;
+    
     // clearing submissions first to avoid dupes on re-mount if effect runs again
     setSubmissions([]); 
     
-    gun.get('request_submissions').get(id).map().on((data: any, key: string) => {
+    const submissionsNode = gun.get('request_submissions').get(id);
+    
+    submissionsNode.map().on((data: any, key: string) => {
         if (data) {
             
             // Security Check for Submissions
@@ -219,7 +226,10 @@ export function RequestDetail() {
             }
         }
     });
-    
+
+    return () => {
+        submissionsNode.map().off();
+    };
   }, [id, gun]);
 
   // Determine user status
@@ -391,7 +401,7 @@ export function RequestDetail() {
           await gun.get('request_participants').get(id).get(pubKey).put(partData);
           
           // Write to local participation
-          user.get(APP_SCOPE).get('participation').get(id).put('accepted');
+          user.get('participation').get(id).put('accepted');
           
           success("You have successfully joined the request!");
           setMyParticipationStatus('accepted');
@@ -405,7 +415,7 @@ export function RequestDetail() {
       if (!id || !pubKey) return;
       try {
           await gun.get('request_participants').get(id).get(pubKey).get('status').put('declined');
-          user.get(APP_SCOPE).get('participation').get(id).put('declined');
+          user.get('participation').get(id).put('declined');
           success("Invite declined.");
           setMyParticipationStatus('declined');
       } catch (e) {
@@ -644,6 +654,17 @@ export function RequestDetail() {
                                     </button>
                                 )}
                                 
+                                {sub.lyrics && (
+                                    <button 
+                                        onClick={() => setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] }))}
+                                        disabled={locked}
+                                        className={`p-2 rounded-full transition ${expandedLyricsMap[sub.id!] ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Lyrics / Notes"
+                                    >
+                                        <FileText className="w-4 h-4" />
+                                    </button>
+                                )}
+
                                 <button 
                                     onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
                                     disabled={locked}
@@ -691,6 +712,15 @@ export function RequestDetail() {
                                 </button>
                             </div>
                         </div>
+                        
+                        {(expandedLyricsMap[sub.id!] && !locked) && (
+                            <div className="mt-4 px-4 pb-2">
+                                <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Lyrics / Notes</h5>
+                                <div className="bg-gray-950 p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap font-mono">
+                                    {sub.lyrics}
+                                </div>
+                            </div>
+                        )}
                         
                         {expandedSubmissionId === sub.id && id && sub.id && !locked && (
                             <div className="mt-4 px-4">

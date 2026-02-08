@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGun } from '../contexts/GunContext';
 
 export function Auth() {
-  const { gun, user } = useGun();
+  const { gun, user, refreshAuth } = useGun();
   const [alias, setAlias] = useState('');
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
@@ -236,6 +236,9 @@ export function Auth() {
                } catch (e) {
                    console.error("Auth: Failed to save session to localStorage:", e);
                }
+
+               // Force GunContext to refresh userPair
+               refreshAuth();
 
                // Ensure we write to Directory (robust pub check)
                // @ts-ignore

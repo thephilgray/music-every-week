@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
@@ -57,7 +56,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   useEffect(() => {
     if (!user || !pubKey) return;
     const list: FileRequest[] = [];
-    user.get(APP_SCOPE).get('my_requests').map().once((data: any, id: string) => {
+    user.get('requests').map().once((data: any, id: string) => {
         if (data && data.title && id !== request.id) {
             list.push({ ...data, id });
             setExistingRequests([...list].sort((a, b) => b.createdAt - a.createdAt));
@@ -243,12 +242,32 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         console.log("EditRequest: No new artwork to upload, using existing.");
       }
 
+      let inviteCode = request.inviteCode;
+      // Generate invite code if one doesn't exist (ensure magic link works for all requests)
+      if (!inviteCode) {
+          inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
+          console.log("EditRequest: Generating new invite code:", inviteCode);
+          
+          await new Promise<void>((resolve, reject) => {
+              gun.get('invites').get(inviteCode!).put({
+                  from: pubKey,
+                  createdAt: Date.now(),
+                  status: 'active',
+                  forRequest: request.id
+              }, (ack: any) => {
+                  if (ack.err) return reject(new Error(ack.err));
+                  resolve();
+              });
+          });
+      }
+
       const updates: any = {
         title,
         description: desc,
         deadline,
         accessMode,
         artworkUrl,
+        inviteCode, // Include new or existing code
         pending_emails: JSON.stringify(pendingEmails),
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true
@@ -270,13 +289,6 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         gun.get('file_requests').get(request.id!).put(updates, (ack: any) => {
             if (ack.err) return reject(new Error(ack.err));
             console.log('EditRequest: Metadata updated in file_requests global graph.');
-            resolve();
-        });
-      }));
-      metadataPromises.push(new Promise<void>((resolve, reject) => {
-        user.get(APP_SCOPE).get('my_requests').get(request.id!).put(updates, (ack: any) => {
-            if (ack.err) return reject(new Error(ack.err));
-            console.log('EditRequest: Metadata updated in my_requests graph.');
             resolve();
         });
       }));
@@ -376,7 +388,6 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       try {
           // Soft delete / nullify
           await user.get('requests').get(request.id!).put(null);
-          await user.get(APP_SCOPE).get('my_requests').get(request.id!).put(null);
           await gun.get('file_requests').get(request.id!).put(null);
           
           success("Request deleted.");

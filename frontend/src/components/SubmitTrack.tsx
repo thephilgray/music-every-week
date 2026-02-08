@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Search, Mic, Square, Trash2 } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { uploadFile } from '../lib/upload';
 import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
@@ -391,7 +390,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         // This is crucial for the "Profile" view to show all works
         if (pubKey) {
             gunPromises.push(createGunPutPromise(
-                user.get(APP_SCOPE).get('my_submissions').get(submissionId), 
+                user.get('my_submissions').get(submissionId), 
                 user.get('submissions').get(submissionId), 
                 'Linked to my_submissions'
             ));
@@ -523,7 +522,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
           
           // 1. Remove from User Graph
           user.get('submissions').get(subId).put(null);
-          user.get(APP_SCOPE).get('my_submissions').get(subId).put(null);
+          user.get('my_submissions').get(subId).put(null);
           
           // 2. Remove from Request Node
           gun.get('request_submissions').get(requestId).get(subId).put(null);

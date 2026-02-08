@@ -11,6 +11,8 @@ interface Track {
     artworkUrl?: string;
     uploaderPub?: string;
     linkProfile?: boolean;
+    stage?: string;
+    feedbackFocus?: string[];
     context?: {
         name: string;
         link: string;
@@ -61,6 +63,21 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                
                <div className="flex-1 overflow-y-auto custom-scrollbar">
                    <div className="p-6">
+                       {(currentTrack.stage || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
+                           <div className="mb-6 flex flex-wrap gap-2">
+                                {currentTrack.stage && (
+                                    <span className="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
+                                        Stage: {currentTrack.stage}
+                                    </span>
+                                )}
+                                {currentTrack.feedbackFocus?.map((focus, i) => (
+                                    <span key={i} className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">
+                                        {focus}
+                                    </span>
+                                ))}
+                           </div>
+                       )}
+
                        <h4 className="text-lg font-semibold text-white mb-2">Lyrics / Notes</h4>
                        <div className="bg-gray-950 p-4 rounded text-gray-300 whitespace-pre-wrap font-mono text-sm border border-gray-800">
                            {currentTrack.lyrics || "No notes or lyrics available for this track."}

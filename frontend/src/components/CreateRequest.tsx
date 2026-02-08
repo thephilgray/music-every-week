@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import type { FileRequest, UserProfile, Notification } from '../types';
@@ -279,23 +278,21 @@ export function CreateRequest() {
         ]);
       };
 
-      let inviteCode = '';
-      if (finalEmails.length > 0) {
-          console.log("CreateRequest: Generating invite code for emails.");
-          inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
-          
-          await createGunPutPromise(
-              gun.get('invites').get(inviteCode),
-              {
-                  from: pubKey,
-                  createdAt: Date.now(),
-                  status: 'active',
-                  forRequest: requestId
-              },
-              "Invite code write"
-          );
-          console.log('CreateRequest: Created Invite Code for Request:', inviteCode);
-      }
+      // Always generate an invite code to enable "magic link" sharing for onboarding
+      console.log("CreateRequest: Generating invite code.");
+      const inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
+      
+      await createGunPutPromise(
+          gun.get('invites').get(inviteCode),
+          {
+              from: pubKey,
+              createdAt: Date.now(),
+              status: 'active',
+              forRequest: requestId
+          },
+          "Invite code write"
+      );
+      console.log('CreateRequest: Created Invite Code for Request:', inviteCode);
 
       const request: any = {
         id: requestId, 
@@ -327,11 +324,6 @@ export function CreateRequest() {
         gun.get('file_requests').get(requestId), 
         user.get('requests').get(requestId), 
         'Linked to global file_requests'
-      ));
-      metadataSavePromises.push(createGunPutPromise(
-        user.get(APP_SCOPE).get('my_requests').get(requestId), 
-        user.get('requests').get(requestId), 
-        'Linked to my_requests'
       ));
 
       await Promise.all(metadataSavePromises);

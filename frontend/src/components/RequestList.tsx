@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { RequestCard } from './RequestCard';
 import { Skeleton } from './ui/Skeleton';
 import type { FileRequest } from '../types';
@@ -22,7 +21,7 @@ export function RequestList({ requests: propRequests, loading: propLoading, filt
     if (!user) return;
     
     // Subscribe to participation statuses (Scoped)
-    user.get(APP_SCOPE).get('participation').map().on((status: any, reqId: string) => {
+    user.get('participation').map().on((status: any, reqId: string) => {
         setParticipation(prev => ({ ...prev, [reqId]: status }));
     });
   }, [user]);

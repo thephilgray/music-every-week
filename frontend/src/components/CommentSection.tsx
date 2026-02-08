@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Mic, Square, Trash2, Loader2, User } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
-import { APP_SCOPE } from '../config/appConfig';
 import { uploadFile } from '../lib/upload';
 import { CommentItem } from './CommentItem';
 import { MiniPlayer } from './ui/MiniPlayer';
@@ -17,7 +16,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle }: CommentSectionProps) {
-  const { gun, pubKey, user, userProfile, isAuthorized } = useGun();
+  const { gun, pubKey, user, userProfile, isAuthorized, userPair } = useGun();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   
@@ -56,9 +55,12 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
               return;
           }
 
-          // If data is a reference (pointer), resolve it
-          if (data && !data.text && !data.audioUrl) {
-              gun.get(key).once((resolvedData: any) => {
+          // Check for Gun pointer { '#': 'soul' }
+          const soul = data && data['#'];
+
+          if (soul) {
+              // Resolve using the soul
+              gun.get(soul).once((resolvedData: any) => {
                   if (resolvedData && (resolvedData.text || resolvedData.audioUrl)) {
                       const comment: Comment = { ...resolvedData, id: key };
                       commentsMap.set(key, comment);
@@ -70,6 +72,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                   }
               });
           } else if (data && (data.text || data.audioUrl)) {
+             // Direct data (fallback or legacy)
              const comment: Comment = { ...data, id: key };
              commentsMap.set(key, comment);
              setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
@@ -222,7 +225,9 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
     try {
         let audioUrl = '';
         if (recordedFile) {
-            const result = await uploadFile(recordedFile, (user as any).is);
+            // @ts-ignore
+            if (!userPair) throw new Error("Authentication error: Missing keys.");
+            const result = await uploadFile(recordedFile, userPair);
             audioUrl = result.url;
         }
 
@@ -239,7 +244,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
             comment.audioUrl = audioUrl;
         }
 
-        const userCommentNode = user.get(APP_SCOPE).get('comments').get(id);
+        const userCommentNode = user.get('comments').get(id);
         userCommentNode.put(comment);
 
         // Write to Public Comments Node
@@ -270,8 +275,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                 gun.get(bucketKey).get(pulseId).put(feedItem);
                 
                 // Store pulseId & bucket ref in comment for future updates/deletes
-                user.get(APP_SCOPE).get('comments').get(id).get('globalPulseId').put(pulseId);
-                user.get(APP_SCOPE).get('comments').get(id).get('globalBucket').put(bucketKey);
+                user.get('comments').get(id).get('globalPulseId').put(pulseId);
+                user.get('comments').get(id).get('globalBucket').put(bucketKey);
             });
         }
 
@@ -347,7 +352,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       setDeleteCandidateId(null);
 
       // Check for Global Pulse ID to delete from feed
-      user.get(APP_SCOPE).get('comments').get(commentId).once((cData: any) => {
+      user.get('comments').get(commentId).once((cData: any) => {
           if (cData && cData.globalPulseId) {
               const bucket = cData.globalBucket || 'global_pulse'; // Fallback for legacy
               gun.get(bucket).get(cData.globalPulseId).put(null as any);
@@ -358,15 +363,15 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       gun.get('submission_comments').get(submissionId).get(commentId).put(null);
       
       // Delete from User Graph (Actual Data)
-      user.get(APP_SCOPE).get('comments').get(commentId).put(null);
+      user.get('comments').get(commentId).put(null);
   };
 
   const handleEditComment = (commentId: string, newText: string) => {
       // Update User Graph (Source of Truth)
-      user.get(APP_SCOPE).get('comments').get(commentId).get('text').put(newText);
+      user.get('comments').get(commentId).get('text').put(newText);
       
       // Update Global Pulse if exists
-      user.get(APP_SCOPE).get('comments').get(commentId).once((cData: any) => {
+      user.get('comments').get(commentId).once((cData: any) => {
           if (cData && cData.globalPulseId) {
               const bucket = cData.globalBucket || 'global_pulse'; // Fallback
               (gun.get(bucket).get(cData.globalPulseId) as any).get('text').put(newText);

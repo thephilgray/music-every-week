@@ -52,100 +52,173 @@ export function Profile() {
     const submissionsNode = gun.get('all_users').get(targetPub).get('submissions');
     const requestsNode = gun.get('file_requests');
 
-    // 1. Fetch Profile
-    profileNode.on((data: any) => {
-        if (data) {
-            let parsedLinks = [];
-            if (typeof data.links === 'string') {
-                try {
-                    parsedLinks = JSON.parse(data.links);
-                } catch (e) {
-                    parsedLinks = [];
-                }
-            } else if (Array.isArray(data.links)) {
-                parsedLinks = data.links;
-            }
+    let isMounted = true; // Flag to prevent state updates on unmounted component
 
-            setProfile({ ...data, pub: targetPub, links: parsedLinks });
-            if (isEditing === false) { // Don't overwrite if editing
-                setEditAlias(data.alias || '');
-                setEditDisplayName(data.displayName || data.alias || '');
-                setEditBio(data.bio || '');
-                setEditLocation(data.location || '');
+    // --- Initial Load ---
+    const initialLoad = async () => {
+        // 1. Fetch Profile (once)
+        const profileData = await new Promise<any>(resolve => profileNode.once(resolve));
+        if (!isMounted) return;
+        if (profileData) {
+            let parsedLinks = [];
+            if (typeof profileData.links === 'string') {
+                try { parsedLinks = JSON.parse(profileData.links); } catch (e) { parsedLinks = []; }
+            } else if (Array.isArray(profileData.links)) { parsedLinks = profileData.links; }
+            setProfile({ ...profileData, pub: targetPub, links: parsedLinks });
+            if (isEditing === false) {
+                setEditAlias(profileData.alias || '');
+                setEditDisplayName(profileData.displayName || profileData.alias || '');
+                setEditBio(profileData.bio || '');
+                setEditLocation(profileData.location || '');
                 setEditLinks(parsedLinks);
             }
-            setLoading(false);
+        }
+
+        // 2. Fetch all Submissions (once, in parallel)
+        const submissionRefs: { refData: any; subId: string }[] = [];
+        await new Promise<void>(resolve => {
+            submissionsNode.map().once((refData: any, subId: string) => {
+                if (refData && refData !== null) {
+                    submissionRefs.push({ refData, subId });
+                }
+            });
+            // map().once() calls its callback synchronously for existing data,
+            // so this resolve will run after all existing items have been processed.
+            resolve(); 
+        });
+
+        if (!isMounted) return;
+
+        const submissionPromises = submissionRefs.map(async ({ refData, subId }) => {
+            const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
+            const subData = await new Promise<any>(resolve => gun.user(uploader).get('submissions').get(subId).once(resolve));
+
+            if (subData && subData.title && subData.requestId) {
+                const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
+                let parsedWaveform = subData.waveform;
+                if (typeof subData.waveform === 'string') {
+                    try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
+                }
+                let isHidden = subData.hiddenFromProfile;
+                if (isHidden === undefined && reqData && reqData.accessMode) {
+                    if (reqData.accessMode !== 'direct') { isHidden = true; }
+                }
+                return { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden } as Submission;
+            }
+            return null;
+        });
+        const initialSubmissions = (await Promise.all(submissionPromises)).filter(Boolean) as Submission[];
+        if (!isMounted) return;
+        setSubmissions(initialSubmissions.sort((a, b) => b.createdAt - a.createdAt));
+
+        // 3. Fetch all Requests (once)
+        const requestRefs: FileRequest[] = [];
+        await new Promise<void>(resolve => {
+            requestsNode.map().once((data: any, key: string) => {
+                if (data && data.ownerPub === targetPub) {
+                    requestRefs.push({ ...data, id: key });
+                }
+            });
+            resolve();
+        });
+        if (!isMounted) return;
+        setRequests(requestRefs.sort((a, b) => b.createdAt - a.createdAt));
+
+        setLoading(false); // Only set loading to false after ALL initial data is fetched
+    };
+
+    initialLoad();
+
+    // --- Live Updates (after initial load) ---
+    // These will handle additions/deletions, but not necessarily live updates of details of *existing* items
+    // as that caused performance issues.
+
+    // 1. Profile updates
+    profileNode.on((data: any) => {
+        if (!isMounted || !data) return;
+        let parsedLinks = [];
+        if (typeof data.links === 'string') {
+            try { parsedLinks = JSON.parse(data.links); } catch (e) { parsedLinks = []; }
+        } else if (Array.isArray(data.links)) { parsedLinks = data.links; }
+        setProfile(currentProfile => {
+            if (currentProfile && currentProfile.pub === targetPub) { // Only update if it's the current profile
+                return { ...currentProfile, ...data, links: parsedLinks };
+            }
+            return { ...data, pub: targetPub, links: parsedLinks }; // Fallback if currentProfile is null or different
+        });
+        if (isEditing === false) { // Update edit fields if not actively editing
+            setEditAlias(data.alias || '');
+            setEditDisplayName(data.displayName || data.alias || '');
+            setEditBio(data.bio || '');
+            setEditLocation(data.location || '');
+            setEditLinks(parsedLinks);
         }
     });
 
-    // 2. Fetch Submissions (from user's public list)
-    // Use an internal map to collect submissions as they arrive
-    const collectedSubmissions = new Map<string, Submission>();
-
+    // 2. Submissions updates (for additions/deletions)
+    // This will run AFTER initialLoad completes, and will update for new items
     submissionsNode.map().on(async (refData: any, subId: string) => {
+        if (!isMounted) return;
         if (refData === null) { // Submission deleted
-            collectedSubmissions.delete(subId);
-            setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
-            return;
-        }
-
-        if (refData) { // Submission reference exists
+            setSubmissions(prev => prev.filter(s => s.id !== subId));
+        } else if (refData) { // Submission added or updated reference
             const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
-            
-            // Fetch subData and reqData using once() for current state
             const subData = await new Promise<any>(resolve => gun.user(uploader).get('submissions').get(subId).once(resolve));
 
-            if (subData && subData.title) { // Ensure submission data is valid
+            if (!isMounted) return;
+            if (subData && subData.title && subData.requestId) {
                 const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
-
                 let parsedWaveform = subData.waveform;
                 if (typeof subData.waveform === 'string') {
-                    try {
-                        parsedWaveform = JSON.parse(subData.waveform);
-                    } catch (e) {
-                        parsedWaveform = [];
-                    }
+                    try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
                 }
-                
                 let isHidden = subData.hiddenFromProfile;
                 if (isHidden === undefined && reqData && reqData.accessMode) {
-                    if (reqData.accessMode !== 'direct') {
-                        isHidden = true;
-                    }
+                    if (reqData.accessMode !== 'direct') { isHidden = true; }
                 }
-                
                 const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
-                collectedSubmissions.set(subId, updatedSubmission);
-                setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
-            } else {
-                // If subData is not valid (e.g., deleted), remove it from collected submissions
-                collectedSubmissions.delete(subId);
-                setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
+                
+                setSubmissions(prev => {
+                    const exists = prev.find(s => s.id === subId);
+                    if (exists) { // Update existing (if details changed, though once() won't catch it here without re-trigger)
+                        return prev.map(s => s.id === subId ? updatedSubmission : s).sort((a, b) => b.createdAt - a.createdAt);
+                    } else { // Add new
+                        return [...prev, updatedSubmission].sort((a, b) => b.createdAt - a.createdAt);
+                    }
+                });
+            } else { // Invalid subData, remove if it exists
+                setSubmissions(prev => prev.filter(s => s.id !== subId));
             }
         }
     });
 
-    // 3. Fetch Requests (Global Scan - Filter by Owner)
-    const collectedRequests = new Map<string, FileRequest>();
+    // 3. Requests updates (for additions/deletions/updates)
     requestsNode.map().on((data: any, key: string) => {
+        if (!isMounted) return;
         if (data === null) { // Request deleted
-            collectedRequests.delete(key);
-            setRequests(Array.from(collectedRequests.values()).sort((a, b) => b.createdAt - a.createdAt));
-            return;
-        }
-        if (data && data.ownerPub === targetPub) {
-            collectedRequests.set(key, { ...data, id: key });
-            setRequests(Array.from(collectedRequests.values()).sort((a, b) => b.createdAt - a.createdAt));
+            setRequests(prev => prev.filter(r => r.id !== key));
+        } else if (data && data.ownerPub === targetPub) {
+            setRequests(prev => {
+                const existingIndex = prev.findIndex(r => r.id === key);
+                const updatedRequest = { ...data, id: key };
+
+                if (existingIndex > -1) {
+                    return prev.map((r, i) => (i === existingIndex ? updatedRequest : r));
+                } else {
+                    return [...prev, updatedRequest].sort((a, b) => b.createdAt - a.createdAt);
+                }
+            });
         }
     });
 
     return () => {
-        profileNode.off();
-        submissionsNode.off();
-        requestsNode.off();
+        isMounted = false; // Set flag to prevent state updates on unmounted component
+        profileNode.off(); // Turns off all listeners on profileNode
+        submissionsNode.off(); // Turns off all listeners on submissionsNode
+        requestsNode.off(); // Turns off all listeners on requestsNode
     };
 
-  }, [targetPub, gun]);
+  }, [targetPub, gun, isEditing]);
 
   const handleSaveProfile = async () => {
       if (!isOwnProfile || !user) return;

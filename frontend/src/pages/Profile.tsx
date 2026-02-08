@@ -53,7 +53,7 @@ export function Profile() {
     const requestsNode = gun.get('file_requests');
 
     // 1. Fetch Profile
-    profileNode.on((data: any) => {
+    const profileListener = profileNode.on((data: any) => {
         if (data) {
             let parsedLinks = [];
             if (typeof data.links === 'string') {
@@ -79,60 +79,70 @@ export function Profile() {
     });
 
     // 2. Fetch Submissions (from user's public list)
-    submissionsNode.map().on((data: any, key: string) => {
-        if (data) {
-            const subId = key;
-            // data is uploaderPub (new) or true (legacy/self)
-            const uploader = (typeof data === 'string' && data.length > 1) ? data : targetPub;
-            
-            gun.user(uploader).get('submissions').get(subId).once((subData: any) => {
-                if (subData && subData.title) {
-                    // Fetch Request to check Access Mode for Default Visibility
-                    gun.get('file_requests').get(subData.requestId).once((reqData: any) => {
-                         setSubmissions(prev => {
-                            const exists = prev.find(s => s.id === subId);
-                            if (exists) return prev;
-                            
-                            let parsedWaveform = subData.waveform;
-                            if (typeof subData.waveform === 'string') {
-                                try {
-                                    parsedWaveform = JSON.parse(subData.waveform);
-                                } catch (e) {
-                                    parsedWaveform = [];
-                                }
-                            }
-                            
-                            // Determine default hidden state based on request access mode
-                            let isHidden = subData.hiddenFromProfile;
-                            if (isHidden === undefined && reqData && reqData.accessMode) {
-                                if (reqData.accessMode !== 'direct') {
-                                    isHidden = true;
-                                }
-                            }
+    // Use an internal map to collect submissions as they arrive
+    const collectedSubmissions = new Map<string, Submission>();
 
-                            return [...prev, { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden }];
-                        });
-                    });
+    const submissionsListListener = submissionsNode.map().on(async (refData: any, subId: string) => {
+        if (refData === null) { // Submission deleted
+            collectedSubmissions.delete(subId);
+            setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
+            return;
+        }
+
+        if (refData) { // Submission reference exists
+            const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
+            
+            // Fetch subData and reqData using once() for current state
+            const subData = await new Promise<any>(resolve => gun.user(uploader).get('submissions').get(subId).once(resolve));
+
+            if (subData && subData.title) { // Ensure submission data is valid
+                const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
+
+                let parsedWaveform = subData.waveform;
+                if (typeof subData.waveform === 'string') {
+                    try {
+                        parsedWaveform = JSON.parse(subData.waveform);
+                    } catch (e) {
+                        parsedWaveform = [];
+                    }
                 }
-            });
+                
+                let isHidden = subData.hiddenFromProfile;
+                if (isHidden === undefined && reqData && reqData.accessMode) {
+                    if (reqData.accessMode !== 'direct') {
+                        isHidden = true;
+                    }
+                }
+                
+                const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
+                collectedSubmissions.set(subId, updatedSubmission);
+                setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
+            } else {
+                // If subData is not valid (e.g., deleted), remove it from collected submissions
+                collectedSubmissions.delete(subId);
+                setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
+            }
         }
     });
 
     // 3. Fetch Requests (Global Scan - Filter by Owner)
-    requestsNode.map().on((data: any, key: string) => {
+    const collectedRequests = new Map<string, FileRequest>();
+    const requestsListListener = requestsNode.map().on((data: any, key: string) => {
+        if (data === null) { // Request deleted
+            collectedRequests.delete(key);
+            setRequests(Array.from(collectedRequests.values()).sort((a, b) => b.createdAt - a.createdAt));
+            return;
+        }
         if (data && data.ownerPub === targetPub) {
-            setRequests(prev => {
-                const exists = prev.find(r => r.id === key);
-                if (exists) return prev;
-                return [...prev, { ...data, id: key }].sort((a, b) => b.createdAt - a.createdAt);
-            });
+            collectedRequests.set(key, { ...data, id: key });
+            setRequests(Array.from(collectedRequests.values()).sort((a, b) => b.createdAt - a.createdAt));
         }
     });
 
     return () => {
-        profileNode.off();
-        submissionsNode.off();
-        requestsNode.off();
+        profileNode.off(profileListener);
+        submissionsNode.off(submissionsListListener);
+        requestsNode.off(requestsListListener);
     };
 
   }, [targetPub, gun]);

@@ -496,7 +496,7 @@ export function Settings() {
         
         <div className="space-y-4">
             <p className="text-gray-400 text-sm">
-                MEW2 is a "Local-First" application. This means a lot of data is stored directly in your browser. 
+                MEW is a "Local-First" application. This means a lot of data is stored directly in your browser. 
                 If you are experiencing issues, clearing your local data might help. 
                 <span className="text-red-400 block mt-1">Warning: This will log you out. Ensure you have your keys saved if using a non-standard login.</span>
             </p>

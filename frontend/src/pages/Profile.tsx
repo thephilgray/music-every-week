@@ -53,7 +53,7 @@ export function Profile() {
     const requestsNode = gun.get('file_requests');
 
     // 1. Fetch Profile
-    const profileListener = profileNode.on((data: any) => {
+    profileNode.on((data: any) => {
         if (data) {
             let parsedLinks = [];
             if (typeof data.links === 'string') {
@@ -82,7 +82,7 @@ export function Profile() {
     // Use an internal map to collect submissions as they arrive
     const collectedSubmissions = new Map<string, Submission>();
 
-    const submissionsListListener = submissionsNode.map().on(async (refData: any, subId: string) => {
+    submissionsNode.map().on(async (refData: any, subId: string) => {
         if (refData === null) { // Submission deleted
             collectedSubmissions.delete(subId);
             setSubmissions(Array.from(collectedSubmissions.values()).sort((a, b) => b.createdAt - a.createdAt));
@@ -127,7 +127,7 @@ export function Profile() {
 
     // 3. Fetch Requests (Global Scan - Filter by Owner)
     const collectedRequests = new Map<string, FileRequest>();
-    const requestsListListener = requestsNode.map().on((data: any, key: string) => {
+    requestsNode.map().on((data: any, key: string) => {
         if (data === null) { // Request deleted
             collectedRequests.delete(key);
             setRequests(Array.from(collectedRequests.values()).sort((a, b) => b.createdAt - a.createdAt));
@@ -140,9 +140,9 @@ export function Profile() {
     });
 
     return () => {
-        profileNode.off(profileListener);
-        submissionsNode.off(submissionsListListener);
-        requestsNode.off(requestsListListener);
+        profileNode.off();
+        submissionsNode.off();
+        requestsNode.off();
     };
 
   }, [targetPub, gun]);

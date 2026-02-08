@@ -40,6 +40,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   // Feedback Metadata
   const [stage, setStage] = useState('First Draft / Demo');
   const [feedbackFocus, setFeedbackFocus] = useState<string[]>([]);
+  const [doesNotUseAI, setDoesNotUseAI] = useState(true);
 
   // Audio Recording
   const [audioType, setAudioType] = useState<'upload' | 'record'>('upload');
@@ -75,6 +76,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
         setLyrics(existingSubmission.lyrics || '');
         setStage(existingSubmission.stage || 'First Draft / Demo');
+        if (existingSubmission.usesAI) setDoesNotUseAI(false);
         
         // Load Collaborators (Handle GunDB references or JSON string)
         let rawCollabs = existingSubmission.collaborators || {};
@@ -346,7 +348,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             collaborators: JSON.stringify(collaboratorsMap), // Flattened as JSON string
             waveform: waveformStr,
             stage,
-            feedbackFocus: JSON.stringify(feedbackFocus)
+            feedbackFocus: JSON.stringify(feedbackFocus),
+            usesAI: !doesNotUseAI
         };
 
         const gunPromises: Promise<any>[] = [];
@@ -427,7 +430,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 link: `/request/${requestId}?submission=${submissionId}`,
                 fromPub: pubKey as string,
                 createdAt: Date.now(),
-                read: false
+                read: false,
+                usesAI: !doesNotUseAI
             };
             gunPromises.push(createGunPutPromise(
                 gun.get('inboxes').get(collabPub).get(notifId), 
@@ -450,7 +454,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         link: `/request/${requestId}?submission=${submissionId}`,
                         fromPub: pubKey as string,
                         createdAt: Date.now(),
-                        read: false
+                        read: false,
+                        usesAI: !doesNotUseAI
                     };
                     createGunPutPromise(
                         gun.get('inboxes').get(req.ownerPub).get(notifId),
@@ -482,7 +487,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         submissionId,
                         requestId,
                         submissionTitle: req?.title || 'Unknown Request',
-                        createdAt: Date.now()
+                        createdAt: Date.now(),
+                        usesAI: !doesNotUseAI
                     };
                     createGunPutPromise(
                         gun.get(bucketKey).get(pulseId),
@@ -827,10 +833,24 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                     >
                         {["Seed of an Idea", "First Draft / Demo", "In Production / Full Arrangement", 
-                          "Ready for Mixing", "Final Polish / Mastering", "All or Mostly AI"].map(s => (
+                          "Ready for Mixing", "Final Polish / Mastering"].map(s => (
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        id="ai-check"
+                        checked={doesNotUseAI}
+                        onChange={(e) => setDoesNotUseAI(e.target.checked)}
+                        className="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="ai-check" className="text-sm text-gray-300 select-none flex items-center gap-2">
+                        My track does not use AI
+                        <Tooltip content="Some users may choose to filter out AI-generated submissions in their settings. Unchecking this might hide your submission from them." icon />
+                    </label>
                 </div>
 
                 <details className="group border border-gray-700 rounded bg-gray-800/30">

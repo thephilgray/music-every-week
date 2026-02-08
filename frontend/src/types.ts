@@ -55,6 +55,7 @@ export interface Submission {
   hiddenFromProfile?: boolean;
   stage?: string;
   feedbackFocus?: string[];
+  usesAI?: boolean;
 }
 
 export interface Comment {
@@ -74,6 +75,7 @@ export interface Notification {
   createdAt: number;
   read: boolean;
   requestId?: string;
+  usesAI?: boolean;
 }
 
 export interface Playlist {

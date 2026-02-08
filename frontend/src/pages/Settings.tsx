@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug } from 'lucide-react';
+import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug, Music } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
@@ -24,6 +24,9 @@ export function Settings() {
   const [isHost, setIsHost] = useState(false);
   const [showRequestsOnProfile, setShowRequestsOnProfile] = useState(true);
   const [showSubmissionsOnProfile, setShowSubmissionsOnProfile] = useState(true);
+
+  // Content Preferences
+  const [filterAI, setFilterAI] = useState(false);
 
 
   // Data State
@@ -62,6 +65,13 @@ export function Settings() {
       
       setIsVolunteer(!!userProfile.isVolunteer);
       setIsHost(!!userProfile.isHost);
+    }
+
+    // Load Content Preferences
+    if (user) {
+        user.get('settings').get('content').get('filterAI').on((data: any) => {
+            setFilterAI(!!data);
+        });
     }
   }, [userProfile, pubKey, user]);
 
@@ -170,6 +180,12 @@ export function Settings() {
       
       gun.get('all_users').get(pubKey).get('isHost').put(newValue);
       user.get('profile').get('isHost').put(newValue);
+  };
+
+  const handleToggleFilterAI = () => {
+      const newValue = !filterAI;
+      setFilterAI(newValue);
+      user.get('settings').get('content').get('filterAI').put(newValue);
   };
 
   const handleClearData = async () => {
@@ -407,6 +423,30 @@ export function Settings() {
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isHost ? 'bg-purple-600' : 'bg-gray-600'}`}
             >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isHost ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+        </div>
+      </section>
+
+      {/* Content Preferences */}
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+        <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+            <Music className="w-5 h-5 text-green-500" />
+            Content Preferences
+        </h2>
+        
+        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800">
+            <div>
+                <h3 className="text-white font-medium mb-1">Filter AI Submissions</h3>
+                <p className="text-sm text-gray-500 max-w-md">
+                    Automatically hide submissions that voluntarily declare they were made with AI. 
+                    This also filters notifications and community feed items.
+                </p>
+            </div>
+            <button 
+                onClick={handleToggleFilterAI}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${filterAI ? 'bg-green-600' : 'bg-gray-600'}`}
+            >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${filterAI ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
         </div>
       </section>

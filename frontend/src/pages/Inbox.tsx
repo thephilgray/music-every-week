@@ -15,6 +15,7 @@ export function Inbox() {
   // Privacy & Contacts
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
   const [contacts, setContacts] = useState<Set<string>>(new Set());
+  const [filterAI, setFilterAI] = useState(false);
 
   useEffect(() => {
     if (!user || !pubKey) return;
@@ -22,6 +23,11 @@ export function Inbox() {
     // 1. Load Privacy Settings
     user.get('settings').get('privacy').get('acceptUnsolicited').on((data: any) => {
         setAcceptUnsolicited(data === false ? false : true);
+    });
+    
+    // Load Content Preferences
+    user.get('settings').get('content').get('filterAI').on((data: any) => {
+        setFilterAI(!!data);
     });
 
     // 2. Load Contacts
@@ -83,6 +89,9 @@ export function Inbox() {
 
   // Filter Notifications based on Privacy and Type
   const filteredNotifications = notifications.filter(n => {
+      // Content Filter
+      if (filterAI && n.usesAI) return false;
+
       // Type Filter
       if (filterType !== 'all' && n.type !== filterType) return false;
 

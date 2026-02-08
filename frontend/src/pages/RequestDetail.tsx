@@ -39,11 +39,19 @@ export function RequestDetail() {
   // Access Mode Logic
   const [myParticipationStatus, setMyParticipationStatus] = useState<'pending' | 'accepted' | 'declined' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Content Preferences
+  const [filterAI, setFilterAI] = useState(false);
 
   useEffect(() => {
-     if (user && id) {
+     if (user) {
          user.get('participation').get(id).on((data: any) => {
              setMyParticipationStatus(data);
+         });
+         
+         // Load Filter AI setting
+         user.get('settings').get('content').get('filterAI').on((data: any) => {
+             setFilterAI(!!data);
          });
      }
   }, [user, id]);
@@ -296,7 +304,7 @@ export function RequestDetail() {
               const needed = 5 - currentIds.length;
               
               // Candidates: Not self, and not already unlocked
-              const candidates = submissions
+              const candidates = filteredSubmissions
                   .filter(s => s.uploaderPub !== pubKey && s.id && !currentIds.includes(s.id))
                   .map(s => s.id!);
               
@@ -317,7 +325,7 @@ export function RequestDetail() {
               setUnlockedSubmissionIds(currentIds);
           }
       });
-  }, [id, user, hasSubmitted, isPastDeadline, isOwner, submissions, pubKey]);
+  }, [id, user, hasSubmitted, isPastDeadline, isOwner, filteredSubmissions, pubKey]);
 
 
   const isLocked = (sub: Submission) => {
@@ -335,9 +343,14 @@ export function RequestDetail() {
       return true; // Locked
   };
 
+  const filteredSubmissions = useMemo(() => {
+      if (!filterAI) return submissions;
+      return submissions.filter(s => !s.usesAI);
+  }, [submissions, filterAI]);
+
   const handlePlayAll = () => {
       if (!request) return;
-      const visibleSubmissions = submissions.filter(s => !isLocked(s));
+      const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
       if (visibleSubmissions.length > 0) {
           play(visibleSubmissions[0], visibleSubmissions, {
               type: 'request',
@@ -350,8 +363,8 @@ export function RequestDetail() {
 
   // Deep Link Handling Effect
   useEffect(() => {
-      if (linkedSubmissionId && submissions.length > 0) {
-          const sub = submissions.find(s => s.id === linkedSubmissionId);
+      if (linkedSubmissionId && filteredSubmissions.length > 0) {
+          const sub = filteredSubmissions.find(s => s.id === linkedSubmissionId);
           // Check if visible (not locked)
           if (sub && !isLocked(sub)) {
               setExpandedSubmissionId(linkedSubmissionId);
@@ -367,7 +380,7 @@ export function RequestDetail() {
               }, 600);
           }
       }
-  }, [linkedSubmissionId, submissions.length]); // Intentionally minimal deps
+  }, [linkedSubmissionId, filteredSubmissions.length]); // Intentionally minimal deps
 
   // Invite Acceptance Logic
   const isInvited = useMemo(() => {
@@ -586,8 +599,8 @@ export function RequestDetail() {
       {/* Submissions List */}
       <div className="border-t border-gray-800 pt-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-200">Submissions ({submissions.length})</h3>
-            {submissions.some(s => !isLocked(s)) && (
+            <h3 className="text-xl font-bold text-gray-200">Submissions ({filteredSubmissions.length})</h3>
+            {filteredSubmissions.some(s => !isLocked(s)) && (
                 <button 
                     onClick={handlePlayAll}
                     className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600"
@@ -597,13 +610,13 @@ export function RequestDetail() {
             )}
           </div>
           
-          {submissions.length === 0 ? (
+          {filteredSubmissions.length === 0 ? (
             <div className="bg-gray-900/50 rounded-lg p-10 text-center border border-gray-800 border-dashed">
                 <p className="text-gray-500">No submissions yet. Be the first!</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-                {submissions.map((sub) => {
+                {filteredSubmissions.map((sub) => {
                     const locked = isLocked(sub);
                     const isMySubmission = sub.uploaderPub === pubKey;
                     

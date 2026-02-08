@@ -16,14 +16,23 @@ interface FeedItem {
     createdAt: number;
     authorAlias?: string;
     authorAvatar?: string;
+    usesAI?: boolean;
 }
 
 export function Community() {
-  const { gun } = useGun();
+  const { gun, user } = useGun();
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterAI, setFilterAI] = useState(false);
 
   useEffect(() => {
+      // Load Filter AI setting
+      if (user) {
+          user.get('settings').get('content').get('filterAI').on((data: any) => {
+              setFilterAI(!!data);
+          });
+      }
+
       const feedMap = new Map<string, FeedItem>();
       
       // Time-Bucketing: Subscribe to Today and Yesterday
@@ -67,7 +76,12 @@ export function Community() {
       
       const timer = setTimeout(() => setLoading(false), 2000);
       return () => clearTimeout(timer);
-  }, [gun]);
+  }, [gun, user]);
+
+  const filteredFeed = feed.filter(item => {
+      if (filterAI && item.usesAI) return false;
+      return true;
+  });
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
@@ -76,18 +90,18 @@ export function Community() {
             <p className="text-gray-400">See what's happening across all public requests.</p>
         </div>
 
-        {loading && feed.length === 0 ? (
+        {loading && filteredFeed.length === 0 ? (
              <div className="space-y-4">
                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
              </div>
-        ) : feed.length === 0 ? (
+        ) : filteredFeed.length === 0 ? (
              <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
                  <MessageSquare className="w-12 h-12 text-gray-700 mx-auto mb-4" />
                  <p className="text-gray-500">No activity yet. Be the first to post!</p>
              </div>
         ) : (
             <div className="space-y-4">
-                {feed.map(item => (
+                {filteredFeed.map(item => (
                     <div key={item.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex gap-4 hover:border-gray-700 transition">
                         {/* Avatar */}
                         <div className="flex-shrink-0">

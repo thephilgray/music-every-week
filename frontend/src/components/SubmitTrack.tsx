@@ -131,19 +131,31 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
   // Fetch Aliases for Collaborators
   useEffect(() => {
-      collaborators.forEach(pub => {
-          if (!knownAliases[pub]) {
+      const pubsToFetch = collaborators.filter(pub => !knownAliases[pub]);
+
+      if (pubsToFetch.length > 0) {
+          const newAliasesMap: Record<string, string> = {};
+          let fetchCount = 0;
+
+          pubsToFetch.forEach(pub => {
               gun.get('all_users').get(pub).once((u: any) => {
                   if (u && (u.alias || u.displayName)) {
-                      setKnownAliases(prev => ({
-                          ...prev,
-                          [pub]: u.displayName || u.alias
-                      }));
+                      newAliasesMap[pub] = u.displayName || u.alias;
+                  }
+                  fetchCount++;
+                  if (fetchCount === pubsToFetch.length) {
+                      // All pending fetches for this batch are done, update state once
+                      if (Object.keys(newAliasesMap).length > 0) {
+                          setKnownAliases(prev => ({
+                              ...prev,
+                              ...newAliasesMap
+                          }));
+                      }
                   }
               });
-          }
-      });
-  }, [collaborators, gun]);
+          });
+      }
+  }, [collaborators, gun, knownAliases]);
 
   const searchUsers = (term: string) => {
     setSearchTerm(term);
@@ -273,6 +285,29 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     setIsUploading(true);
     setError(null);
 
+    // Helper function to create a GunDB put promise with a timeout
+    const createGunPutPromise = (node: any, data: any, logMessage: string) => {
+        let timer: ReturnType<typeof setTimeout>;
+        return Promise.race([
+            new Promise<void>((resolve, reject) => {
+                node.put(data, (ack: any) => {
+                    clearTimeout(timer);
+                    if (ack.err) {
+                        console.error(`SubmitTrack: ${logMessage} FAILED:`, ack.err);
+                        return reject(new Error(`${logMessage} failed: ${ack.err}`));
+                    }
+                    resolve();
+                });
+            }),
+            new Promise<void>((_, reject) => {
+                timer = setTimeout(() => {
+                    console.warn(`SubmitTrack: ${logMessage} TIMEOUT after ${GUN_ACK_TIMEOUT / 1000}s.`);
+                    reject(new Error(`${logMessage} timed out.`));
+                }, GUN_ACK_TIMEOUT);
+            })
+        ]);
+    };
+
     try {
         let audioUrlStr = existingSubmission?.audioUrl || '';
         let waveformStr = '';
@@ -351,31 +386,18 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             feedbackFocus: JSON.stringify(feedbackFocus),
             usesAI: !doesNotUseAI
         };
+        
+        // Create the promise for the main submission data and await it
+        const mainSubmissionPutPromise = createGunPutPromise(
+            user.get('submissions').get(submissionId),
+            submission,
+            'Saved to user graph (submissions)'
+        );
 
-        const gunPromises: Promise<any>[] = [];
+        // Await this specific promise to ensure the submission node is created/updated
+        await mainSubmissionPutPromise; // <--- AWAIT HERE
 
-        // Helper function to create a GunDB put promise with a timeout
-        const createGunPutPromise = (node: any, data: any, logMessage: string) => {
-            let timer: ReturnType<typeof setTimeout>;
-            return Promise.race([
-                new Promise<void>((resolve, reject) => {
-                    node.put(data, (ack: any) => {
-                        clearTimeout(timer);
-                        if (ack.err) {
-                            console.error(`SubmitTrack: ${logMessage} FAILED:`, ack.err);
-                            return reject(new Error(`${logMessage} failed: ${ack.err}`));
-                        }
-                        resolve();
-                    });
-                }),
-                new Promise<void>((_, reject) => {
-                    timer = setTimeout(() => {
-                        console.warn(`SubmitTrack: ${logMessage} TIMEOUT after ${GUN_ACK_TIMEOUT / 1000}s.`);
-                        reject(new Error(`${logMessage} timed out.`));
-                    }, GUN_ACK_TIMEOUT);
-                })
-            ]);
-        };
+        const gunPromises: Promise<any>[] = []; // Now, collect other promises
 
         // Save safely (User Graph and Request Node)
         gunPromises.push(createGunPutPromise(

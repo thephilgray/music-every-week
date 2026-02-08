@@ -243,10 +243,9 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       }
 
       let inviteCode = request.inviteCode;
-      // Generate invite code if one doesn't exist (ensure magic link works for all requests)
+      // Generate invite code if one doesn't exist
       if (!inviteCode) {
           inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
-          console.log("EditRequest: Generating new invite code:", inviteCode);
           
           await new Promise<void>((resolve, reject) => {
               gun.get('invites').get(inviteCode!).put({
@@ -267,38 +266,48 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         deadline,
         accessMode,
         artworkUrl,
-        inviteCode, // Include new or existing code
+        inviteCode,
         pending_emails: JSON.stringify(pendingEmails),
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true
       };
-      console.log("EditRequest: Constructed updates object:", updates);
-
+      
       console.log("EditRequest: Starting GunDB metadata updates.");
-      console.time("EditRequest_metadataUpdates");
-      // Update Metadata
-      const metadataPromises: Promise<any>[] = [];
-      metadataPromises.push(new Promise<void>((resolve, reject) => {
-        user.get('requests').get(request.id!).put(updates, (ack: any) => {
-            if (ack.err) return reject(new Error(ack.err));
-            console.log('EditRequest: Metadata updated in user graph.');
-            resolve();
-        });
-      }));
-      metadataPromises.push(new Promise<void>((resolve, reject) => {
-        gun.get('file_requests').get(request.id!).put(updates, (ack: any) => {
-            if (ack.err) return reject(new Error(ack.err));
-            console.log('EditRequest: Metadata updated in file_requests global graph.');
-            resolve();
-        });
-      }));
-      await Promise.all(metadataPromises);
-      console.timeEnd("EditRequest_metadataUpdates");
-      console.log("EditRequest: All GunDB metadata updates resolved.");
+      
+      // Helper to wrap Gun put with timeout
+      const gunPut = (node: any, data: any, label: string) => {
+          return new Promise<void>((resolve, reject) => {
+              let resolved = false;
+              const timer = setTimeout(() => {
+                  if (resolved) return;
+                  resolved = true;
+                  console.warn(`EditRequest: Timeout waiting for ack on ${label}. Assuming success/offline.`);
+                  resolve();
+              }, 3000);
 
+              node.put(data, (ack: any) => {
+                  if (resolved) return;
+                  resolved = true;
+                  clearTimeout(timer);
+                  if (ack.err) {
+                      console.error(`EditRequest: Error on ${label}`, ack.err);
+                      reject(new Error(ack.err));
+                  } else {
+                      console.log(`EditRequest: Success on ${label}`);
+                      resolve();
+                  }
+              });
+          });
+      };
+
+      await Promise.all([
+          gunPut(user.get('requests').get(request.id!), updates, "User Graph"),
+          gunPut(gun.get('file_requests').get(request.id!), updates, "Global Graph")
+      ]);
+      
+      console.log("EditRequest: Metadata updates complete.");
 
       console.log("EditRequest: Starting participants handling.");
-      console.time("EditRequest_participantsHandling");
       // Handle Participants (Graph Mode)
       const oldParticipants = request.participants || {};
       const newParticipants = { ...selectedParticipants };
@@ -307,24 +316,18 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       Object.keys(oldParticipants).forEach(key => {
           if (!newParticipants[key]) {
               newParticipants[key] = null;
-              console.log(`EditRequest: Marking participant ${key} for deletion.`);
           }
       });
       
-      // Save participants node
       const participantsNode = gun.get('request_participants').get(request.id!);
       const participantUpdatePromises: Promise<any>[] = [];
+      
       Object.entries(newParticipants).forEach(([pub, data]) => {
-          participantUpdatePromises.push(new Promise<void>((resolve, reject) => {
-            participantsNode.get(pub).put(data, (ack: any) => {
-                if (ack.err) return reject(new Error(ack.err));
-                console.log(`EditRequest: Updated participant ${pub} data.`);
-                resolve();
-            });
-          }));
+          participantUpdatePromises.push(gunPut(participantsNode.get(pub), data, `Participant ${pub}`));
       });
+      
       await Promise.all(participantUpdatePromises);
-      console.log("EditRequest: All participant data updates resolved.");
+      console.log("EditRequest: Participant data updates resolved.");
       
       // Notify New Participants
       const existingKeys = Object.keys(oldParticipants);
@@ -332,7 +335,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       
       const notificationPromises: Promise<any>[] = [];
       addedParticipants.forEach((partPub: string) => {
-          if (partPub === pubKey) return; // Don't notify self
+          if (partPub === pubKey) return; 
           
           const notifId = crypto.randomUUID();
           const message = accessMode === 'direct' 
@@ -349,22 +352,16 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
               read: false,
               requestId: request.id!
           };
-          notificationPromises.push(new Promise<void>((resolve, reject) => {
-            gun.get('inboxes').get(partPub).get(notifId).put(notification, (ack: any) => {
-                if (ack.err) return reject(new Error(ack.err));
-                console.log(`EditRequest: Sent invite notification to ${partPub}.`);
-                resolve();
-            });
-          }));
+          
+          notificationPromises.push(gunPut(gun.get('inboxes').get(partPub).get(notifId), notification, `Notify ${partPub}`));
       });
+      
       await Promise.all(notificationPromises);
-      console.timeEnd("EditRequest_participantsHandling");
       console.log("EditRequest: All participant notifications resolved.");
 
       success("Request updated!");
       onUpdate();
       onClose();
-      console.log("EditRequest: success, onUpdate, onClose called. Save process complete.");
 
     } catch (err: any) {
       console.error("EditRequest: Save failed in catch block.", err);

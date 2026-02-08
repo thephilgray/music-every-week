@@ -34,17 +34,29 @@ export function RequestList({ requests: propRequests, loading: propLoading, filt
       }
 
       const reqMap = new Map<string, FileRequest>();
+      let batchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+      const updateState = () => {
+          setInternalRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+          setInternalLoading(false);
+          batchTimeout = null;
+      };
       
       gun.get('file_requests').map().on((data: any, key: string) => {
           if (data && data.title) {
               reqMap.set(key, { ...data, id: key });
-              setInternalRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
-              setInternalLoading(false);
+              
+              if (!batchTimeout) {
+                batchTimeout = setTimeout(updateState, 100);
+              }
           }
       });
       
       const timer = setTimeout(() => setInternalLoading(false), 2000);
-      return () => clearTimeout(timer);
+      return () => {
+          if (batchTimeout) clearTimeout(batchTimeout);
+          clearTimeout(timer);
+      };
   }, [gun, propRequests]);
 
   const requestsToFilter = propRequests || internalRequests;

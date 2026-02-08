@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { User as UserIcon, MoreVertical, Trash2, Edit2, X, Check } from 'lucide-react';

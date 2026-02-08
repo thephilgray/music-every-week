@@ -13,6 +13,13 @@ export function Directory() {
 
   useEffect(() => {
     const userMap = new Map<string, UserProfile>();
+    let batchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const updateState = () => {
+        setUsers(Array.from(userMap.values()));
+        setLoading(false);
+        batchTimeout = null;
+    };
     
     // Fetch all users
     // Note: This iterates all keys in 'all_users'
@@ -20,8 +27,10 @@ export function Directory() {
         if (data && data.alias) {
             // Ensure pub key is set from key if not in data
             userMap.set(key, { ...data, pub: key });
-            setUsers(Array.from(userMap.values()));
-            setLoading(false);
+            
+            if (!batchTimeout) {
+                batchTimeout = setTimeout(updateState, 100);
+            }
         }
     });
 
@@ -30,7 +39,10 @@ export function Directory() {
         if (userMap.size === 0) setLoading(false);
     }, 2000);
 
-    return () => clearTimeout(timer);
+    return () => {
+        if (batchTimeout) clearTimeout(batchTimeout);
+        clearTimeout(timer);
+    };
   }, [gun]);
 
   const filteredUsers = users.filter(u => 

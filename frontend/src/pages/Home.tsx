@@ -21,6 +21,13 @@ export function Home() {
     });
 
     const reqMap = new Map<string, FileRequest>();
+    let batchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const updateState = () => {
+        setRequests(Array.from(reqMap.values()));
+        setLoading(false);
+        batchTimeout = null;
+    };
 
     // 2. Listen to Global Requests (Public Scoped Graph via useGun)
     gun.get('file_requests').map().on((data: any, key: string) => {
@@ -29,8 +36,9 @@ export function Home() {
             reqMap.set(key, { ...data, id: key });
             
             // Debounce/Batch update
-            setRequests(Array.from(reqMap.values()));
-            setLoading(false);
+            if (!batchTimeout) {
+                batchTimeout = setTimeout(updateState, 100);
+            }
         }
     });
     
@@ -39,6 +47,7 @@ export function Home() {
     
     return () => {
         reqMap.clear();
+        if (batchTimeout) clearTimeout(batchTimeout);
         clearTimeout(timer);
     };
   }, [user, pubKey, gun]);

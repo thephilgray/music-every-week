@@ -45,7 +45,7 @@ export function RequestDetail() {
 
   useEffect(() => {
      if (user) {
-         user.get('participation').get(id).on((data: any) => {
+         user.get('participation').get(id!).on((data: any) => {
              setMyParticipationStatus(data);
          });
          
@@ -284,6 +284,11 @@ export function RequestDetail() {
       isPastDeadline = now > deadlineTime;
   }
 
+  const filteredSubmissions = useMemo(() => {
+      if (!filterAI) return submissions;
+      return submissions.filter(s => !s.usesAI);
+  }, [submissions, filterAI]);
+
   // Unlock Logic: Select 5 random tracks if user has submitted and not yet unlocked
   useEffect(() => {
       if (!id || !user || !hasSubmitted || isPastDeadline || isOwner) return;
@@ -342,11 +347,6 @@ export function RequestDetail() {
       if (unlockedSubmissionIds.includes(sub.id!)) return false; // Peer review
       return true; // Locked
   };
-
-  const filteredSubmissions = useMemo(() => {
-      if (!filterAI) return submissions;
-      return submissions.filter(s => !s.usesAI);
-  }, [submissions, filterAI]);
 
   const handlePlayAll = () => {
       if (!request) return;

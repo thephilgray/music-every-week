@@ -48,93 +48,14 @@ export function Profile() {
     setSubmissions([]);
     setRequests([]);
 
-    const profileNode = gun.get('all_users').get(targetPub);
+    const profileNode = gun.get('all_users').get(targetPub); // Declare profileNode here
     const submissionsNode = gun.get('all_users').get(targetPub).get('submissions');
     const requestsNode = gun.get('file_requests');
 
     let isMounted = true; // Flag to prevent state updates on unmounted component
+    const submissionListeners = new Map<string, { uploader: string; listener: (data: any, key: string) => void }>();
 
-    // --- Initial Load ---
-    const initialLoad = async () => {
-        // 1. Fetch Profile (once)
-        const profileData = await new Promise<any>(resolve => profileNode.once(resolve));
-        if (!isMounted) return;
-        if (profileData) {
-            let parsedLinks = [];
-            if (typeof profileData.links === 'string') {
-                try { parsedLinks = JSON.parse(profileData.links); } catch (e) { parsedLinks = []; }
-            } else if (Array.isArray(profileData.links)) { parsedLinks = profileData.links; }
-            setProfile({ ...profileData, pub: targetPub, links: parsedLinks });
-            if (isEditing === false) {
-                setEditAlias(profileData.alias || '');
-                setEditDisplayName(profileData.displayName || profileData.alias || '');
-                setEditBio(profileData.bio || '');
-                setEditLocation(profileData.location || '');
-                setEditLinks(parsedLinks);
-            }
-        }
-
-        // 2. Fetch all Submissions (once, in parallel)
-        const submissionRefs: { refData: any; subId: string }[] = [];
-        await new Promise<void>(resolve => {
-            submissionsNode.map().once((refData: any, subId: string) => {
-                if (refData && refData !== null) {
-                    submissionRefs.push({ refData, subId });
-                }
-            });
-            // map().once() calls its callback synchronously for existing data,
-            // so this resolve will run after all existing items have been processed.
-            resolve(); 
-        });
-
-        if (!isMounted) return;
-
-        const submissionPromises = submissionRefs.map(async ({ refData, subId }) => {
-            const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
-            const subData = await new Promise<any>(resolve => gun.user(uploader).get('submissions').get(subId).once(resolve));
-
-            if (subData && subData.title && subData.requestId) {
-                const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
-                let parsedWaveform = subData.waveform;
-                if (typeof subData.waveform === 'string') {
-                    try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
-                }
-                let isHidden = subData.hiddenFromProfile;
-                if (isHidden === undefined && reqData && reqData.accessMode) {
-                    if (reqData.accessMode !== 'direct') { isHidden = true; }
-                }
-                return { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden } as Submission;
-            }
-            return null;
-        });
-        const initialSubmissions = (await Promise.all(submissionPromises)).filter(Boolean) as Submission[];
-        if (!isMounted) return;
-        setSubmissions(initialSubmissions.sort((a, b) => b.createdAt - a.createdAt));
-
-        // 3. Fetch all Requests (once)
-        const requestRefs: FileRequest[] = [];
-        await new Promise<void>(resolve => {
-            requestsNode.map().once((data: any, key: string) => {
-                if (data && data.ownerPub === targetPub) {
-                    requestRefs.push({ ...data, id: key });
-                }
-            });
-            resolve();
-        });
-        if (!isMounted) return;
-        setRequests(requestRefs.sort((a, b) => b.createdAt - a.createdAt));
-
-        setLoading(false); // Only set loading to false after ALL initial data is fetched
-    };
-
-    initialLoad();
-
-    // --- Live Updates (after initial load) ---
-    // These will handle additions/deletions, but not necessarily live updates of details of *existing* items
-    // as that caused performance issues.
-
-    // 1. Profile updates
-    profileNode.on((data: any) => {
+    const profileListener = (data: any) => {
         if (!isMounted || !data) return;
         let parsedLinks = [];
         if (typeof data.links === 'string') {
@@ -153,47 +74,82 @@ export function Profile() {
             setEditLocation(data.location || '');
             setEditLinks(parsedLinks);
         }
-    });
+    };
+    profileNode.on(profileListener);
 
-    // 2. Submissions updates (for additions/deletions)
-    // This will run AFTER initialLoad completes, and will update for new items
-    submissionsNode.map().on(async (refData: any, subId: string) => {
+    // 2. Submissions (live updates, handling additions/deletions/updates)
+    submissionsNode.map().on((refData: any, subId: string) => {
         if (!isMounted) return;
-        if (refData === null) { // Submission deleted
-            setSubmissions(prev => prev.filter(s => s.id !== subId));
-        } else if (refData) { // Submission added or updated reference
-            const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
-            const subData = await new Promise<any>(resolve => gun.user(uploader).get('submissions').get(subId).once(resolve));
 
-            if (!isMounted) return;
-            if (subData && subData.title && subData.requestId) {
-                const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
-                let parsedWaveform = subData.waveform;
-                if (typeof subData.waveform === 'string') {
-                    try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
+        const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
+
+        if (refData === null) { // Submission reference deleted
+            setSubmissions(prev => prev.filter(s => s.id !== subId));
+            // Turn off listener for this submission if it exists
+            const listenerInfo = submissionListeners.get(subId);
+            if (listenerInfo) {
+                gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
+                submissionListeners.delete(subId);
+            }
+        } else if (refData) { // Submission reference added or updated
+            // Only create a new listener if one doesn't exist or uploader changed
+            const existingListenerInfo = submissionListeners.get(subId);
+            if (!existingListenerInfo || existingListenerInfo.uploader !== uploader) {
+                // If existing listener, turn it off first
+                if (existingListenerInfo) {
+                    gun.user(existingListenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
                 }
-                let isHidden = subData.hiddenFromProfile;
-                if (isHidden === undefined && reqData && reqData.accessMode) {
-                    if (reqData.accessMode !== 'direct') { isHidden = true; }
-                }
-                const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
-                
-                setSubmissions(prev => {
-                    const exists = prev.find(s => s.id === subId);
-                    if (exists) { // Update existing (if details changed, though once() won't catch it here without re-trigger)
-                        return prev.map(s => s.id === subId ? updatedSubmission : s).sort((a, b) => b.createdAt - a.createdAt);
-                    } else { // Add new
-                        return [...prev, updatedSubmission].sort((a, b) => b.createdAt - a.createdAt);
+
+                const subListener = (subData: any) => { // This is the callback for the individual submission data
+                    if (!isMounted) return;
+
+                    if (subData === null) { // Actual submission data deleted
+                        setSubmissions(prev => prev.filter(s => s.id !== subId));
+                        const currentListenerInfo = submissionListeners.get(subId);
+                        if (currentListenerInfo) {
+                             gun.user(currentListenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
+                             submissionListeners.delete(subId);
+                        }
+                    } else if (subData && subData.title && subData.requestId) {
+                        let parsedWaveform = subData.waveform;
+                        if (typeof subData.waveform === 'string') {
+                            try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
+                        }
+                        
+                        const fetchAndSetSubmission = async () => {
+                            if (!isMounted) return; 
+
+                            const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
+                            let isHidden = subData.hiddenFromProfile;
+                            if (isHidden === undefined && reqData && reqData.accessMode) {
+                                if (reqData.accessMode !== 'direct') { isHidden = true; }
+                            }
+                            const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
+                            
+                            setSubmissions(prev => {
+                                const exists = prev.find(s => s.id === subId);
+                                if (exists) {
+                                    return prev.map(s => s.id === subId ? updatedSubmission : s)
+                                                .sort((a, b) => b.createdAt - a.createdAt);
+                                } else {
+                                    return [...prev, updatedSubmission]
+                                                .sort((a, b) => b.createdAt - a.createdAt);
+                                }
+                            });
+                        };
+                        fetchAndSetSubmission();
                     }
-                });
-            } else { // Invalid subData, remove if it exists
-                setSubmissions(prev => prev.filter(s => s.id !== subId));
+                };
+
+                // Subscribe to the actual submission data
+                gun.user(uploader).get('submissions').get(subId).on(subListener);
+                submissionListeners.set(subId, { uploader, listener: subListener });
             }
         }
     });
 
     // 3. Requests updates (for additions/deletions/updates)
-    requestsNode.map().on((data: any, key: string) => {
+    const requestsListener = (data: any, key: string) => {
         if (!isMounted) return;
         if (data === null) { // Request deleted
             setRequests(prev => prev.filter(r => r.id !== key));
@@ -209,13 +165,29 @@ export function Profile() {
                 }
             });
         }
+    };
+    requestsNode.map().on(requestsListener);
+
+    // Set loading to false once initial profile and requests are loaded,
+    // submissions will stream in.
+    profileNode.once(() => {
+        if (isMounted) {
+            // After initial profile load, we can set loading to false.
+            // Submissions will be populated by their own real-time listener.
+            setLoading(false); 
+        }
     });
 
     return () => {
         isMounted = false; // Set flag to prevent state updates on unmounted component
-        profileNode.off(); // Turns off all listeners on profileNode
+        profileNode.off(); // Turns off listener on profileNode - Changed to .off() without arguments
         submissionsNode.off(); // Turns off all listeners on submissionsNode
-        requestsNode.off(); // Turns off all listeners on requestsNode
+        requestsNode.off(); // Turns off all listeners on requestsNode - Changed to .off() without arguments
+
+        // Turn off all individual submission listeners
+        submissionListeners.forEach((listenerInfo, subId) => {
+            gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
+        });
     };
 
   }, [targetPub, gun, isEditing]);

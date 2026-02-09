@@ -2,9 +2,9 @@ config:
   gcp:region: us-west1
   gcp:project: mew-app-2
   mew2-infra:location: us-west1
-  mew2-infra:r2AccountId: 4889c7d44ca5cef68bb33a259a60ec9b
-  mew2-infra:r2BucketName: mew-2-media
+  mew2-infra:r2AccountId: 0b3cff910e69a8d0ddbdcc6e02746951
   mew2-infra:r2AccessKeyId:
     secure: AAABAFV/ik1RSQ0mApqep1qLVDKh1R+XvqGd8k80KkN29rwIHMrjY56n5tQR3N8Xsdf//pAaJ/vo/NDbzrylDg==
   mew2-infra:r2SecretAccessKey:
     secure: AAABAHAfP2LVT21M9uUgu+IBUPpQSJLBnLyMWlqgTV+95VDWDjvki1mXjKdsRGIwM3oroz+SNdV7++k8IBEhtDd86gcutQKOj5EIvujODqSumm5vs6pcKtu17snrrzgs
+  mew2-infra:r2BucketName: mew2-uploads

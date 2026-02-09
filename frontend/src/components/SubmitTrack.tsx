@@ -170,11 +170,16 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     gun.get('all_users').map().once((user: any, pub: string) => {
       if (user && user.alias && user.alias.toLowerCase().includes(term.toLowerCase())) {
         if (pub !== pubKey && !collaborators.includes(pub)) {
-             // Avoid dupes in results
-             setSearchResults(prev => {
-                const existing = new Set(prev.map(p => p.pub));
-                if (!existing.has(pub)) return [...prev, { ...user, pub }];
-                return prev;
+             // Check if this account has been migrated (is "old")
+             gun.get('migrations_reverse').get(pub).once((newPub: any) => {
+                 if (!newPub) {
+                     // Not migrated, safe to show
+                     setSearchResults(prev => {
+                        const existing = new Set(prev.map(p => p.pub));
+                        if (!existing.has(pub)) return [...prev, { ...user, pub }];
+                        return prev;
+                     });
+                 }
              });
         }
       }

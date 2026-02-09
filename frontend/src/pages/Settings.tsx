@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug, Music } from 'lucide-react';
+import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug, Music, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
@@ -31,6 +31,11 @@ export function Settings() {
 
   // Data State
   const [isClearing, setIsClearing] = useState(false);
+
+  // Migration Tool State
+  const [migrationOldPub, setMigrationOldPub] = useState('');
+  const [migrationNewPub, setMigrationNewPub] = useState('');
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // Load Initial Data
   useEffect(() => {
@@ -255,6 +260,55 @@ export function Settings() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+  };
+
+  const handleMigration = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!migrationOldPub.trim() || !migrationNewPub.trim()) {
+          error("Both public keys are required.");
+          return;
+      }
+      
+      setIsMigrating(true);
+      
+      try {
+          // Verify both users exist (optional but good practice)
+          const oldUserExists = await new Promise(resolve => 
+              gun.get('all_users').get(migrationOldPub).once(d => resolve(!!d))
+          );
+          const newUserExists = await new Promise(resolve => 
+              gun.get('all_users').get(migrationNewPub).once(d => resolve(!!d))
+          );
+
+          if (!oldUserExists) {
+              error("Old user profile not found.");
+              setIsMigrating(false);
+              return;
+          }
+          if (!newUserExists) {
+              error("New user profile not found.");
+              setIsMigrating(false);
+              return;
+          }
+
+          // Create the Link
+          // We use a dedicated 'migrations' graph
+          // Schema: migrations -> newPub -> oldPub -> true
+          await gun.get('migrations').get(migrationNewPub).get(migrationOldPub).put(true);
+          
+          // Link reverse for filtering old accounts from directory
+          // Schema: migrations_reverse -> oldPub -> newPub
+          await gun.get('migrations_reverse').get(migrationOldPub).put(migrationNewPub);
+
+          success(`Successfully linked accounts! Content migrated.`);
+          setMigrationOldPub('');
+          setMigrationNewPub('');
+      } catch (err) {
+          console.error(err);
+          error("Migration failed. Check console.");
+      } finally {
+          setIsMigrating(false);
+      }
   };
 
   return (
@@ -525,7 +579,7 @@ export function Settings() {
             Admin Tools
         </h2>
         
-        <div className="bg-gray-900 p-4 rounded-lg border border-gray-800">
+        <div className="bg-gray-900 p-4 rounded-lg border border-gray-800 mb-4">
             <h3 className="text-white font-medium mb-3">Bug Reports</h3>
             <p className="text-xs text-gray-500 mb-3">Export all bug reports sent to your inbox as a CSV file.</p>
             <button
@@ -534,6 +588,51 @@ export function Settings() {
             >
                 <Bug className="w-4 h-4" /> Export CSV
             </button>
+        </div>
+
+        <div className="bg-gray-900 p-4 rounded-lg border border-gray-800">
+            <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-500" /> 
+                Account Migration
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+                Link an old account (lost keys) to a new account. Content will be merged on the new profile, and the old account will be hidden from search.
+            </p>
+            
+            <form onSubmit={handleMigration} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr] gap-2 items-center">
+                    <input 
+                        type="text" 
+                        value={migrationOldPub} 
+                        onChange={e => setMigrationOldPub(e.target.value)}
+                        placeholder="Old Public Key (Lost)"
+                        className="w-full bg-black border border-gray-700 rounded p-2 text-white font-mono text-xs focus:border-blue-500 outline-none"
+                    />
+                    <div className="flex justify-center">
+                        <ArrowRight className="text-gray-600 w-4 h-4 rotate-90 md:rotate-0" />
+                    </div>
+                    <input 
+                        type="text" 
+                        value={migrationNewPub} 
+                        onChange={e => setMigrationNewPub(e.target.value)}
+                        placeholder="New Public Key (Current)"
+                        className="w-full bg-black border border-gray-700 rounded p-2 text-white font-mono text-xs focus:border-blue-500 outline-none"
+                    />
+                </div>
+
+                <button 
+                    type="submit" 
+                    disabled={isMigrating || !migrationOldPub || !migrationNewPub}
+                    className={`w-full py-2 rounded font-medium transition flex items-center justify-center gap-2 text-sm
+                        ${isMigrating || !migrationOldPub || !migrationNewPub
+                            ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
+                            : 'bg-blue-600 hover:bg-blue-500 text-white'
+                        }`}
+                >
+                    {isMigrating && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {isMigrating ? 'Linking...' : 'Link Accounts'}
+                </button>
+            </form>
         </div>
       </section>
       )}

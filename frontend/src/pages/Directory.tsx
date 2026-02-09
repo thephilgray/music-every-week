@@ -13,14 +13,25 @@ export function Directory() {
 
   useEffect(() => {
     const userMap = new Map<string, UserProfile>();
+    const migratedSet = new Set<string>();
     let batchTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const updateState = () => {
-        setUsers(Array.from(userMap.values()));
+        // Filter out any users that are in the migratedSet (i.e. they are "old" accounts)
+        const activeUsers = Array.from(userMap.values()).filter(u => !migratedSet.has(u.pub));
+        setUsers(activeUsers);
         setLoading(false);
         batchTimeout = null;
     };
     
+    // Listen for migrated accounts to hide them
+    gun.get('migrations_reverse').map().on((newPub: any, oldPub: string) => {
+        if (newPub) {
+            migratedSet.add(oldPub);
+            if (!batchTimeout) batchTimeout = setTimeout(updateState, 100);
+        }
+    });
+
     // Fetch all users
     // Note: This iterates all keys in 'all_users'
     gun.get('all_users').map().on((data: any, key: string) => {

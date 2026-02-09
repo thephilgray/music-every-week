@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
@@ -34,6 +34,9 @@ export function Profile() {
   const [editLinks, setEditLinks] = useState<{label: string, url: string}[]>([]);
   const [editAvatar, setEditAvatar] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Track linked public keys for migration
+  const linkedPubsRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (searchParams.get('edit') === 'true' && isOwnProfile) {
@@ -47,13 +50,30 @@ export function Profile() {
     setProfile(null);
     setSubmissions([]);
     setRequests([]);
+    
+    // Check for Reverse Migration (Old Profile -> New Profile Redirect)
+    // If this profile has been migrated, redirect to the new one.
+    if (targetPub) {
+        gun.get('migrations_reverse').get(targetPub).once((newPub: any) => {
+            if (newPub && typeof newPub === 'string' && newPub !== targetPub) {
+                console.log(`Redirecting migrated profile ${targetPub} -> ${newPub}`);
+                navigate(`/profile/${newPub}`, { replace: true });
+                return;
+            }
+        });
+    }
+    
+    // Reset linked pubs
+    linkedPubsRef.current = new Set([targetPub]);
 
-    const profileNode = gun.get('all_users').get(targetPub); // Declare profileNode here
-    const submissionsNode = gun.get('all_users').get(targetPub).get('submissions');
+    const profileNode = gun.get('all_users').get(targetPub); 
+    // We will setup submission listeners dynamically
     const requestsNode = gun.get('file_requests');
+    const migrationsNode = gun.get('migrations').get(targetPub);
 
-    let isMounted = true; // Flag to prevent state updates on unmounted component
+    let isMounted = true; 
     const submissionListeners = new Map<string, { uploader: string; listener: (data: any, key: string) => void }>();
+    const migrationListeners = new Set<string>();
 
     const profileListener = (data: any) => {
         if (!isMounted || !data) return;
@@ -62,12 +82,12 @@ export function Profile() {
             try { parsedLinks = JSON.parse(data.links); } catch (e) { parsedLinks = []; }
         } else if (Array.isArray(data.links)) { parsedLinks = data.links; }
         setProfile(currentProfile => {
-            if (currentProfile && currentProfile.pub === targetPub) { // Only update if it's the current profile
+            if (currentProfile && currentProfile.pub === targetPub) { 
                 return { ...currentProfile, ...data, links: parsedLinks };
             }
-            return { ...data, pub: targetPub, links: parsedLinks }; // Fallback if currentProfile is null or different
+            return { ...data, pub: targetPub, links: parsedLinks }; 
         });
-        if (isEditing === false) { // Update edit fields if not actively editing
+        if (isEditing === false) { 
             setEditAlias(data.alias || '');
             setEditDisplayName(data.displayName || data.alias || '');
             setEditBio(data.bio || '');
@@ -77,83 +97,117 @@ export function Profile() {
     };
     profileNode.on(profileListener);
 
-    // 2. Submissions (live updates, handling additions/deletions/updates)
-    submissionsNode.map().on((refData: any, subId: string) => {
-        if (!isMounted) return;
+    // Helper to setup submission listener for ANY pub (target or migrated)
+    const setupSubmissionListener = (sourcePub: string) => {
+        if (migrationListeners.has(sourcePub)) return; // Prevent duplicate listeners
+        migrationListeners.add(sourcePub);
 
-        const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : targetPub;
+        gun.user(sourcePub).get('submissions').map().on((refData: any, subId: string) => {
+            if (!isMounted) return;
 
-        if (refData === null) { // Submission reference deleted
-            setSubmissions(prev => prev.filter(s => s.id !== subId));
-            // Turn off listener for this submission if it exists
-            const listenerInfo = submissionListeners.get(subId);
-            if (listenerInfo) {
-                gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
-                submissionListeners.delete(subId);
-            }
-        } else if (refData) { // Submission reference added or updated
-            // Only create a new listener if one doesn't exist or uploader changed
-            const existingListenerInfo = submissionListeners.get(subId);
-            if (!existingListenerInfo || existingListenerInfo.uploader !== uploader) {
-                // If existing listener, turn it off first
-                if (existingListenerInfo) {
-                    gun.user(existingListenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
+            // Determine uploader pub (default to sourcePub if refData is not a specific pointer)
+            const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : sourcePub;
+
+            if (refData === null) { 
+                setSubmissions(prev => prev.filter(s => s.id !== subId));
+                const listenerInfo = submissionListeners.get(subId);
+                if (listenerInfo) {
+                    gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); 
+                    submissionListeners.delete(subId);
                 }
-
-                const subListener = (subData: any) => { // This is the callback for the individual submission data
-                    if (!isMounted) return;
-
-                    if (subData === null) { // Actual submission data deleted
-                        setSubmissions(prev => prev.filter(s => s.id !== subId));
-                        const currentListenerInfo = submissionListeners.get(subId);
-                        if (currentListenerInfo) {
-                             gun.user(currentListenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
-                             submissionListeners.delete(subId);
-                        }
-                    } else if (subData && subData.title && subData.requestId) {
-                        let parsedWaveform = subData.waveform;
-                        if (typeof subData.waveform === 'string') {
-                            try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
-                        }
-                        
-                        const fetchAndSetSubmission = async () => {
-                            if (!isMounted) return; 
-
-                            const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
-                            let isHidden = subData.hiddenFromProfile;
-                            if (isHidden === undefined && reqData && reqData.accessMode) {
-                                if (reqData.accessMode !== 'direct') { isHidden = true; }
-                            }
-                            const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
-                            
-                            setSubmissions(prev => {
-                                const exists = prev.find(s => s.id === subId);
-                                if (exists) {
-                                    return prev.map(s => s.id === subId ? updatedSubmission : s)
-                                                .sort((a, b) => b.createdAt - a.createdAt);
-                                } else {
-                                    return [...prev, updatedSubmission]
-                                                .sort((a, b) => b.createdAt - a.createdAt);
-                                }
-                            });
-                        };
-                        fetchAndSetSubmission();
+            } else if (refData) { 
+                const existingListenerInfo = submissionListeners.get(subId);
+                if (!existingListenerInfo || existingListenerInfo.uploader !== uploader) {
+                    if (existingListenerInfo) {
+                        gun.user(existingListenerInfo.uploader).get('submissions').get(subId).off(); 
                     }
-                };
 
-                // Subscribe to the actual submission data
-                gun.user(uploader).get('submissions').get(subId).on(subListener);
-                submissionListeners.set(subId, { uploader, listener: subListener });
+                    const subListener = (subData: any) => { 
+                        if (!isMounted) return;
+
+                        if (subData === null) { 
+                            setSubmissions(prev => prev.filter(s => s.id !== subId));
+                            const currentListenerInfo = submissionListeners.get(subId);
+                            if (currentListenerInfo) {
+                                gun.user(currentListenerInfo.uploader).get('submissions').get(subId).off(); 
+                                submissionListeners.delete(subId);
+                            }
+                        } else if (subData && subData.title && subData.requestId) {
+                            let parsedWaveform = subData.waveform;
+                            if (typeof subData.waveform === 'string') {
+                                try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
+                            }
+                            
+                            const fetchAndSetSubmission = async () => {
+                                if (!isMounted) return; 
+
+                                const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
+                                let isHidden = subData.hiddenFromProfile;
+                                if (isHidden === undefined && reqData && reqData.accessMode) {
+                                    if (reqData.accessMode !== 'direct') { isHidden = true; }
+                                }
+                                const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
+                                
+                                setSubmissions(prev => {
+                                    const exists = prev.find(s => s.id === subId);
+                                    if (exists) {
+                                        return prev.map(s => s.id === subId ? updatedSubmission : s)
+                                                    .sort((a, b) => b.createdAt - a.createdAt);
+                                    } else {
+                                        return [...prev, updatedSubmission]
+                                                    .sort((a, b) => b.createdAt - a.createdAt);
+                                    }
+                                });
+                            };
+                            fetchAndSetSubmission();
+                        }
+                    };
+                    gun.user(uploader).get('submissions').get(subId).on(subListener);
+                    submissionListeners.set(subId, { uploader, listener: subListener });
+                }
             }
+        });
+    };
+
+    // 1. Setup listeners for Target Pub
+    setupSubmissionListener(targetPub);
+
+    // 2. Setup Migration Listener
+    migrationsNode.map().on((isLinked: any, oldPub: string) => {
+        if (!isMounted) return;
+        if (isLinked && !linkedPubsRef.current.has(oldPub)) {
+            console.log(`Found migrated account: ${oldPub}`);
+            linkedPubsRef.current.add(oldPub);
+            
+            // Fetch submissions from old account
+            setupSubmissionListener(oldPub);
+
+            // Fetch requests from old account (via user graph fallback)
+            gun.user(oldPub).get('requests').map().once((_: any, reqId: string) => {
+                if (!reqId) return;
+                gun.get('file_requests').get(reqId).once((data: any) => {
+                   if (data && isMounted) {
+                        setRequests(prev => {
+                            const existingIndex = prev.findIndex(r => r.id === reqId);
+                            const updatedRequest = { ...data, id: reqId };
+                            if (existingIndex > -1) {
+                                return prev.map((r, i) => (i === existingIndex ? updatedRequest : r));
+                            } else {
+                                return [...prev, updatedRequest].sort((a, b) => b.createdAt - a.createdAt);
+                            }
+                        });
+                   }
+                });
+            });
         }
     });
 
-    // 3. Requests updates (for additions/deletions/updates)
+    // 3. Global Requests Listener (filtered by owned/linked pubs)
     const requestsListener = (data: any, key: string) => {
         if (!isMounted) return;
-        if (data === null) { // Request deleted
+        if (data === null) { 
             setRequests(prev => prev.filter(r => r.id !== key));
-        } else if (data && data.ownerPub === targetPub) {
+        } else if (data && (data.ownerPub === targetPub || linkedPubsRef.current.has(data.ownerPub))) {
             setRequests(prev => {
                 const existingIndex = prev.findIndex(r => r.id === key);
                 const updatedRequest = { ...data, id: key };
@@ -168,25 +222,25 @@ export function Profile() {
     };
     requestsNode.map().on(requestsListener);
 
-    // Set loading to false once initial profile and requests are loaded,
-    // submissions will stream in.
     profileNode.once(() => {
         if (isMounted) {
-            // After initial profile load, we can set loading to false.
-            // Submissions will be populated by their own real-time listener.
             setLoading(false); 
         }
     });
 
     return () => {
-        isMounted = false; // Set flag to prevent state updates on unmounted component
-        profileNode.off(); // Turns off listener on profileNode - Changed to .off() without arguments
-        submissionsNode.off(); // Turns off all listeners on submissionsNode
-        requestsNode.off(); // Turns off all listeners on requestsNode - Changed to .off() without arguments
+        isMounted = false; 
+        profileNode.off(); 
+        requestsNode.off(); 
+        migrationsNode.off();
 
-        // Turn off all individual submission listeners
         submissionListeners.forEach((listenerInfo, subId) => {
-            gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); // Changed to .off() without arguments
+            gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); 
+        });
+        
+        // Turn off listeners for all migrated pubs
+        migrationListeners.forEach(pub => {
+             gun.user(pub).get('submissions').off();
         });
     };
 

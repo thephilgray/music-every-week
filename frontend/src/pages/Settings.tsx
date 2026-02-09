@@ -258,13 +258,12 @@ export function Settings() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto pb-20 p-6">
+    <div className="max-w-3xl mx-auto pb-4 p-2 sm:pb-20 sm:p-6">
       <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
         Settings
       </h1>
 
-      {/* Profile Section */}
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <User className="w-5 h-5 text-blue-500" />
             Profile Settings
@@ -388,98 +387,104 @@ export function Settings() {
       </section>
 
       {/* Community Section */}
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <Users className="w-5 h-5 text-purple-500" />
             Community Contributions
         </h2>
         
-        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800">
-            <div>
-                <h3 className="text-white font-medium mb-1">Join Feedback Volunteer Pool</h3>
-                <p className="text-sm text-gray-500 max-w-md">
-                    Opt-in to be randomly selected to give feedback on tracks from other users. 
-                    Helping others helps the community grow!
-                </p>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Join Feedback Volunteer Pool</h3>
+                    <p className="text-xs text-gray-400">
+                        Opt-in to be randomly selected to give feedback on tracks from other users. 
+                        Helping others helps the community grow!
+                    </p>
+                </div>
+                <button 
+                    onClick={handleToggleVolunteer}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${isVolunteer ? 'bg-purple-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isVolunteer ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
             </div>
-            <button 
-                onClick={handleToggleVolunteer}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isVolunteer ? 'bg-purple-600' : 'bg-gray-600'}`}
-            >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isVolunteer ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-        </div>
 
-        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800 mt-4">
-            <div>
-                <h3 className="text-white font-medium mb-1">Host Requests</h3>
-                <p className="text-sm text-gray-500 max-w-md">
-                    Enable the ability to create new requests and invite others. 
-                    Turn this on if you want to host collaborative sessions.
-                </p>
+            <div className="flex items-center justify-between border-t border-gray-800 pt-4 gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Host Requests</h3>
+                    <p className="text-xs text-gray-400">
+                        Enable the ability to create new requests and invite others. 
+                        Turn this on if you want to host collaborative sessions.
+                    </p>
+                </div>
+                <button 
+                    onClick={handleToggleHost}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${isHost ? 'bg-purple-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isHost ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
             </div>
-            <button 
-                onClick={handleToggleHost}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isHost ? 'bg-purple-600' : 'bg-gray-600'}`}
-            >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isHost ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
         </div>
       </section>
 
       {/* Content Preferences */}
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <Music className="w-5 h-5 text-green-500" />
             Content Preferences
         </h2>
         
-        <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg border border-gray-800">
-            <div>
-                <h3 className="text-white font-medium mb-1">Filter AI Submissions</h3>
-                <p className="text-sm text-gray-500 max-w-md">
-                    Automatically hide submissions that voluntarily declare they were made with AI. 
-                    This also filters notifications and community feed items.
-                </p>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Filter AI Submissions</h3>
+                    <p className="text-xs text-gray-400">
+                        Automatically hide submissions that voluntarily declare they were made with AI. 
+                        This also filters notifications and community feed items.
+                    </p>
+                </div>
+                <button 
+                    onClick={handleToggleFilterAI}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${filterAI ? 'bg-green-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${filterAI ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
             </div>
-            <button 
-                onClick={handleToggleFilterAI}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${filterAI ? 'bg-green-600' : 'bg-gray-600'}`}
-            >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${filterAI ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
         </div>
       </section>
 
       {/* Privacy Section */}
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-500" />
             Privacy & Permissions
         </h2>
         
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            {isHost && (
+            <div className="flex items-center justify-between gap-x-4">
                 <div>
                     <label className="text-white font-medium block">Show Hosted Requests on Profile</label>
                     <p className="text-gray-400 text-xs">List your hosted requests on your public profile page.</p>
                 </div>
                 <button 
                     onClick={handleToggleRequestsVisibility}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showRequestsOnProfile ? 'bg-blue-600' : 'bg-gray-600'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${showRequestsOnProfile ? 'bg-blue-600' : 'bg-gray-600'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showRequestsOnProfile ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
             </div>
+            )}
 
-            <div className="flex items-center justify-between border-t border-gray-800 pt-4">
+            <div className="flex items-center justify-between border-t border-gray-800 pt-4 gap-x-4">
                 <div>
                     <label className="text-white font-medium block">Show Submissions on Profile</label>
                     <p className="text-gray-400 text-xs">List your track submissions on your public profile page.</p>
                 </div>
                 <button 
                     onClick={handleToggleSubmissionsVisibility}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showSubmissionsOnProfile ? 'bg-blue-600' : 'bg-gray-600'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${showSubmissionsOnProfile ? 'bg-blue-600' : 'bg-gray-600'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showSubmissionsOnProfile ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -488,14 +493,14 @@ export function Settings() {
       </section>
 
       {/* Data Management Section */}
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-yellow-500" />
             Data Management
         </h2>
         
         <div className="space-y-4">
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-400 text-xs">
                 MEW is a "Local-First" application. This means a lot of data is stored directly in your browser. 
                 If you are experiencing issues, clearing your local data might help. 
                 <span className="text-red-400 block mt-1">Warning: This will log you out. Ensure you have your keys saved if using a non-standard login.</span>
@@ -514,7 +519,7 @@ export function Settings() {
 
       {/* Admin Tools (Hidden) */}
       {isAdmin && (
-      <section className="bg-red-900/10 border border-red-900/30 rounded-xl p-6">
+      <section className="bg-red-900/10 border border-red-900/30 rounded-xl p-4 sm:p-6">
         <h2 className="text-xl font-semibold text-red-400 mb-6 flex items-center gap-2">
             <Shield className="w-5 h-5" />
             Admin Tools

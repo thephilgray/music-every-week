@@ -76,7 +76,7 @@ export function Home() {
                   </span>
                )}
            </div>
-           <p className="text-gray-400">Manage your collaborative sessions</p>
+           <p className="text-gray-400">Submit tracks, listen, and provide feedback</p>
         </div>
         {userProfile?.isHost && (
         <button 

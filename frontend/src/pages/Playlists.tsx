@@ -112,7 +112,7 @@ export function Playlists() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-8 pb-32">
+    <div className="max-w-5xl mx-auto p-2 pb-4 sm:p-8 sm:pb-32">
         <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
             <ListMusic className="w-8 h-8 text-blue-500" />
             My Playlists

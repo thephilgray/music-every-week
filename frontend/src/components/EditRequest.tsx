@@ -22,7 +22,21 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   
   const [title, setTitle] = useState(request.title);
   const [desc, setDesc] = useState(request.description);
-  const [deadline, setDeadline] = useState(request.deadline || '');
+  
+  // Initialize deadline: Convert UTC ISO (if stored) to Local "YYYY-MM-DDTHH:mm" for input
+  const [deadline, setDeadline] = useState(() => {
+      if (!request.deadline) return '';
+      // Check if it looks like an ISO string (ends in Z)
+      if (request.deadline.endsWith('Z')) {
+          const d = new Date(request.deadline);
+          // Adjust to local time components but keep as object to format
+          const offset = d.getTimezoneOffset() * 60000;
+          const localTime = new Date(d.getTime() - offset);
+          return localTime.toISOString().slice(0, 16);
+      }
+      return request.deadline; // Legacy (already local string)
+  });
+  
   const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(request.accessMode || 'direct');
   const [file, setFile] = useState<File | null>(null);
   const [currentArtworkUrl] = useState(request.artworkUrl || ''); // Removed unused setter
@@ -260,10 +274,16 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
           });
       }
 
+      // Convert local input time to UTC ISO for storage
+      let finalDeadline = deadline;
+      if (deadline) {
+          finalDeadline = new Date(deadline).toISOString();
+      }
+
       const updates: any = {
         title,
         description: desc,
-        deadline,
+        deadline: finalDeadline,
         accessMode,
         artworkUrl,
         inviteCode,

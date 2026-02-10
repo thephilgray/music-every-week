@@ -11,7 +11,7 @@ import { Tooltip } from './ui/Tooltip';
 const GUN_ACK_TIMEOUT = 30000;
 
 export function CreateRequest() {
-  const { gun, user, pubKey } = useGun();
+  const { gun, user, pubKey, userPair } = useGun();
   const { error } = useToast();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -229,15 +229,15 @@ export function CreateRequest() {
       if (file) {
         console.log('CreateRequest: Artwork file detected. Starting upload.');
         console.time("CreateRequest_uploadArtwork");
-        // @ts-ignore
-        if (!user || !user.is || !user.is.pub || !user.is.priv) { 
+        
+        if (!userPair || !userPair.pub || !userPair.priv) { 
             error("Authentication error: Please log in again to upload artwork.");
             console.error("CreateRequest: Upload failed: User pair (with private key) is not available.");
             setLoading(false);
             console.timeEnd("CreateRequest_handleSubmit_total");
             return;
         }
-        const result = await uploadFile(file, (user as any).is); // Using user.is from context
+        const result = await uploadFile(file, userPair);
         artworkUrl = result.url;
         console.timeEnd("CreateRequest_uploadArtwork");
         console.log(`CreateRequest: Artwork uploaded. URL: ${artworkUrl}`);
@@ -308,6 +308,13 @@ export function CreateRequest() {
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
       };
+      
+      // Convert Deadline to UTC ISO String for storage if present
+      // The input[type="datetime-local"] gives us a local time string (e.g. "2023-10-27T17:00")
+      // We convert this to a simplified ISO string (UTC) to ensure it's timezone aware across clients.
+      if (request.deadline) {
+          request.deadline = new Date(request.deadline).toISOString();
+      }
 
       console.log('CreateRequest: Constructed request object:', request);
       console.log('CreateRequest: Starting GunDB save operations for request metadata.');

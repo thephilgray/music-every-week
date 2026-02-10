@@ -572,7 +572,7 @@ export function RequestDetail() {
                      <div className="flex items-center gap-2">
                         <Clock className={`w-4 h-4 ${isPastDeadline ? 'text-red-500' : 'text-gray-400'}`} />
                         <span className={isPastDeadline ? 'text-red-500' : ''}>
-                            Due: {new Date(request.deadline).toLocaleDateString()} {new Date(request.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            Due: {new Date(request.deadline).toLocaleDateString()} {new Date(request.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}
                             {extensionHours > 0 && <span className="text-green-400 ml-2">(+ {extensionHours}h extension)</span>}
                             {isPastDeadline && <span className="text-red-500 ml-2 font-bold">CLOSED</span>}
                         </span>

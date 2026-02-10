@@ -28,6 +28,9 @@ export function Settings() {
   // Content Preferences
   const [filterAI, setFilterAI] = useState(false);
 
+  // Global Permissions (Admin Controlled)
+  const [lockHostCreation, setLockHostCreation] = useState(false);
+
 
   // Data State
   const [isClearing, setIsClearing] = useState(false);
@@ -78,7 +81,12 @@ export function Settings() {
             setFilterAI(!!data);
         });
     }
-  }, [userProfile, pubKey, user]);
+
+    // Load Global Permissions
+    gun.get('application_settings').get('lockHostCreation').on((data: any) => {
+        setLockHostCreation(!!data);
+    });
+  }, [userProfile, pubKey, user, gun]); // Added gun dependency
 
   // Load Public Visibility Settings (Separate Effect to avoid re-subscription loop)
   useEffect(() => {
@@ -180,6 +188,13 @@ export function Settings() {
 
   const handleToggleHost = () => {
       if (!pubKey) return;
+      
+      // Security Check: If locked and not admin, do nothing
+      if (lockHostCreation && !isAdmin) {
+          error("Host creation is currently restricted to administrators.");
+          return;
+      }
+
       const newValue = !isHost;
       setIsHost(newValue); 
       
@@ -192,6 +207,13 @@ export function Settings() {
       setFilterAI(newValue);
       user.get('settings').get('content').get('filterAI').put(newValue);
   };
+
+  const handleToggleLockHostCreation = () => {
+      const newValue = !lockHostCreation;
+      setLockHostCreation(newValue);
+      gun.get('application_settings').get('lockHostCreation').put(newValue);
+  };
+
 
   const handleClearData = async () => {
       if (!window.confirm("Are you sure? This will clear all local data, including your login session. You will need to log in again.")) return;
@@ -466,17 +488,31 @@ export function Settings() {
 
             <div className="flex items-center justify-between border-t border-gray-800 pt-4 gap-x-4">
                 <div>
-                    <h3 className="text-white font-medium mb-1">Host Requests</h3>
+                    <h3 className="text-white font-medium mb-1 flex items-center gap-2">
+                        Host Requests
+                        {(lockHostCreation && !isAdmin) && <Shield className="w-3 h-3 text-red-500" />}
+                    </h3>
                     <p className="text-xs text-gray-400">
-                        Enable the ability to create new requests and invite others. 
-                        Turn this on if you want to host collaborative sessions.
+                        {(lockHostCreation && !isAdmin) 
+                            ? "Host access is currently managed by administrators."
+                            : "Enable the ability to create new requests and invite others."}
                     </p>
                 </div>
                 <button 
                     onClick={handleToggleHost}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${isHost ? 'bg-purple-600' : 'bg-gray-600'}`}
+                    disabled={lockHostCreation && !isAdmin}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 
+                        ${(lockHostCreation && !isAdmin) 
+                            ? 'bg-gray-800 cursor-not-allowed opacity-50' 
+                            : (isHost ? 'bg-purple-600' : 'bg-gray-600')
+                        }`}
                 >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isHost ? 'translate-x-6' : 'translate-x-1'}`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform 
+                        ${(lockHostCreation && !isAdmin) 
+                            ? 'translate-x-1' 
+                            : (isHost ? 'translate-x-6' : 'translate-x-1')
+                        }`} 
+                    />
                 </button>
             </div>
         </div>
@@ -579,6 +615,25 @@ export function Settings() {
             Admin Tools
         </h2>
         
+        <div className="bg-gray-900 p-4 rounded-lg border border-gray-800 mb-4">
+            <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-red-500" />
+                Global Permissions
+            </h3>
+            <div className="flex items-center justify-between">
+                <div>
+                    <span className="text-sm text-gray-300 block">Lock Host Creation</span>
+                    <span className="text-xs text-gray-500">Prevent non-admins from enabling "Host" status.</span>
+                </div>
+                <button 
+                    onClick={handleToggleLockHostCreation}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${lockHostCreation ? 'bg-red-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${lockHostCreation ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+        </div>
+
         <div className="bg-gray-900 p-4 rounded-lg border border-gray-800 mb-4">
             <h3 className="text-white font-medium mb-3">Bug Reports</h3>
             <p className="text-xs text-gray-500 mb-3">Export all bug reports sent to your inbox as a CSV file.</p>

@@ -333,6 +333,8 @@ export function RequestDetail() {
       return submissions.filter(s => !s.usesAI);
   }, [submissions, filterAI]);
 
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+
   // Unlock Logic: Select 5 random tracks if user has submitted and not yet unlocked
   useEffect(() => {
       if (!id || !user || !hasSubmitted || isPastDeadline || isOwner) return;
@@ -385,12 +387,25 @@ export function RequestDetail() {
       // Volunteer mode is inherently open for feedback immediately
       if (request?.accessMode === 'volunteer') return false;
 
-      if (isPlaylistLive) return false; // Open after live date (or deadline)
-      if (isOwner) return false; // Host sees all
-      if (isAdmin) return false; // Admin sees all
-      if (sub.uploaderPub === pubKey) return false; // Own track
-      if (unlockedSubmissionIds.includes(sub.id!)) return false; // Peer review
-      return true; // Locked
+      // Host and Admin always see all
+      if (isOwner) return false; 
+      if (isAdmin) return false; 
+      
+      // Own track always visible
+      if (sub.uploaderPub === pubKey) return false;
+
+      // Unlocked via Peer Review
+      if (unlockedSubmissionIds.includes(sub.id!)) return false; 
+
+      // Playlist Live Logic:
+      // Even if live, client wants "Invitees who didn't submit" to NOT see the playlist.
+      // So, we require hasSubmitted to be true to see *other* tracks.
+      if (isPlaylistLive) {
+          if (hasSubmitted) return false; // Open to submitters
+          return true; // Still locked for non-submitters
+      }
+      
+      return true; // Default Locked
   };
 
   const handlePlayAll = () => {
@@ -514,24 +529,6 @@ export function RequestDetail() {
             </div>
         );
     }        
-          if (!request) {
-              return (
-                  <div className="max-w-5xl mx-auto py-20 text-center p-4">
-                      <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 md:p-12 inline-block shadow-2xl">
-                          <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
-                              <AlertTriangle className="w-8 h-8 text-yellow-500" />
-                          </div>
-                          <h2 className="text-2xl font-bold text-white mb-2">Request Not Found</h2>
-                          <p className="text-gray-500 mb-8 max-w-md">
-                              This request may have been deleted by the host or does not exist.
-                          </p>
-                          <Link to="/" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center gap-2 justify-center">
-                              <ArrowLeft className="w-4 h-4" /> Return Home
-                          </Link>
-                      </div>
-                  </div>
-              );
-          }
         
           return (
             <div className="max-w-5xl mx-auto p-4 md:p-8">      <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
@@ -617,7 +614,19 @@ export function RequestDetail() {
                   Hosted by <Link to={`/profile/${request.ownerPub}`} className="text-blue-400 hover:underline">{hostName || 'Loading...'}</Link>
               </div>
 
-              <p className="text-gray-300 text-lg mb-4">{request.description}</p>
+              <div className="relative">
+                  <p className={`text-gray-300 text-lg mb-4 whitespace-pre-wrap transition-all ${isDescriptionExpanded ? '' : 'line-clamp-3'}`}>
+                      {request.description}
+                  </p>
+                  {request.description && request.description.length > 150 && (
+                      <button 
+                        onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                        className="text-blue-400 hover:text-blue-300 text-sm font-medium mb-4 focus:outline-none"
+                      >
+                          {isDescriptionExpanded ? 'Show Less' : 'Read Prompt / Show More'}
+                      </button>
+                  )}
+              </div>
               
               <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-gray-400 mb-6 justify-center md:justify-start">
                  {request.deadline && (
@@ -681,7 +690,17 @@ export function RequestDetail() {
                     const isMySubmission = sub.uploaderPub === pubKey;
                     
                     return (
-                    <div id={`submission-${sub.id}`} key={sub.id} className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group`}>
+                    <div 
+                        id={`submission-${sub.id}`} 
+                        key={sub.id} 
+                        className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group ${!locked ? 'cursor-pointer hover:border-gray-700' : ''}`}
+                        onClick={(e) => {
+                            if (locked) return;
+                            // Don't toggle if clicking buttons
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null));
+                        }}
+                    >
                         <div className="flex flex-col md:flex-row md:items-center gap-4">
                             {/* Artwork and Info Group */}
                             <div className="flex items-center gap-4 flex-1 min-w-0 w-full">
@@ -725,7 +744,7 @@ export function RequestDetail() {
                                 <div className="flex items-center gap-2">
                                     {isMySubmission && !isPastDeadline && (
                                         <button 
-                                            onClick={() => setIsSubmitOpen(true)}
+                                            onClick={(e) => { e.stopPropagation(); setIsSubmitOpen(true); }}
                                             className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
                                             title="Edit Submission"
                                         >
@@ -735,7 +754,7 @@ export function RequestDetail() {
                                     
                                     {sub.lyrics && (
                                         <button 
-                                            onClick={() => setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] }))}
+                                            onClick={(e) => { e.stopPropagation(); setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] })); }}
                                             disabled={locked}
                                             className={`p-2 rounded-full transition ${expandedLyricsMap[sub.id!] ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                             title="Lyrics / Notes"
@@ -745,7 +764,7 @@ export function RequestDetail() {
                                     )}
 
                                     <button 
-                                        onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
+                                        onClick={(e) => { e.stopPropagation(); setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null)); }}
                                         disabled={locked}
                                         className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
@@ -756,7 +775,7 @@ export function RequestDetail() {
                                     </button>
                                     
                                     <button                                      
-                                        onClick={() => setAddToPlaylistSubmission(sub)}
+                                        onClick={(e) => { e.stopPropagation(); setAddToPlaylistSubmission(sub); }}
                                         disabled={locked}
                                         className={`p-2 rounded-full transition text-gray-400 hover:text-white ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         title="Add to Playlist"
@@ -766,7 +785,8 @@ export function RequestDetail() {
                                 </div>
                                 
                                 <button 
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                        e.stopPropagation();
                                         if (locked) return;
                                         if (currentTrack?.id === sub.id && isPlaying) {
                                             pause();

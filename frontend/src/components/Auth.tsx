@@ -274,7 +274,7 @@ export function Auth() {
   return (
     <div className="max-w-md mx-auto mt-10 p-6 bg-gray-800 rounded-lg shadow-xl border border-gray-700">
       <h2 className="text-2xl font-bold mb-6 text-center text-white">
-        {isSignup ? 'Create Account' : 'Login'}
+        {isSignup ? 'Create Account' : 'Member Login'}
       </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

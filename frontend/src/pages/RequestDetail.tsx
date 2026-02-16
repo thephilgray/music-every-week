@@ -698,7 +698,17 @@ export function RequestDetail() {
                             if (locked) return;
                             // Don't toggle if clicking buttons
                             if ((e.target as HTMLElement).closest('button')) return;
-                            setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null));
+
+                            const isExpanding = expandedSubmissionId !== sub.id;
+                            setExpandedSubmissionId(isExpanding ? (sub.id || null) : null);
+                            
+                            // Also toggle lyrics if they exist
+                            if (sub.lyrics) {
+                                setExpandedLyricsMap(prev => ({
+                                    ...prev,
+                                    [sub.id!]: isExpanding
+                                }));
+                            }
                         }}
                     >
                         <div className="flex flex-col md:flex-row md:items-center gap-4">

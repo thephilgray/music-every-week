@@ -37,6 +37,17 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       return request.deadline; // Legacy (already local string)
   });
   
+  const [playlistLiveDate, setPlaylistLiveDate] = useState(() => {
+      if (!request.playlistLiveDate) return '';
+      if (request.playlistLiveDate.endsWith('Z')) {
+          const d = new Date(request.playlistLiveDate);
+          const offset = d.getTimezoneOffset() * 60000;
+          const localTime = new Date(d.getTime() - offset);
+          return localTime.toISOString().slice(0, 16);
+      }
+      return request.playlistLiveDate;
+  });
+
   const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(request.accessMode || 'direct');
   const [file, setFile] = useState<File | null>(null);
   const [currentArtworkUrl] = useState(request.artworkUrl || ''); // Removed unused setter
@@ -210,14 +221,6 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
      setSelectedParticipants(newParts);
   };
 
-  const addEmail = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (emailInput && !pendingEmails.includes(emailInput)) {
-      setPendingEmails([...pendingEmails, emailInput]);
-      setEmailInput('');
-    }
-  };
-
   const removeEmail = (email: string) => {
     setPendingEmails(pendingEmails.filter(e => e !== email));
   };
@@ -279,11 +282,17 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       if (deadline) {
           finalDeadline = new Date(deadline).toISOString();
       }
+      
+      let finalPlaylistLiveDate = playlistLiveDate;
+      if (playlistLiveDate) {
+          finalPlaylistLiveDate = new Date(playlistLiveDate).toISOString();
+      }
 
       const updates: any = {
         title,
         description: desc,
         deadline: finalDeadline,
+        playlistLiveDate: finalPlaylistLiveDate,
         accessMode,
         artworkUrl,
         inviteCode,
@@ -432,7 +441,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
             <h2 className="text-xl font-bold text-white">Edit Request</h2>
         </div>
 
-        <form onSubmit={handleSave} className="p-6 space-y-4">
+        <form onSubmit={handleSave} className="p-4 md:p-6 space-y-4">
             <div>
                 <label className="block text-gray-400 text-sm mb-1">Title</label>
                 <input 
@@ -464,6 +473,18 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                         type="datetime-local" 
                         value={deadline}
                         onChange={e => setDeadline(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                    />
+                </div>
+                <div>
+                    <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                        Playlist Live Date (Optional)
+                        <Tooltip content="If set, submissions remain hidden until this date." icon />
+                    </label>
+                    <input 
+                        type="datetime-local" 
+                        value={playlistLiveDate}
+                        onChange={e => setPlaylistLiveDate(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                     />
                 </div>
@@ -594,20 +615,53 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                      Invite by Email
                      <Tooltip content="Add external users. They will need the invite link to join." icon />
                  </label>
-                 <div className="flex gap-2 mb-2">
-                   <input 
-                     type="email" 
+                 <div className="flex flex-col gap-2 mb-2">
+                   <textarea 
                      value={emailInput}
-                     onChange={e => setEmailInput(e.target.value)}
-                     className="flex-1 bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
-                     placeholder="friend@example.com"
+                     onChange={e => {
+                        const val = e.target.value;
+                        setEmailInput(val);
+                        
+                        // Auto-process on paste or delimiter
+                        if (val.includes(',') || val.includes('\n')) {
+                            const raw = val.split(/[\n, ]+/);
+                            const valid: string[] = [];
+                            let remaining = '';
+
+                            raw.forEach((s, i) => {
+                                const trimmed = s.trim();
+                                const endsWithDelimiter = val.trimEnd().match(/[\n,]$/);
+                                const hasInternalSpace = trimmed.includes(' ');
+
+                                if (i === raw.length - 1 && !endsWithDelimiter) { 
+                                    remaining = s; 
+                                } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !pendingEmails.includes(trimmed)) {
+                                    valid.push(trimmed);
+                                }
+                            });
+                            
+                            if (valid.length > 0) {
+                                setPendingEmails(prev => Array.from(new Set([...prev, ...valid])));
+                                setEmailInput(remaining); 
+                            }
+                        }
+                     }}
+                     onBlur={() => {
+                        if (!emailInput.trim()) return;
+                        const valid = emailInput
+                            .split(/[\n, ]+/)
+                            .map(s => s.trim())
+                            .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !pendingEmails.includes(s));
+                        
+                        if (valid.length > 0) {
+                            setPendingEmails(prev => Array.from(new Set([...prev, ...valid])));
+                            setEmailInput(''); 
+                        }
+                     }}
+                     className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none h-20 text-sm"
+                     placeholder="friend@example.com (Press Enter or Comma to add)"
                    />
-                   <button 
-                     onClick={addEmail}
-                     className="bg-gray-700 hover:bg-gray-600 px-4 rounded text-white text-sm font-semibold"
-                   >
-                     Add
-                   </button>
+                   <p className="text-xs text-gray-500">Paste a list of emails here. Separate with commas or newlines.</p>
                  </div>
                </div>
 
@@ -633,6 +687,15 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
             <div>
                 <label className="block text-gray-400 text-sm mb-1">Update Artwork (Optional)</label>
+                {(file || currentArtworkUrl) && (
+                    <div className="mb-2 w-24 h-24 bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
+                        <img 
+                            src={file ? URL.createObjectURL(file) : currentArtworkUrl} 
+                            alt="Artwork Preview" 
+                            className="w-full h-full object-cover"
+                        />
+                    </div>
+                )}
                 <input 
                     type="file" 
                     onChange={e => setFile(e.target.files ? e.target.files[0] : null)}

@@ -37,6 +37,7 @@ export interface FileRequest {
   }>; // Snapshot of participants
   pending_emails?: string[];
   hiddenFromProfile?: boolean;
+  playlistLiveDate?: string;
 }
 
 export interface Submission {
@@ -56,6 +57,8 @@ export interface Submission {
   stage?: string;
   feedbackFocus?: string[];
   usesAI?: boolean;
+  proxyFor?: { alias: string, pub?: string };
+  fragile?: boolean;
 }
 
 export interface Comment {

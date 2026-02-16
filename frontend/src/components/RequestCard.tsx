@@ -42,11 +42,19 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
               No Artwork
             </div>
           )}
-          {request.accessMode === 'direct' && (
+          {request.accessMode === 'direct' ? (
             <div className="absolute top-2 left-2 px-2 py-1 bg-blue-600/90 text-white rounded text-xs font-bold border border-blue-400 shadow-md">
               PUBLIC
             </div>
-          )}
+          ) : request.accessMode === 'invite' ? (
+            <div className="absolute top-2 left-2 px-2 py-1 bg-purple-600/90 text-white rounded text-xs font-bold border border-purple-400 shadow-md">
+              PRIVATE
+            </div>
+          ) : request.accessMode === 'volunteer' ? (
+             <div className="absolute top-2 left-2 px-2 py-1 bg-teal-600/90 text-white rounded text-xs font-bold border border-teal-400 shadow-md">
+              VOLUNTEER
+            </div>
+          ) : null}
           {isClosed && (
             <div className="absolute bottom-2 right-2 px-2 py-1 bg-red-900/90 text-red-200 rounded text-xs font-bold border border-red-700">
               CLOSED

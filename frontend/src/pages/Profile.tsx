@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff, Shield } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
+import { Tooltip } from '../components/ui/Tooltip';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import type { UserProfile, Submission, FileRequest } from '../types';
 
 export function Profile() {
@@ -34,6 +36,8 @@ export function Profile() {
   const [editLinks, setEditLinks] = useState<{label: string, url: string}[]>([]);
   const [editAvatar, setEditAvatar] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Track linked public keys for migration
   const linkedPubsRef = useRef(new Set<string>());
@@ -303,9 +307,24 @@ export function Profile() {
       setEditLinks(newLinks);
   };
 
-  const handleAdminDelete = async () => {
-      if (!confirm(`Are you sure you want to remove ${profile?.alias} from the directory? This hides them from search but preserves their history.`)) return;
+  const executePromoteAdmin = async () => {
       if (!targetPub) return;
+      setShowPromoteConfirm(false);
+
+      try {
+          await gun.get('all_users').get(targetPub).get('isAdmin').put(true);
+          success("User promoted to Admin.");
+          // Optimistic update
+          setProfile(prev => prev ? { ...prev, isAdmin: true } : null);
+      } catch (e) {
+          console.error(e);
+          error("Failed to promote user.");
+      }
+  };
+
+  const executeAdminDelete = async () => {
+      if (!targetPub) return;
+      setShowDeleteConfirm(false);
 
       try {
           await gun.get('all_users').get(targetPub).put(null);
@@ -418,14 +437,25 @@ export function Profile() {
                                 <Edit className="w-4 h-4" />
                             </button>
                         )}
+                        {isAdmin && !isOwnProfile && !profile.isAdmin && (
+                            <Tooltip content="Promote to Admin">
+                                <button 
+                                    onClick={() => setShowPromoteConfirm(true)}
+                                    className="p-2 text-green-400 hover:text-green-200 bg-green-900/20 rounded-full hover:bg-green-900/40 border border-green-900/50 transition"
+                                >
+                                    <Shield className="w-4 h-4" />
+                                </button>
+                            </Tooltip>
+                        )}
                         {isAdmin && !isOwnProfile && (
-                            <button 
-                                onClick={handleAdminDelete}
-                                className="p-2 text-red-400 hover:text-red-200 bg-red-900/20 rounded-full hover:bg-red-900/40 border border-red-900/50 transition"
-                                title="Admin: Remove from Directory"
-                            >
-                                <ShieldAlert className="w-4 h-4" />
-                            </button>
+                            <Tooltip content="Remove from Directory">
+                                <button 
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="p-2 text-red-400 hover:text-red-200 bg-red-900/20 rounded-full hover:bg-red-900/40 border border-red-900/50 transition"
+                                >
+                                    <ShieldAlert className="w-4 h-4" />
+                                </button>
+                            </Tooltip>
                         )}
                     </div>
                     
@@ -698,6 +728,25 @@ export function Profile() {
                 </div>
             </div>
         )}
+
+        <ConfirmModal 
+            isOpen={showPromoteConfirm}
+            title="Promote to Admin?"
+            message={`Are you sure you want to promote ${profile.alias} to Admin? They will have full access to manage content and users.`}
+            confirmLabel="Promote"
+            onConfirm={executePromoteAdmin}
+            onCancel={() => setShowPromoteConfirm(false)}
+        />
+
+        <ConfirmModal 
+            isOpen={showDeleteConfirm}
+            title="Remove from Directory?"
+            message={`Are you sure you want to remove ${profile.alias} from the directory? This hides them from search but preserves their history.`}
+            confirmLabel="Remove User"
+            isDestructive={true}
+            onConfirm={executeAdminDelete}
+            onCancel={() => setShowDeleteConfirm(false)}
+        />
     </div>
   );
 }

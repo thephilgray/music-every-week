@@ -55,9 +55,9 @@ app.get('/api/upload-url', async (req, res) => {
          return res.status(401).json({ error: 'Missing authentication headers' });
     }
 
-    // 1. Check timestamp freshness (5 min window)
+    // 1. Check timestamp freshness (15 min window to allow for clock drift)
     const now = Date.now();
-    if (Math.abs(now - parseInt(timestamp)) > 300000) {
+    if (Math.abs(now - parseInt(timestamp)) > 900000) {
         console.error('Request expired');
         return res.status(401).json({ error: 'Request expired' });
     }

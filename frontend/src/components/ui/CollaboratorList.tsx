@@ -17,6 +17,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
   const [isExpanded, setIsExpanded] = useState(false);
   const [loadedCollaborators, setLoadedCollaborators] = useState<Record<string, boolean>>({});
   const [isLinked, setIsLinked] = useState(true); // Default to linked
+  const [proxyFor, setProxyFor] = useState<{ alias: string, pub?: string } | null>(null);
 
   useEffect(() => {
       let found = false;
@@ -42,14 +43,19 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
           }
       }
 
-      // 2. If not found in prop, OR if we need to check linkProfile status, try Source
+      // 2. If not found in prop, OR if we need to check linkProfile/proxy status, try Source
       if (submissionId && uploaderPub && gun) {
-          // Fetch entire submission node to get linkProfile AND collaborators if needed
+          // Fetch entire submission node to get linkProfile, proxyFor AND collaborators if needed
           gun.user(uploaderPub).get('submissions').get(submissionId).once((data: any) => {
               if (data) {
                   // Check linkProfile
                   if (data.linkProfile !== undefined) {
                       setIsLinked(data.linkProfile);
+                  }
+                  
+                  // Check Proxy
+                  if (data.proxyFor) {
+                      setProxyFor(data.proxyFor);
                   }
 
                   // If we didn't have collaborators from props, use fetched ones
@@ -121,6 +127,17 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
   
   // Render Uploader Name (Link or Text based on isLinked)
   const renderUploader = () => {
+      if (proxyFor) {
+          return (
+              <span 
+                className="text-white relative z-10 cursor-help border-b border-dotted border-gray-500" 
+                title={`Uploaded by Admin on behalf of ${proxyFor.alias}`}
+              >
+                  {proxyFor.alias} <span className="text-[10px] text-gray-500 uppercase tracking-wider">(Proxy)</span>
+              </span>
+          );
+      }
+
       const displayPub = uploaderPub || 'unknown';
       const name = names[displayPub] || displayPub.substring(0, 8);
       
@@ -216,7 +233,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
                   <button 
                       onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
                       className="ml-2 text-blue-400 hover:text-white relative z-10"
-                      title="Collapse to Byline"
+                      title="Collapse to Artist Name"
                   >
                       <ChevronUp className="w-3 h-3" />
                   </button>

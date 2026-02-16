@@ -10,15 +10,17 @@ import { AddToPlaylist } from '../components/AddToPlaylist';
 import { EditRequest } from '../components/EditRequest';
 import { Waveform } from '../components/ui/Waveform';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
+import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
-  const { gun, pubKey, user } = useGun();
+  const { gun, pubKey, user, isAdmin } = useGun();
   const { success, error } = useToast();
-  const { play, currentTrack, isPlaying, pause } = usePlayer();
+  const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
   const [request, setRequest] = useState<FileRequest | null>(null);
+  const [ownerPub, setOwnerPub] = useState<string | null>(null);
   const [hostName, setHostName] = useState<string>('');
   const [participants, setParticipants] = useState<Record<string, any>>({});
   const [isVerified, setIsVerified] = useState(true); // Security Check
@@ -35,6 +37,24 @@ export function RequestDetail() {
   // Deep Link Params
   const linkedSubmissionId = searchParams.get('submission');
   const linkedCommentId = searchParams.get('comment');
+  const extensionCode = searchParams.get('extension');
+
+  // Extension Code Handler
+  useEffect(() => {
+      if (extensionCode && pubKey && id && user) {
+          gun.get('extension_codes').get(extensionCode).once((data: any) => {
+              if (data && data.requestId === id) {
+                  console.log("Found extension code:", data);
+                  // Apply Extension to Public Participant Node
+                  gun.get('request_participants').get(id).get(pubKey).get('extensionHours').put(data.hours, (ack: any) => {
+                      if (!ack.err) {
+                          success(`Extension applied! You have +${data.hours} extra hours.`);
+                      }
+                  });
+              }
+          });
+      }
+  }, [extensionCode, pubKey, id, user]);
 
   // Access Mode Logic
   const [myParticipationStatus, setMyParticipationStatus] = useState<'pending' | 'accepted' | 'declined' | null>(null);
@@ -131,11 +151,9 @@ export function RequestDetail() {
                 participants: {} // Placeholder, populated by separate state
             });
 
-            // Fetch Host Name
+            // Set Owner Pub for separate subscription
             if (data.ownerPub) {
-                gun.get('all_users').get(data.ownerPub).once((u: any) => {
-                    if (u) setHostName(u.displayName || u.alias || 'Unknown Host');
-                });
+                setOwnerPub(data.ownerPub);
             }
         } else if (data === null) {
             // Explicitly deleted
@@ -155,6 +173,20 @@ export function RequestDetail() {
     
   }, [id, gun]);
 
+  // Separate Effect for Host Name
+  useEffect(() => {
+      if (!ownerPub) return;
+      
+      const hostNode = gun.get('all_users').get(ownerPub);
+      hostNode.on((u: any) => {
+          if (u) setHostName(u.displayName || u.alias || 'Unknown Host');
+      });
+
+      return () => {
+          hostNode.off();
+      };
+  }, [ownerPub, gun]);
+
   // Separate Effect for Submissions to ensure clean subscription/unsubscription
   useEffect(() => {
     if (!id) return;
@@ -163,8 +195,9 @@ export function RequestDetail() {
     setSubmissions([]); 
     
     const submissionsNode = gun.get('request_submissions').get(id);
+    const map = submissionsNode.map();
     
-    submissionsNode.map().on((data: any, key: string) => {
+    map.on((data: any, key: string) => {
         if (data) {
             
             // Security Check for Submissions
@@ -236,7 +269,7 @@ export function RequestDetail() {
     });
 
     return () => {
-        submissionsNode.map().off();
+        map.off();
     };
   }, [id, gun]);
 
@@ -263,6 +296,7 @@ export function RequestDetail() {
   let deadlineTime = 0;
   let isPastDeadline = false;
   let extensionHours = 0;
+  let playlistUnlockTime = 0; // Default 0 means immediate if no deadline/date? No, logic below.
 
   if (request && request.deadline) {
       const deadlineDate = new Date(request.deadline);
@@ -283,6 +317,16 @@ export function RequestDetail() {
       
       isPastDeadline = now > deadlineTime;
   }
+  
+  // Playlist Live Date Logic
+  if (request?.playlistLiveDate) {
+      playlistUnlockTime = new Date(request.playlistLiveDate).getTime();
+  } else {
+      // Default behavior: Unlock when deadline passes
+      playlistUnlockTime = deadlineTime;
+  }
+  
+  const isPlaylistLive = now > playlistUnlockTime;
 
   const filteredSubmissions = useMemo(() => {
       if (!filterAI) return submissions;
@@ -341,8 +385,9 @@ export function RequestDetail() {
       // Volunteer mode is inherently open for feedback immediately
       if (request?.accessMode === 'volunteer') return false;
 
-      if (isPastDeadline) return false; // Open after deadline
+      if (isPlaylistLive) return false; // Open after live date (or deadline)
       if (isOwner) return false; // Host sees all
+      if (isAdmin) return false; // Admin sees all
       if (sub.uploaderPub === pubKey) return false; // Own track
       if (unlockedSubmissionIds.includes(sub.id!)) return false; // Peer review
       return true; // Locked
@@ -351,7 +396,14 @@ export function RequestDetail() {
   const handlePlayAll = () => {
       if (!request) return;
       const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
-      if (visibleSubmissions.length > 0) {
+      
+      if (context?.id === request.id && visibleSubmissions.length > 0) {
+          if (isPlaying) {
+              pause();
+          } else {
+              resume();
+          }
+      } else if (visibleSubmissions.length > 0) {
           play(visibleSubmissions[0], visibleSubmissions, {
               type: 'request',
               id: request.id!,
@@ -605,7 +657,15 @@ export function RequestDetail() {
                     onClick={handlePlayAll}
                     className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600"
                 >
-                    <Play className="w-3 h-3 fill-current" /> Play All
+                    {context?.id === request.id && isPlaying ? (
+                        <>
+                            <Pause className="w-3 h-3 fill-current" /> Pause
+                        </>
+                    ) : (
+                        <>
+                            <Play className="w-3 h-3 fill-current" /> {context?.id === request.id ? 'Resume' : 'Play All'}
+                        </>
+                    )}
                 </button>
             )}
           </div>
@@ -622,81 +682,88 @@ export function RequestDetail() {
                     
                     return (
                     <div id={`submission-${sub.id}`} key={sub.id} className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group`}>
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0 relative">
-                                {sub.artworkUrl && !locked ? (
-                                    <img src={sub.artworkUrl} className="w-full h-full object-cover rounded" alt="Art" />
-                                ) : (
-                                    <FileAudio className="text-gray-600" />
-                                )}
-                                {locked && (
-                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded">
-                                        <Lock className="w-4 h-4 text-gray-400" />
-                                    </div>
-                                )}
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                                <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
-                                    {locked ? 'Hidden Track' : sub.title}
-                                </h4>
-                                <div className="flex items-center gap-2">
-                                    <CollaboratorList 
-                                        uploaderPub={sub.uploaderPub!} 
-                                        submissionId={sub.id}
-                                        byline={sub.byline} 
-                                        collaborators={sub.collaborators} 
+                        <div className="flex flex-col md:flex-row md:items-center gap-4">
+                            {/* Artwork and Info Group */}
+                            <div className="flex items-center gap-4 flex-1 min-w-0 w-full">
+                                <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0 relative">
+                                    <ArtworkDisplay 
+                                        src={!locked ? sub.artworkUrl : null}
+                                        alt="Art"
+                                        className="w-full h-full object-cover rounded"
+                                        FallbackIcon={FileAudio}
                                     />
-                                    {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
+                                    {locked && (
+                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded">
+                                            <Lock className="w-4 h-4 text-gray-400" />
+                                        </div>
+                                    )}
                                 </div>
-                                {sub.waveform && sub.waveform.length > 0 && !locked && (
-                                     <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition">
-                                         <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
-                                     </div>
-                                 )}
+                                
+                                <div className="flex-1 min-w-0">
+                                    <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
+                                        {locked ? 'Hidden Track' : sub.title}
+                                    </h4>
+                                    <div className="flex items-center gap-2">
+                                        <CollaboratorList 
+                                            uploaderPub={sub.uploaderPub!} 
+                                            submissionId={sub.id}
+                                            byline={sub.byline} 
+                                            collaborators={sub.collaborators} 
+                                        />
+                                        {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
+                                    </div>
+                                    {sub.waveform && sub.waveform.length > 0 && !locked && (
+                                        <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition hidden md:block">
+                                            <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                                {isMySubmission && !isPastDeadline && (
-                                    <button 
-                                        onClick={() => setIsSubmitOpen(true)}
-                                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
-                                        title="Edit Submission"
-                                    >
-                                        <Edit className="w-4 h-4" />
-                                    </button>
-                                )}
-                                
-                                {sub.lyrics && (
-                                    <button 
-                                        onClick={() => setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] }))}
-                                        disabled={locked}
-                                        className={`p-2 rounded-full transition ${expandedLyricsMap[sub.id!] ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="Lyrics / Notes"
-                                    >
-                                        <FileText className="w-4 h-4" />
-                                    </button>
-                                )}
-
-                                <button 
-                                    onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
-                                    disabled={locked}
-                                    className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                >
-                                    <MessageSquare className="w-4 h-4" />
-                                    {commentCounts[sub.id!] > 0 && (
-                                        <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
+                            {/* Buttons Row */}
+                            <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-gray-800 md:border-none">
+                                <div className="flex items-center gap-2">
+                                    {isMySubmission && !isPastDeadline && (
+                                        <button 
+                                            onClick={() => setIsSubmitOpen(true)}
+                                            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
+                                            title="Edit Submission"
+                                        >
+                                            <Edit className="w-4 h-4" />
+                                        </button>
                                     )}
-                                </button>
-                                
-                                <button                                      
-                                    onClick={() => setAddToPlaylistSubmission(sub)}
-                                    disabled={locked}
-                                    className={`p-2 rounded-full transition text-gray-400 hover:text-white ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    title="Add to Playlist"
-                                >
-                                    <ListPlus className="w-4 h-4" />
-                                </button>
+                                    
+                                    {sub.lyrics && (
+                                        <button 
+                                            onClick={() => setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] }))}
+                                            disabled={locked}
+                                            className={`p-2 rounded-full transition ${expandedLyricsMap[sub.id!] ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title="Lyrics / Notes"
+                                        >
+                                            <FileText className="w-4 h-4" />
+                                        </button>
+                                    )}
+
+                                    <button 
+                                        onClick={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
+                                        disabled={locked}
+                                        className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <MessageSquare className="w-4 h-4" />
+                                        {commentCounts[sub.id!] > 0 && (
+                                            <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
+                                        )}
+                                    </button>
+                                    
+                                    <button                                      
+                                        onClick={() => setAddToPlaylistSubmission(sub)}
+                                        disabled={locked}
+                                        className={`p-2 rounded-full transition text-gray-400 hover:text-white ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Add to Playlist"
+                                    >
+                                        <ListPlus className="w-4 h-4" />
+                                    </button>
+                                </div>
                                 
                                 <button 
                                     onClick={() => {
@@ -713,7 +780,7 @@ export function RequestDetail() {
                                         }
                                     }}
                                     disabled={locked}
-                                    className={`w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition ml-2 ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className={`w-10 h-10 md:w-8 md:h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition ml-2 ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
                                     {locked ? (
                                         <Lock className="w-3 h-3 text-gray-500" />
@@ -726,10 +793,17 @@ export function RequestDetail() {
                             </div>
                         </div>
                         
+                        {/* Mobile Waveform (optional, keeping desktop only for now or moving below) */}
+                        {sub.waveform && sub.waveform.length > 0 && !locked && (
+                             <div className="mt-2 w-full opacity-70 block md:hidden">
+                                 <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
+                             </div>
+                         )}
+                        
                         {(expandedLyricsMap[sub.id!] && !locked) && (
                             <div className="mt-4 px-4 pb-2">
                                 <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Lyrics / Notes</h5>
-                                <div className="bg-gray-950 p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap font-mono">
+                                <div className="bg-gray-950 p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap break-words font-mono">
                                     {sub.lyrics}
                                 </div>
                             </div>
@@ -822,6 +896,9 @@ export function RequestDetail() {
             onClose={() => setAddToPlaylistSubmission(null)}
         />
       )}
+      
+      {/* Bottom Spacer for Player */}
+      <div className="h-32" />
     </div>
   );
 }

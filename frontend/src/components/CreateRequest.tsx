@@ -16,6 +16,7 @@ export function CreateRequest() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [playlistLiveDate, setPlaylistLiveDate] = useState('');
   const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>('direct');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -315,6 +316,10 @@ export function CreateRequest() {
       if (request.deadline) {
           request.deadline = new Date(request.deadline).toISOString();
       }
+      
+      if (playlistLiveDate) {
+          request.playlistLiveDate = new Date(playlistLiveDate).toISOString();
+      }
 
       console.log('CreateRequest: Constructed request object:', request);
       console.log('CreateRequest: Starting GunDB save operations for request metadata.');
@@ -485,7 +490,7 @@ export function CreateRequest() {
   }
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg mb-8 border border-gray-700">
+    <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-8 border border-gray-700">
       <h3 className="text-xl font-bold text-white mb-4">Create New File Request</h3>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -523,6 +528,18 @@ export function CreateRequest() {
               onChange={e => setDeadline(e.target.value)}
               className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
               required
+            />
+          </div>
+          <div>
+            <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                Playlist Live Date (Optional)
+                <Tooltip content="If set, the playlist/submissions will remain hidden from participants until this date. If blank, they are visible immediately (or after deadline depending on mode)." icon />
+            </label>
+            <input 
+              type="datetime-local" 
+              value={playlistLiveDate}
+              onChange={e => setPlaylistLiveDate(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
             />
           </div>
           <div>

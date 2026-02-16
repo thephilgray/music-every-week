@@ -1,64 +1,85 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useReducer } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, User } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import type { UserProfile } from '../types';
 
+type UserState = Record<string, UserProfile>;
+type Action = 
+  | { type: 'ADD_USER'; key: string; user: UserProfile }
+  | { type: 'REMOVE_USER'; key: string };
+
+function userReducer(state: UserState, action: Action): UserState {
+  switch (action.type) {
+    case 'ADD_USER':
+      // Only update if changed to avoid renders? React handles object identity checks on parents, 
+      // but here we return a new object. 
+      return { ...state, [action.key]: action.user };
+    case 'REMOVE_USER':
+      if (!state[action.key]) return state;
+      const newState = { ...state };
+      delete newState[action.key];
+      return newState;
+    default:
+      return state;
+  }
+}
+
 export function Directory() {
   const { gun } = useGun();
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [userState, dispatch] = useReducer(userReducer, {});
+  const [migratedSet, setMigratedSet] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const userMap = new Map<string, UserProfile>();
-    const migratedSet = new Set<string>();
-    let batchTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const updateState = () => {
-        // Filter out any users that are in the migratedSet (i.e. they are "old" accounts)
-        const activeUsers = Array.from(userMap.values()).filter(u => !migratedSet.has(u.pub));
-        setUsers(activeUsers);
-        setLoading(false);
-        batchTimeout = null;
-    };
-    
-    // Listen for migrated accounts to hide them
-    gun.get('migrations_reverse').map().on((newPub: any, oldPub: string) => {
+    // 1. Listen for migrated accounts
+    const migrationsMap = gun.get('migrations_reverse').map();
+    migrationsMap.on((newPub: any, oldPub: string) => {
         if (newPub) {
-            migratedSet.add(oldPub);
-            if (!batchTimeout) batchTimeout = setTimeout(updateState, 100);
+            setMigratedSet(prev => {
+                const next = new Set(prev);
+                next.add(oldPub);
+                return next;
+            });
         }
     });
 
-    // Fetch all users
-    // Note: This iterates all keys in 'all_users'
-    gun.get('all_users').map().on((data: any, key: string) => {
-        if (data && data.alias) {
-            // Ensure pub key is set from key if not in data
-            userMap.set(key, { ...data, pub: key });
-            
-            if (!batchTimeout) {
-                batchTimeout = setTimeout(updateState, 100);
-            }
+    // 2. Fetch all users
+    const usersMap = gun.get('all_users').map();
+    usersMap.on((data: any, key: string) => {
+        if (data) {
+            dispatch({ 
+                type: 'ADD_USER', 
+                key, 
+                user: { ...data, pub: key, alias: data.alias || 'Unknown' } 
+            });
+            setLoading(false);
+        } else {
+            dispatch({ type: 'REMOVE_USER', key });
         }
     });
 
     // Fallback if empty or slow
     const timer = setTimeout(() => {
-        if (userMap.size === 0) setLoading(false);
-    }, 2000);
+        // If we haven't received data by now, just stop loading spinner
+        setLoading(false);
+    }, 5000);
 
     return () => {
-        if (batchTimeout) clearTimeout(batchTimeout);
         clearTimeout(timer);
+        migrationsMap.off();
+        usersMap.off();
     };
   }, [gun]);
 
+  const users = Object.values(userState);
+  
   const filteredUsers = users.filter(u => 
-      u.alias.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (u.bio && u.bio.toLowerCase().includes(searchTerm.toLowerCase()))
+      !migratedSet.has(u.pub) && 
+      (u.alias.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.bio && u.bio.toLowerCase().includes(searchTerm.toLowerCase())))
   );
 
   return (

@@ -22,7 +22,7 @@ interface SubmitTrackProps {
 }
 
 export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess, accessMode }: SubmitTrackProps) {
-  const { gun, user, pubKey, userProfile, userPair } = useGun(); // Destructure userPair
+  const { gun, user, pubKey, userProfile, userPair, isAdmin } = useGun(); // Destructure userPair
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false); // Default: Not Anonymous (Linked)
@@ -34,6 +34,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   
+  // Admin Proxy
+  const [proxyAlias, setProxyAlias] = useState('');
+  
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [knownAliases, setKnownAliases] = useState<Record<string, string>>({}); // Store aliases for UI display
   
@@ -41,6 +44,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const [stage, setStage] = useState('First Draft / Demo');
   const [feedbackFocus, setFeedbackFocus] = useState<string[]>([]);
   const [doesNotUseAI, setDoesNotUseAI] = useState(true);
+  const [isFragile, setIsFragile] = useState(false);
 
   // Audio Recording
   const [audioType, setAudioType] = useState<'upload' | 'record'>('upload');
@@ -77,6 +81,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setLyrics(existingSubmission.lyrics || '');
         setStage(existingSubmission.stage || 'First Draft / Demo');
         if (existingSubmission.usesAI) setDoesNotUseAI(false);
+        if (existingSubmission.fragile) setIsFragile(true);
+        if (existingSubmission.proxyFor && existingSubmission.proxyFor.alias) setProxyAlias(existingSubmission.proxyFor.alias);
         
         // Load Collaborators (Handle GunDB references or JSON string)
         let rawCollabs = existingSubmission.collaborators || {};
@@ -389,7 +395,9 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             waveform: waveformStr,
             stage,
             feedbackFocus: JSON.stringify(feedbackFocus),
-            usesAI: !doesNotUseAI
+            usesAI: !doesNotUseAI,
+            fragile: isFragile,
+            proxyFor: proxyAlias ? { alias: proxyAlias } : null
         };
         
         // Create the promise for the main submission data and await it
@@ -498,11 +506,12 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             });
         }));
 
-        // Write to Global Feed if Public and New
-        if (accessMode === 'direct' && !existingSubmission && linkProfile) {
+        // Write to Activity Feeds (Global and Request-Specific)
+        if (!existingSubmission && linkProfile) {
             const pulseId = crypto.randomUUID();
             const dateStr = new Date().toISOString().split('T')[0];
-            const bucketKey = `global_pulse_${dateStr}`;
+            const globalBucketKey = `global_pulse_${dateStr}`;
+            const requestBucketKey = `request_pulse_${requestId}_${dateStr}`;
             
             gunPromises.push(new Promise<void>((resolve) => {
                 gun.get('file_requests').get(requestId).once((req: any) => { // Using once to get req.title reliably
@@ -514,17 +523,30 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         submissionId,
                         requestId,
                         submissionTitle: req?.title || 'Unknown Request',
+                        requestTitle: req?.title || 'Unknown Request', // Fixed: was using submission title for request title in some contexts
                         createdAt: Date.now(),
                         usesAI: !doesNotUseAI
                     };
-                    createGunPutPromise(
-                        gun.get(bucketKey).get(pulseId),
+
+                    const feedPromises: Promise<any>[] = [];
+
+                    // 1. Always write to Request Pulse (for private/personal feed)
+                    feedPromises.push(createGunPutPromise(
+                        gun.get(requestBucketKey).get(pulseId),
                         feedItem,
-                        'Wrote to global feed'
-                    ).then(resolve).catch((e) => {
-                        console.warn("Global feed update failed (non-fatal):", e);
-                        resolve();
-                    }); // Resolve anyway so submission succeeds
+                        'Wrote to request feed'
+                    ).catch(e => console.warn("Request feed update failed (non-fatal):", e)));
+
+                    // 2. Write to Global Pulse ONLY if Public
+                    if (accessMode === 'direct') {
+                        feedPromises.push(createGunPutPromise(
+                            gun.get(globalBucketKey).get(pulseId),
+                            feedItem,
+                            'Wrote to global feed'
+                        ).catch(e => console.warn("Global feed update failed (non-fatal):", e)));
+                    }
+
+                    Promise.all(feedPromises).then(() => resolve());
                 });
             }));
         }
@@ -613,8 +635,8 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
 
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2">
-                    Byline (Optional)
-                    <Tooltip content="The artist name displayed for this track. If 'Anonymous' is enabled, this is hidden from your profile and defaults to 'Anonymous' if left blank." icon />
+                    Artist Name (Optional)
+                    <Tooltip content="The artist name displayed for this track. Your user alias name if blank. If 'Anonymous' is enabled, this is hidden from your profile and defaults to 'Anonymous' if left blank." icon />
                 </label>
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                     <input 
@@ -764,6 +786,25 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 </div>
             </div>
             
+            {/* Admin Proxy Upload */}
+            {isAdmin && (
+                <div className="bg-purple-900/20 border border-purple-500/30 p-3 rounded">
+                    <label className="block text-sm font-bold text-purple-300 mb-1 flex items-center gap-2">
+                        <Users className="w-4 h-4" /> Admin Proxy Upload
+                    </label>
+                    <input 
+                        type="text" 
+                        value={proxyAlias}
+                        onChange={(e) => setProxyAlias(e.target.value)}
+                        className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm"
+                        placeholder="Enter original artist name (e.g. from email)"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                        If set, this track will appear as uploaded by "Admin (on behalf of [Name])".
+                    </p>
+                </div>
+            )}
+
             {/* Collaborators */}
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2 justify-between">
@@ -864,6 +905,20 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        id="fragile-check"
+                        checked={isFragile}
+                        onChange={(e) => setIsFragile(e.target.checked)}
+                        className="w-4 h-4 rounded bg-gray-800 border-gray-700 text-pink-500 focus:ring-pink-500"
+                    />
+                    <label htmlFor="fragile-check" className="text-sm text-pink-300 select-none flex items-center gap-2 font-medium">
+                        Fragile / Compliments Only
+                        <Tooltip content="Check this if you only want positive feedback or encouragement. Reviewers will be notified." icon />
+                    </label>
                 </div>
 
                 <div className="flex items-center gap-2">

@@ -55,6 +55,8 @@ export function Home() {
   // Filter for View
   const visibleRequests = requests.filter(req => {
       if (!req.id) return false;
+      if (userProfile?.isAdmin) return true; // Admin access: See all requests
+      
       const isOwner = req.ownerPub === pubKey;
       const isDirect = req.accessMode === 'direct'; 
       

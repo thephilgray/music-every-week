@@ -48,7 +48,8 @@ export function Community() {
       dates.forEach(dateStr => {
           const bucketKey = `global_pulse_${dateStr}`;
           
-          gun.get(bucketKey).map().on((data: any, key: string) => {
+          // Helper to process feed item
+          const processItem = (data: any, key: string) => {
               if (data && data.text) {
                   const item: FeedItem = { ...data, id: key };
                   
@@ -71,7 +72,20 @@ export function Community() {
                   feedMap.delete(key);
                   setFeed(Array.from(feedMap.values()).sort((a, b) => b.createdAt - a.createdAt));
               }
-          });
+          };
+
+          // 1. Subscribe to Global Pulse
+          gun.get(bucketKey).map().on(processItem);
+
+          // 2. Subscribe to Participated Requests Pulse
+          if (user) {
+              user.get('participation').map().on((status: string, reqId: string) => {
+                  if (status === 'accepted' || status === 'joined' || status === 'invited') { // Include invited? Maybe just accepted.
+                      const reqBucket = `request_pulse_${reqId}_${dateStr}`;
+                      gun.get(reqBucket).map().on(processItem);
+                  }
+              });
+          }
       });
       
       const timer = setTimeout(() => setLoading(false), 2000);
@@ -87,7 +101,7 @@ export function Community() {
     <div className="max-w-3xl mx-auto py-8 px-4">
         <div className="mb-8">
             <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
-            <p className="text-gray-400">See what's happening across all public requests.</p>
+            <p className="text-gray-400">See what's happening across all your requests.</p>
         </div>
 
         {loading && filteredFeed.length === 0 ? (
@@ -97,7 +111,7 @@ export function Community() {
         ) : filteredFeed.length === 0 ? (
              <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
                  <MessageSquare className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-                 <p className="text-gray-500">No activity yet. Be the first to post!</p>
+                 <p className="text-gray-500">No submission activity yet.</p>
              </div>
         ) : (
             <div className="space-y-4">

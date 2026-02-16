@@ -12,7 +12,7 @@ interface RequestListProps {
 }
 
 export function RequestList({ requests: propRequests, loading: propLoading, filter = 'active' }: RequestListProps) {
-  const { gun, user, pubKey } = useGun();
+  const { gun, user, pubKey, userProfile } = useGun();
   const [internalRequests, setInternalRequests] = useState<FileRequest[]>([]);
   const [internalLoading, setInternalLoading] = useState(true);
   const [participation, setParticipation] = useState<Record<string, string>>({});
@@ -74,7 +74,8 @@ export function RequestList({ requests: propRequests, loading: propLoading, filt
       // If requests are passed via props (e.g. from Home), they are already filtered by the parent?
       // Home.tsx filters for "Active Requests" using similar logic.
       // Archive.tsx does NOT filter. So we need this check here for Archive view security.
-      if (!isOwner && !isDirect && !isJoined) return false;
+      const isAdmin = userProfile?.isAdmin;
+      if (!isAdmin && !isOwner && !isDirect && !isJoined) return false;
       
       if (filter === 'active') {
           return !isExpired; 

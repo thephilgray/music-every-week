@@ -43,6 +43,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // Initialize Audio Element
   useEffect(() => {
     audioRef.current = new Audio();
+    audioRef.current.preload = "metadata"; // Ensure metadata loads for duration
     audioRef.current.volume = volume;
     audioRef.current.muted = muted;
     

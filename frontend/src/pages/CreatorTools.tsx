@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
@@ -158,6 +158,8 @@ export function CreatorTools() {
 
   // 2. Process Data into Rows
   useEffect(() => {
+      let isCurrent = true;
+
       if (!selectedRequest) {
           setParticipants([]);
           return;
@@ -166,7 +168,7 @@ export function CreatorTools() {
       const rows = new Map<string, ParticipantRow>();
       
       const updateParticipants = () => {
-          setParticipants(Array.from(rows.values()));
+          if (isCurrent) setParticipants(Array.from(rows.values()));
       };
 
       // Process Participants
@@ -200,37 +202,84 @@ export function CreatorTools() {
           });
       }
 
+      // Ensure Host is Listed
+      if (selectedRequest.ownerPub && !rows.has(selectedRequest.ownerPub)) {
+          rows.set(selectedRequest.ownerPub, {
+              id: selectedRequest.ownerPub,
+              name: 'Host (You)',
+              contact: selectedRequest.ownerPub,
+              status: 'joined', // or 'host'
+              type: 'user',
+              extensionHours: 0,
+              hasPass: true
+          });
+          // Alias fetch will happen in the loop below
+      }
+
       updateParticipants();
 
       // Fetch Submissions to update status (from public node)
-      gun.get('request_submissions').get(selectedRequest.id!).map().on((sub: any) => {
-          if (!sub || !sub.uploaderPub) return;
-          const pub = sub.uploaderPub;
+      const submissionsMap = gun.get('request_submissions').get(selectedRequest.id!).map();
+      
+      submissionsMap.on((sub: any) => {
+          if (!isCurrent) return;
+          if (!sub) return;
           
-          if (!rows.has(pub)) {
-              rows.set(pub, {
-                  id: pub,
-                  name: 'Loading...',
-                  contact: pub,
+          let targetId = sub.uploaderPub;
+          let isProxy = false;
+          let proxyAlias = '';
+
+          // Check for Proxy
+          if (sub.proxyFor && sub.proxyFor.alias) {
+              isProxy = true;
+              proxyAlias = sub.proxyFor.alias;
+              
+              // Try to find matching participant by name or contact
+              let found = false;
+              for (const [key, p] of rows.entries()) {
+                  if (p.name === proxyAlias || p.contact === proxyAlias) {
+                      targetId = key;
+                      found = true;
+                      break;
+                  }
+              }
+              
+              // If no existing participant matched, create a unique key
+              if (!found) {
+                   targetId = `proxy:${proxyAlias}`;
+              }
+          }
+
+          if (!targetId) return;
+          
+          if (!rows.has(targetId)) {
+              rows.set(targetId, {
+                  id: targetId,
+                  name: isProxy ? proxyAlias : 'Loading...',
+                  contact: isProxy ? 'Proxy Submission' : targetId,
                   status: 'submitted',
-                  type: 'user',
+                  type: isProxy ? 'email' : 'user', 
                   extensionHours: 0,
                   hasPass: false
               });
-              gun.get('all_users').get(pub).once((u: any) => {
-                  if (u && u.alias) {
-                      const p = rows.get(pub);
-                      if (p) {
-                          rows.set(pub, { ...p, name: u.alias });
-                          updateParticipants();
+              
+              if (!isProxy) {
+                  gun.get('all_users').get(targetId).once((u: any) => {
+                      if (!isCurrent) return;
+                      if (u && u.alias) {
+                          const p = rows.get(targetId);
+                          if (p) {
+                              rows.set(targetId, { ...p, name: u.alias });
+                              updateParticipants();
+                          }
                       }
-                  }
-              });
+                  });
+              }
               updateParticipants();
           } else {
-             const p = rows.get(pub);
+             const p = rows.get(targetId);
              if (p && p.status !== 'submitted') {
-                 rows.set(pub, { ...p, status: 'submitted' });
+                 rows.set(targetId, { ...p, status: 'submitted' });
                  updateParticipants();
              }
           }
@@ -240,6 +289,7 @@ export function CreatorTools() {
       rows.forEach((row, pub) => {
           if (row.type === 'user') {
               gun.get('all_users').get(pub).once((u: any) => {
+                  if (!isCurrent) return;
                   if (u) {
                        let changed = false;
                        let newName = row.name;
@@ -263,6 +313,10 @@ export function CreatorTools() {
           }
       });
 
+      return () => {
+          isCurrent = false;
+          submissionsMap.off();
+      };
   }, [selectedRequest, gun]);
 
   const grantExtension = (pub: string, hours: number) => {
@@ -289,6 +343,20 @@ export function CreatorTools() {
         p.id === pub ? { ...p, hasPass: newPassStatus } : p
       ));
   };
+
+  const handleBulkExtend = (hours: number) => {
+      if (!selectedRequest || !selectedRequest.id) return;
+      if (!confirm(`Are you sure you want to grant a ${hours} hour extension to ALL ${participants.length} participants?`)) return;
+
+      participants.forEach(p => {
+          // Grant extension to everyone
+          gun.get('request_participants').get(selectedRequest.id!).get(p.id).get('extensionHours').put(hours);
+      });
+
+      // Optimistic update
+      setParticipants(prev => prev.map(p => ({ ...p, extensionHours: hours })));
+      success(`Granted +${hours}h extension to all participants.`);
+  };
   
   const exportCSV = () => {
       if (!selectedRequest || participants.length === 0) return;
@@ -308,6 +376,33 @@ export function CreatorTools() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+  };
+
+  const handleGenerateExtensionLink = async () => {
+      if (!selectedRequest || !selectedRequest.id) return;
+      
+      const hoursStr = prompt("Enter extension hours (e.g. 24, 48):", "24");
+      if (!hoursStr) return;
+      
+      const hours = parseInt(hoursStr);
+      if (isNaN(hours) || hours <= 0) {
+          error("Invalid hours.");
+          return;
+      }
+
+      const code = crypto.randomUUID().substring(0, 8).toUpperCase();
+      
+      // Save code
+      gun.get('extension_codes').get(code).put({
+          hours,
+          requestId: selectedRequest.id,
+          createdAt: Date.now(),
+          createdBy: pubKey
+      });
+
+      const url = `${window.location.origin}/request/${selectedRequest.id}?extension=${code}`;
+      navigator.clipboard.writeText(url);
+      success(`Extension link (+${hours}h) copied to clipboard!`);
   };
 
   const handleRepublish = async () => {
@@ -464,6 +559,13 @@ export function CreatorTools() {
                                     <Edit className="w-5 h-5" />
                                 </button>
                                 <button 
+                                    onClick={handleGenerateExtensionLink}
+                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                    title="Generate Extension Link"
+                                >
+                                    <LinkIcon className="w-5 h-5" />
+                                </button>
+                                <button 
                                     onClick={handleRepublish}
                                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
                                     title="Republish to Global Feed (Fix Missing)"
@@ -483,7 +585,22 @@ export function CreatorTools() {
                     </div>
 
                     <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden overflow-x-auto">
-                        <div className="p-4 border-b border-gray-800 flex justify-end">
+                        <div className="p-4 border-b border-gray-800 flex justify-between items-center flex-wrap gap-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-gray-500 text-sm">Bulk Actions:</span>
+                                <button 
+                                    onClick={() => handleBulkExtend(24)}
+                                    className="px-3 py-1.5 bg-blue-900/30 text-blue-400 border border-blue-800 rounded text-xs hover:bg-blue-900/50 transition"
+                                >
+                                    +24h All
+                                </button>
+                                <button 
+                                    onClick={() => handleBulkExtend(48)}
+                                    className="px-3 py-1.5 bg-blue-900/30 text-blue-400 border border-blue-800 rounded text-xs hover:bg-blue-900/50 transition"
+                                >
+                                    +48h All
+                                </button>
+                            </div>
                             <select
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
@@ -531,20 +648,18 @@ export function CreatorTools() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {p.type === 'user' && (
-                                                <div className="flex items-center gap-1">
-                                                    <select 
-                                                        value={p.extensionHours || 0}
-                                                        onChange={(e) => grantExtension(p.id, Number(e.target.value))}
-                                                        className="bg-gray-800 text-white text-xs border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
-                                                    >
-                                                        <option value={0}>None</option>
-                                                        <option value={12}>+12h</option>
-                                                        <option value={24}>+24h</option>
-                                                        <option value={48}>+48h</option>
-                                                    </select>
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-1">
+                                                <select 
+                                                    value={p.extensionHours || 0}
+                                                    onChange={(e) => grantExtension(p.id, Number(e.target.value))}
+                                                    className="bg-gray-800 text-white text-xs border border-gray-700 rounded px-2 py-1 outline-none focus:border-blue-500"
+                                                >
+                                                    <option value={0}>None</option>
+                                                    <option value={12}>+12h</option>
+                                                    <option value={24}>+24h</option>
+                                                    <option value={48}>+48h</option>
+                                                </select>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             {p.type === 'user' && (
@@ -621,7 +736,7 @@ export function CreatorTools() {
                             </div>
                             <div className="space-y-4 flex-1 w-full">
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase font-bold">Byline</label>
+                                    <label className="text-xs text-gray-500 uppercase font-bold">Artist Name</label>
                                     <p className="text-white">{selectedSubmission.byline || 'Unknown'}</p>
                                 </div>
                                 <div>

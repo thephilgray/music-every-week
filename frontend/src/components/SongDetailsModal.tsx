@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { X, Music, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CommentSection } from './CommentSection'; // Import CommentSection
@@ -25,23 +26,38 @@ interface SongDetailsModalProps {
 }
 
 export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProps) {
+    const [imgError, setImgError] = useState(false);
+
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-           <div className="bg-gray-900 border border-gray-700 rounded-lg w-11/12 md:max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-               <div className="p-6 border-b border-gray-800 flex justify-between items-start">
-                   <div className="flex items-center gap-4">
-                       <div className="w-16 h-16 bg-gray-800 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0">
-                           {currentTrack.artworkUrl ? (
-                               <img src={currentTrack.artworkUrl} alt={currentTrack.title} className="w-full h-full object-cover" />
-                           ) : (
-                               <Music className="text-gray-600 w-8 h-8" />
-                           )}
-                       </div>
-                       <div className="flex-1">
-                           <h3 className="text-xl font-bold text-white leading-tight">{currentTrack.title}</h3>
-                           <p className="text-gray-400 text-sm leading-tight">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
+           <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+               <div className="flex-1 overflow-y-auto custom-scrollbar">
+                   {/* Header / Artwork Section */}
+                   <div className="relative w-full aspect-video bg-gray-800 flex-shrink-0">
+                       {currentTrack.artworkUrl && !imgError ? (
+                           <img 
+                                src={currentTrack.artworkUrl} 
+                                alt={currentTrack.title} 
+                                className="w-full h-full object-cover" 
+                                onError={() => setImgError(true)}
+                           />
+                       ) : (
+                           <div className="w-full h-full flex items-center justify-center text-gray-600">
+                               <Music className="w-16 h-16" />
+                           </div>
+                       )}
+                       <button 
+                           onClick={onClose} 
+                           className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition backdrop-blur-sm"
+                       >
+                           <X className="w-5 h-5" />
+                       </button>
+                       
+                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-900 to-transparent p-6 pt-20">
+                           <h3 className="text-2xl md:text-3xl font-bold text-white mb-1 shadow-black drop-shadow-md">{currentTrack.title}</h3>
+                           <p className="text-gray-200 text-sm md:text-base font-medium drop-shadow-md">
                                {currentTrack.uploaderPub && currentTrack.linkProfile !== false ? (
-                                   <Link to={`/profile/${currentTrack.uploaderPub}`} className="text-blue-400 hover:underline" onClick={onClose}>
+                                   <Link to={`/profile/${currentTrack.uploaderPub}`} className="hover:text-blue-300 hover:underline" onClick={onClose}>
                                        {currentTrack.byline || `by ${currentTrack.uploaderPub.substring(0, 6)}...`}
                                    </Link>
                                ) : (
@@ -49,22 +65,17 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                                )}
                            </p>
                            {currentTrack.context && (
-                               <Link to={currentTrack.context.link} className="text-blue-500 hover:underline text-xs flex items-center gap-1 mt-1">
+                               <Link to={currentTrack.context.link} className="text-blue-400 hover:text-blue-300 hover:underline text-xs flex items-center gap-1 mt-2 w-fit">
                                    <span className="truncate">From: {currentTrack.context.name}</span>
                                    <ExternalLink className="w-3 h-3" />
                                </Link>
                            )}
                        </div>
                    </div>
-                   <button onClick={onClose} className="text-gray-400 hover:text-white p-2 -mr-2">
-                       <X className="w-5 h-5" />
-                   </button>
-               </div>
-               
-               <div className="flex-1 overflow-y-auto custom-scrollbar">
-                   <div className="p-6">
+
+                   <div className="p-6 space-y-6">
                        {(currentTrack.stage || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
-                           <div className="mb-6 flex flex-wrap gap-2">
+                           <div className="flex flex-wrap gap-2">
                                 {currentTrack.stage && (
                                     <span className="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
                                         Stage: {currentTrack.stage}
@@ -78,18 +89,21 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                            </div>
                        )}
 
-                       <h4 className="text-lg font-semibold text-white mb-2">Lyrics / Notes</h4>
-                       <div className="bg-gray-950 p-4 rounded text-gray-300 whitespace-pre-wrap font-mono text-sm border border-gray-800">
-                           {currentTrack.lyrics || "No notes or lyrics available for this track."}
+                       <div>
+                           <h4 className="text-sm font-bold text-gray-500 uppercase mb-3">Lyrics / Notes</h4>
+                           <div className="bg-gray-950 p-4 rounded-lg text-gray-300 whitespace-pre-wrap break-words font-mono text-sm border border-gray-800">
+                               {currentTrack.lyrics || "No notes or lyrics available for this track."}
+                           </div>
                        </div>
-                   </div>
 
-                   {/* Comment Section Integration */}
-                   {currentTrack.requestId && currentTrack.id && (
-                       <div className="px-6 py-4 border-t border-gray-800">
-                           <CommentSection requestId={currentTrack.requestId} submissionId={currentTrack.id} />
-                       </div>
-                   )}
+                       {/* Comment Section Integration */}
+                       {currentTrack.requestId && currentTrack.id && (
+                           <div className="pt-6 border-t border-gray-800">
+                               <h4 className="text-sm font-bold text-gray-500 uppercase mb-4">Discussion</h4>
+                               <CommentSection requestId={currentTrack.requestId} submissionId={currentTrack.id} />
+                           </div>
+                       )}
+                   </div>
                </div>
            </div>
         </div>

@@ -12,9 +12,14 @@ interface UploadResult {
 }
 
 export async function uploadFile(file: File, userPair: { pub: string, priv: string }): Promise<UploadResult> {
+  // Check if file is HEIC/HEIF
+  if (file.type.toLowerCase().includes('heic') || file.type.toLowerCase().includes('heif') || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+      throw new Error("HEIC/HEIF images are not supported. Please convert to JPG or PNG before uploading.");
+  }
+
   // Check if userPair is valid BEFORE attempting to use it
   if (!userPair || !userPair.pub || !userPair.priv) {
-    throw new Error("Authentication required for upload: Invalid user pair (missing pub or priv key).");
+    throw new Error("Authentication required for upload: Invalid user pair (missing pub or priv key). Please refresh and try again.");
   }
 
   // 1. Prepare Auth Headers
@@ -62,8 +67,10 @@ export async function uploadFile(file: File, userPair: { pub: string, priv: stri
   }
 
   // 4. Return Public URL
+  // Encode key components to handle spaces/special chars safely in URL (fixes Safari issues)
+  const encodedKey = key.split('/').map(encodeURIComponent).join('/');
   return {
-    url: `${PUBLIC_R2_DOMAIN}/${key}`,
+    url: `${PUBLIC_R2_DOMAIN}/${encodedKey}`,
     key
   };
 }

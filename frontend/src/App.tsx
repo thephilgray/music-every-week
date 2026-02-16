@@ -16,6 +16,7 @@ import { Community } from './pages/Community';
 import { ToastProvider } from './contexts/ToastContext';
 import { IdleMonitor } from './components/IdleMonitor';
 import { LandingPage } from './pages/LandingPage';
+import { ScrollToTop } from './components/ScrollToTop';
 
 function App() {
   const { isLoggedIn, isAuthorized, user, isAuthLoading } = useGun();
@@ -109,6 +110,7 @@ function App() {
   return (
     <ToastProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <IdleMonitor />
         <Routes>
           <Route element={<AppLayout />}>

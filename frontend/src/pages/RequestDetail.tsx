@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users, Loader2, FileText } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Users, Loader2, FileText, Heart } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -840,9 +840,17 @@ export function RequestDetail() {
                         )}
                         
                         {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-                            <div className="mt-4 px-4">
-                                {(sub.stage || (sub.feedbackFocus && sub.feedbackFocus.length > 0)) && (
+                            <div 
+                                className="mt-4 px-4 cursor-auto" 
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {(sub.stage || sub.fragile || (sub.feedbackFocus && sub.feedbackFocus.length > 0)) && (
                                     <div className="flex flex-wrap gap-2 mb-4">
+                                        {sub.fragile && (
+                                            <span className="px-2 py-1 rounded bg-pink-900/30 border border-pink-500/50 text-pink-300 text-xs font-bold flex items-center gap-1 animate-pulse">
+                                                <Heart className="w-3 h-3 fill-current" /> Fragile / Compliments Only
+                                            </span>
+                                        )}
                                         {sub.stage && (
                                             <span className="px-2 py-1 rounded bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
                                                 Stage: {sub.stage}

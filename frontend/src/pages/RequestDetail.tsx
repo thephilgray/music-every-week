@@ -33,6 +33,35 @@ export function RequestDetail() {
   const [addToPlaylistSubmission, setAddToPlaylistSubmission] = useState<Submission | null>(null);
   const subscribedSubmissions = useRef(new Set<string>());
   const [copied, setCopied] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+      const checkDrafts = () => {
+          const newDrafts: Record<string, boolean> = {};
+          submissions.forEach(sub => {
+              if (sub.id) {
+                  const hasDraft = !!localStorage.getItem(`draft_comment_${sub.id}`);
+                  if (hasDraft) newDrafts[sub.id] = true;
+              }
+          });
+          setDrafts(newDrafts);
+      };
+      
+      checkDrafts();
+
+      const handleDraftUpdate = (e: Event) => {
+          const detail = (e as CustomEvent).detail;
+          if (detail && detail.submissionId) {
+              setDrafts(prev => ({
+                  ...prev,
+                  [detail.submissionId]: detail.hasDraft
+              }));
+          }
+      };
+
+      window.addEventListener('comment-draft-update', handleDraftUpdate);
+      return () => window.removeEventListener('comment-draft-update', handleDraftUpdate);
+  }, [submissions]);
 
   // Deep Link Params
   const linkedSubmissionId = searchParams.get('submission');
@@ -531,7 +560,7 @@ export function RequestDetail() {
     }        
         
           return (
-            <div className="max-w-5xl mx-auto p-4 md:p-8">      <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
+            <div className="max-w-5xl mx-auto p-2 md:p-8">      <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
         <ArrowLeft className="w-4 h-4" /> Back to Requests
       </Link>
 
@@ -776,9 +805,10 @@ export function RequestDetail() {
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null)); }}
                                         disabled={locked}
-                                        className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : (drafts[sub.id!] ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-400 hover:text-white')} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={drafts[sub.id!] ? "Draft Comment" : "Comments"}
                                     >
-                                        <MessageSquare className="w-4 h-4" />
+                                        <MessageSquare className={`w-4 h-4 ${drafts[sub.id!] ? 'fill-current' : ''}`} />
                                         {commentCounts[sub.id!] > 0 && (
                                             <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
                                         )}
@@ -831,9 +861,9 @@ export function RequestDetail() {
                          )}
                         
                         {(expandedLyricsMap[sub.id!] && !locked) && (
-                            <div className="mt-4 px-4 pb-2">
+                            <div className="mt-4 px-2 md:px-4 pb-2">
                                 <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Lyrics / Notes</h5>
-                                <div className="bg-gray-950 p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap break-words font-mono">
+                                <div className="bg-gray-950 p-2 md:p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap break-words font-mono">
                                     {sub.lyrics}
                                 </div>
                             </div>
@@ -841,7 +871,7 @@ export function RequestDetail() {
                         
                         {expandedSubmissionId === sub.id && id && sub.id && !locked && (
                             <div 
-                                className="mt-4 px-4 cursor-auto" 
+                                className="mt-4 px-0 md:px-4 cursor-auto" 
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 {(sub.stage || sub.fragile || (sub.feedbackFocus && sub.feedbackFocus.length > 0)) && (

@@ -90,7 +90,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     if (currentTrack) {
         audio.src = currentTrack.audioUrl;
-        audio.play().then(() => setIsPlaying(true)).catch(e => console.error("Playback failed", e));
+        audio.play().then(() => {
+            setIsPlaying(true);
+            updateMediaSession();
+        }).catch(e => console.error("Playback failed", e));
     } else {
         audio.pause();
         if (isPlaying) setIsPlaying(false);
@@ -107,7 +110,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } else if (!isPlaying && !audio.paused) {
         audio.pause();
     }
+    updateMediaSessionState();
   }, [isPlaying, currentTrack]);
+
+  // Update Media Session Metadata & Handlers
+  const updateMediaSession = () => {
+      if (!currentTrack || !('mediaSession' in navigator)) return;
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentTrack.title,
+          artist: currentTrack.byline || 'Unknown Artist',
+          artwork: currentTrack.artworkUrl ? [{ src: currentTrack.artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : []
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => resume());
+      navigator.mediaSession.setActionHandler('pause', () => pause());
+      navigator.mediaSession.setActionHandler('previoustrack', () => prev());
+      navigator.mediaSession.setActionHandler('nexttrack', () => next());
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime !== undefined) {
+              seek(details.seekTime);
+          }
+      });
+  };
+
+  const updateMediaSessionState = () => {
+      if (!('mediaSession' in navigator)) return;
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  };
+
 
   // Handle Volume/Mute changes
   useEffect(() => {

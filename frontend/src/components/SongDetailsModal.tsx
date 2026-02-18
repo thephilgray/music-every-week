@@ -73,7 +73,7 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                        </div>
                    </div>
 
-                   <div className="p-6 space-y-6">
+                   <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                        {(currentTrack.stage || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
                            <div className="flex flex-wrap gap-2">
                                 {currentTrack.stage && (
@@ -91,7 +91,7 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
 
                        <div>
                            <h4 className="text-sm font-bold text-gray-500 uppercase mb-3">Lyrics / Notes</h4>
-                           <div className="bg-gray-950 p-4 rounded-lg text-gray-300 whitespace-pre-wrap break-words font-mono text-sm border border-gray-800">
+                           <div className="bg-gray-950 p-2 md:p-4 rounded-lg text-gray-300 whitespace-pre-wrap break-words font-mono text-sm border border-gray-800">
                                {currentTrack.lyrics || "No notes or lyrics available for this track."}
                            </div>
                        </div>
@@ -100,7 +100,11 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                        {currentTrack.requestId && currentTrack.id && (
                            <div className="pt-6 border-t border-gray-800">
                                <h4 className="text-sm font-bold text-gray-500 uppercase mb-4">Discussion</h4>
-                               <CommentSection requestId={currentTrack.requestId} submissionId={currentTrack.id} />
+                               <CommentSection 
+                                   key={currentTrack.id}
+                                   requestId={currentTrack.requestId} 
+                                   submissionId={currentTrack.id} 
+                               />
                            </div>
                        )}
                    </div>

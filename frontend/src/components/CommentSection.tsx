@@ -18,7 +18,12 @@ interface CommentSectionProps {
 export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle }: CommentSectionProps) {
   const { gun, pubKey, user, userProfile, isAuthorized, userPair } = useGun();
   const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
+  const [newComment, setNewComment] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`draft_comment_${submissionId}`) || '';
+    }
+    return '';
+  });
   
   // Audio Recording State
   const [isRecording, setIsRecording] = useState(false);
@@ -35,6 +40,30 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Debounced Draft Saving
+  useEffect(() => {
+    // Don't save empty string on initial mount if storage is already empty
+    // But do save if user cleared it.
+    const handler = setTimeout(() => {
+        if (typeof window !== 'undefined') {
+            if (newComment) {
+                localStorage.setItem(`draft_comment_${submissionId}`, newComment);
+                window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: true } }));
+            } else {
+                // Only remove if it was previously set, to avoid noise? 
+                // Actually safe to just remove if empty.
+                const preExists = localStorage.getItem(`draft_comment_${submissionId}`);
+                if (preExists) {
+                    localStorage.removeItem(`draft_comment_${submissionId}`);
+                    window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: false } }));
+                }
+            }
+        }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(handler);
+  }, [newComment, submissionId]);
 
   useEffect(() => {
     // Clear previous
@@ -331,6 +360,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
         });
         
         setNewComment('');
+        localStorage.removeItem(`draft_comment_${submissionId}`);
+        window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: false } }));
         cancelRecording();
         setMentionedUsers({});
 
@@ -380,7 +411,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
   };
 
   return (
-    <div className="mt-4 bg-gray-950/50 rounded p-4 border border-gray-800">
+    <div className="mt-4 md:bg-gray-950/50 md:rounded md:p-4 md:border md:border-gray-800">
        <h5 className="text-sm font-semibold text-gray-400 mb-3">Comments</h5>
        
        <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
@@ -443,7 +474,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                </div>
            )}
 
-           <div className="flex gap-2">
+           <div className="flex gap-1 md:gap-2">
                {isAuthorized ? (
                <>
                <input 

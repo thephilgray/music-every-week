@@ -700,7 +700,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     }`}>
                         <input 
                             type="file" 
-                            accept="audio/*"
+                            accept="audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/ogg,audio/x-m4a,audio/*,.mp3,.wav,.ogg,.m4a,.aac"
                             onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
                             className="hidden"
                             id="audio-upload"

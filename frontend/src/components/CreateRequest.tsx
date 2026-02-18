@@ -196,6 +196,7 @@ export function CreateRequest() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     console.log("CreateRequest: handleSubmit initiated.");
     console.time("CreateRequest_handleSubmit_total");
 

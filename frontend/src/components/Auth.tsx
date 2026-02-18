@@ -98,6 +98,32 @@ export function Auth() {
                  return;
              }
              console.log("Auth: Auto-login successful after create.");
+
+             // Force injection if Gun failed to set it but Ack has it (Robustness Fix)
+             // @ts-ignore
+             if ((!user.is || !user.is.priv) && authAck.sea && authAck.sea.priv) {
+                console.warn("Auth: Manually injecting keys from authAck into user.is (Signup Flow).");
+                // @ts-ignore
+                user.is = { ...user.is, ...authAck.sea, alias };
+                // @ts-ignore
+                user._.is = user.is; // Gun internal reference
+             }
+
+             // Explicitly persist session for robust recovery
+             // @ts-ignore
+             if (user.is && user.is.priv) {
+                try {
+                    // @ts-ignore
+                    localStorage.setItem('mew_user_session', JSON.stringify(user.is));
+                    console.log("Auth: Explicitly saved session to localStorage (Signup Flow).");
+                } catch (e) {
+                    console.error("Auth: Failed to save session to localStorage:", e);
+                }
+             }
+
+             // Force GunContext to refresh userPair
+             refreshAuth();
+
              // Add to Directory
              // @ts-ignore
              const pub = user.is?.pub || authAck?.sea?.pub || authAck?.pub;

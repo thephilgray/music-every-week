@@ -116,15 +116,15 @@ export function Community() {
         ) : (
             <div className="space-y-4">
                 {filteredFeed.map(item => (
-                    <div key={item.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex gap-4 hover:border-gray-700 transition">
+                    <div key={item.id} className="bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-4 flex gap-2 md:gap-4 hover:border-gray-700 transition">
                         {/* Avatar */}
                         <div className="flex-shrink-0">
                             <Link to={`/profile/${item.authorPub}`}>
-                                <div className="w-10 h-10 rounded-full bg-gray-800 overflow-hidden">
+                                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-800 overflow-hidden">
                                     {item.authorAvatar ? (
                                         <img src={item.authorAvatar} alt={item.authorAlias} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-500"><User className="w-5 h-5" /></div>
+                                        <div className="w-full h-full flex items-center justify-center text-gray-500"><User className="w-4 h-4 md:w-5 md:h-5" /></div>
                                     )}
                                 </div>
                             </Link>
@@ -132,7 +132,7 @@ export function Community() {
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline justify-between mb-1">
+                            <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-1 gap-1 md:gap-0">
                                 <div className="text-sm">
                                     <Link to={`/profile/${item.authorPub}`} className="font-bold text-white hover:underline">
                                         {item.authorAlias || 'Unknown User'}
@@ -141,7 +141,7 @@ export function Community() {
                                         {item.type === 'submission' ? 'uploaded a track' : 'commented on'}
                                     </span>
                                 </div>
-                                <span className="text-xs text-gray-600 whitespace-nowrap">{new Date(item.createdAt).toLocaleDateString()}</span>
+                                <span className="text-xs text-gray-600 whitespace-nowrap self-end md:self-auto">{new Date(item.createdAt).toLocaleDateString()}</span>
                             </div>
 
                             <div className="bg-gray-950 rounded-lg p-3 mb-2 border border-gray-800/50 flex items-center gap-3">
@@ -153,19 +153,21 @@ export function Community() {
                                 <p className="text-gray-300 text-sm line-clamp-3 italic">{item.text.replace('Submitted a new track: ', '')}</p>
                             </div>
 
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <Music className="w-3 h-3" />
-                                <span>{item.submissionTitle}</span>
-                                <span>in</span>
-                                <Link to={`/request/${item.requestId}`} className="text-blue-400 hover:underline truncate max-w-[150px]">
-                                    {item.requestTitle}
-                                </Link>
+                            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs text-gray-500 mt-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Music className="w-3 h-3 flex-shrink-0" />
+                                    <span className="truncate">{item.submissionTitle}</span>
+                                    <span className="flex-shrink-0">in</span>
+                                    <Link to={`/request/${item.requestId}`} className="text-blue-400 hover:underline truncate max-w-[150px]">
+                                        {item.requestTitle}
+                                    </Link>
+                                </div>
                                 
-                                <div className="flex-1" />
+                                <div className="md:flex-1" />
                                 
                                 <Link 
                                     to={`/request/${item.requestId}?submission=${item.submissionId}${item.type === 'comment' ? `&comment=${item.id}` : ''}`}
-                                    className="flex items-center gap-1 text-gray-400 hover:text-white transition"
+                                    className="flex items-center gap-1 text-gray-400 hover:text-white transition self-end md:self-auto"
                                 >
                                     {item.type === 'submission' ? 'View Track' : 'View Thread'}
                                 </Link>

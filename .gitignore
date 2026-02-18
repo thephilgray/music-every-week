@@ -20,3 +20,4 @@ radata/*
 *.private.md
 
 infrastructure/relay/radata/
+.vercel

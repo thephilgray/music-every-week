@@ -11,6 +11,7 @@ import { EditRequest } from '../components/EditRequest';
 import { Waveform } from '../components/ui/Waveform';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
+import { fixUrl } from '../lib/url';
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
@@ -602,7 +603,7 @@ export function RequestDetail() {
       <div className="flex flex-col md:flex-row gap-8 mb-10">
           <div className="w-48 h-48 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700 mx-auto md:mx-0">
               {request.artworkUrl ? (
-                  <img src={request.artworkUrl} alt="Cover" className="w-full h-full object-cover" />
+                  <img src={fixUrl(request.artworkUrl)} alt="Cover" className="w-full h-full object-cover" />
               ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-600">No Art</div>
               )}

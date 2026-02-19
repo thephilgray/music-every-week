@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, User } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { Skeleton } from '../components/ui/Skeleton';
+import { fixUrl } from '../lib/url';
 import type { UserProfile } from '../types';
 
 type UserState = Record<string, UserProfile>;
@@ -127,7 +128,7 @@ export function Directory() {
                       >
                           <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 mb-4 overflow-hidden group-hover:border-blue-500 transition shadow-lg">
                               {user.avatarUrl ? (
-                                  <img src={user.avatarUrl} alt={user.alias} className="w-full h-full object-cover" />
+                                  <img src={fixUrl(user.avatarUrl)} alt={user.alias} className="w-full h-full object-cover" />
                               ) : (
                                   <div className="w-full h-full flex items-center justify-center text-gray-600">
                                       <User className="w-8 h-8" />

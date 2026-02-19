@@ -30,10 +30,34 @@ export async function uploadFile(file: File, userPair: { pub: string, priv: stri
   const proof = await SEA.sign(data, userPair);
   const pub = userPair.pub;
 
+  // Helper to determine mime type
+  const getMimeType = (name: string, type: string) => {
+    if (type && type !== 'application/octet-stream') return type;
+    const ext = name.split('.').pop()?.toLowerCase();
+    const map: Record<string, string> = {
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'ogg': 'audio/ogg',
+      'm4a': 'audio/mp4',
+      'aac': 'audio/aac',
+      'webm': 'audio/webm',
+      'mp4': 'audio/mp4',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'svg': 'image/svg+xml',
+    };
+    return (ext && map[ext]) || 'application/octet-stream';
+  };
+
+  const finalContentType = getMimeType(file.name, file.type);
+
   // 2. Get Presigned URL
   const params = new URLSearchParams({
     filename: file.name,
-    contentType: file.type,
+    contentType: finalContentType,
   });
 
   console.log('Get Presigned URL', params);
@@ -53,11 +77,11 @@ export async function uploadFile(file: File, userPair: { pub: string, priv: stri
   const { url: signedUrl, key } = await response.json();
 
   // 3. Upload File to R2
-  console.log('Upload file to R2');
+  console.log('Upload file to R2 with type:', finalContentType);
   const uploadResponse = await fetch(signedUrl, {
     method: 'PUT',
     headers: {
-      'Content-Type': file.type,
+      'Content-Type': finalContentType,
     },
     body: file,
   });

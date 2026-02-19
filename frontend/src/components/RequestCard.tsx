@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
+import { fixUrl } from '../lib/url';
 import type { FileRequest } from '../types';
 
 interface RequestCardProps {
@@ -36,7 +37,7 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
       <div className={`bg-gray-800 border ${isClosed ? 'border-red-900/50 opacity-80' : 'border-gray-700'} rounded-lg overflow-hidden hover:border-blue-500 transition-colors h-full flex flex-col`}>
         <div className="aspect-video bg-gray-700 relative">
           {request.artworkUrl ? (
-            <img src={request.artworkUrl} alt={request.title} className="w-full h-full object-cover" />
+            <img src={fixUrl(request.artworkUrl)} alt={request.title} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm">
               No Artwork

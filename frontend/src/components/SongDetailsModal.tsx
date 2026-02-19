@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { X, Music, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { CommentSection } from './CommentSection'; // Import CommentSection
+import { CommentSection } from './CommentSection';
+import { fixUrl } from '../lib/url';
 
 interface Track {
     id?: string; // Submission ID
@@ -36,7 +37,7 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                    <div className="relative w-full aspect-video bg-gray-800 flex-shrink-0">
                        {currentTrack.artworkUrl && !imgError ? (
                            <img 
-                                src={currentTrack.artworkUrl} 
+                                src={fixUrl(currentTrack.artworkUrl)} 
                                 alt={currentTrack.title} 
                                 className="w-full h-full object-cover" 
                                 onError={() => setImgError(true)}

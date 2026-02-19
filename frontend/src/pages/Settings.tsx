@@ -3,6 +3,7 @@ import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug,
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
+import { fixUrl } from '../lib/url';
 
 export function Settings() {
   const { gun, user, pubKey, userProfile, isAdmin } = useGun();
@@ -358,7 +359,7 @@ export function Settings() {
                     {avatar ? (
                         <img src={URL.createObjectURL(avatar)} className="w-full h-full object-cover" />
                     ) : currentAvatarUrl ? (
-                        <img src={currentAvatarUrl} className="w-full h-full object-cover" />
+                        <img src={fixUrl(currentAvatarUrl)} className="w-full h-full object-cover" />
                     ) : (
                         <User className="w-8 h-8 text-gray-500 group-hover:text-gray-400" />
                     )}

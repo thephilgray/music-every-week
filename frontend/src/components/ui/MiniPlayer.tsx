@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause } from 'lucide-react';
+import { fixUrl } from '../../lib/url';
 
 interface MiniPlayerProps {
   src: string;
@@ -68,7 +69,7 @@ export function MiniPlayer({ src }: MiniPlayerProps) {
 
   return (
     <div className="flex items-center gap-3 bg-gray-800 rounded-full px-3 py-2 mt-1 w-fit border border-gray-700 min-w-[180px]">
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={fixUrl(src)} preload="metadata" />
       <button 
         type="button"
         onClick={togglePlay}

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { User as UserIcon, MoreVertical, Trash2, Edit2, X, Check } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { MiniPlayer } from './ui/MiniPlayer';
+import { fixUrl } from '../lib/url';
 import type { Comment } from '../types';
 
 interface CommentItemProps {
@@ -60,7 +61,7 @@ export function CommentItem({ comment, onDelete, onEdit }: CommentItemProps) {
     <div className="flex gap-2 group relative">
          <div className="w-6 h-6 bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden mt-1">
              {authorAvatar ? (
-                 <img src={authorAvatar} alt={authorAlias} className="w-full h-full object-cover" />
+                 <img src={fixUrl(authorAvatar)} alt={authorAlias} className="w-full h-full object-cover" />
              ) : (
                  <UserIcon className="w-3 h-3 text-gray-400" />
              )}

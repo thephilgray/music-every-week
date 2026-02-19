@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, UserPlus, Copy, X } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
+import { fixUrl } from '../../lib/url';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { gun, user, pubKey, userProfile, isConnected, isIdle, isInternetOnline } = useGun();
@@ -130,7 +131,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
         >
             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center overflow-hidden border border-gray-600">
                 {userProfile?.avatarUrl ? (
-                    <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    <img src={fixUrl(userProfile.avatarUrl)} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                     <UserIcon className="w-5 h-5 text-white" />
                 )}

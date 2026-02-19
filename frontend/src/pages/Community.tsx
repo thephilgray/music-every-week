@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MessageSquare, Music, User } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { Skeleton } from '../components/ui/Skeleton';
+import { fixUrl } from '../lib/url';
 
 interface FeedItem {
     id: string;
@@ -122,7 +123,7 @@ export function Community() {
                             <Link to={`/profile/${item.authorPub}`}>
                                 <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-800 overflow-hidden">
                                     {item.authorAvatar ? (
-                                        <img src={item.authorAvatar} alt={item.authorAlias} className="w-full h-full object-cover" />
+                                        <img src={fixUrl(item.authorAvatar)} alt={item.authorAlias} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-gray-500"><User className="w-4 h-4 md:w-5 md:h-5" /></div>
                                     )}

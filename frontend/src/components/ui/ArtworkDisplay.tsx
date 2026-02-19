@@ -1,5 +1,6 @@
 import { useState, useEffect, type ComponentType } from 'react';
 import { Music } from 'lucide-react';
+import { fixUrl } from '../../lib/url';
 
 interface ArtworkDisplayProps {
   src?: string | null;
@@ -26,7 +27,7 @@ export function ArtworkDisplay({
   if (src && !error) {
     return (
       <img 
-        src={src} 
+        src={fixUrl(src)} 
         alt={alt} 
         className={className} 
         onError={() => setError(true)} 

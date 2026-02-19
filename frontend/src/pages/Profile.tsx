@@ -5,6 +5,7 @@ import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
+import { fixUrl } from '../lib/url';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { Tooltip } from '../components/ui/Tooltip';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -413,7 +414,7 @@ export function Profile() {
             <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center md:items-start">
                 <div className="w-32 h-32 rounded-full border-4 border-gray-800 overflow-hidden bg-gray-700 flex-shrink-0">
                     {profile.avatarUrl ? (
-                        <img src={profile.avatarUrl} alt={profile.alias} className="w-full h-full object-cover" />
+                        <img src={fixUrl(profile.avatarUrl)} alt={profile.alias} className="w-full h-full object-cover" />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-500">
                             <User className="w-12 h-12" />
@@ -633,7 +634,7 @@ export function Profile() {
                                  {editAvatar ? (
                                      <img src={URL.createObjectURL(editAvatar)} className="w-full h-full object-cover" />
                                  ) : profile.avatarUrl ? (
-                                     <img src={profile.avatarUrl} className="w-full h-full object-cover" />
+                                     <img src={fixUrl(profile.avatarUrl)} className="w-full h-full object-cover" />
                                  ) : (
                                      <Upload className="w-6 h-6 text-gray-500" />
                                  )}

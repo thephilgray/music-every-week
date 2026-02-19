@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import type { Submission } from '../types';
+import { fixUrl } from '../lib/url';
 
 interface PlayerContextType {
   currentTrack: Submission | null;
@@ -89,7 +90,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!audio) return;
 
     if (currentTrack) {
-        audio.src = currentTrack.audioUrl;
+        audio.src = fixUrl(currentTrack.audioUrl);
         audio.play().then(() => {
             setIsPlaying(true);
             updateMediaSession();

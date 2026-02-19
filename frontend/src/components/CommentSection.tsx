@@ -5,6 +5,7 @@ import { uploadFile } from '../lib/upload';
 import { CommentItem } from './CommentItem';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { fixUrl } from '../lib/url';
 import type { Comment, Notification, UserProfile } from '../types';
 
 interface CommentSectionProps {
@@ -439,7 +440,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                            className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2 transition"
                        >
                            <div className="w-6 h-6 rounded-full bg-gray-600 overflow-hidden flex-shrink-0">
-                               {u.avatarUrl ? <img src={u.avatarUrl} className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-gray-300 mx-auto mt-1" />}
+                               {u.avatarUrl ? <img src={fixUrl(u.avatarUrl)} className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-gray-300 mx-auto mt-1" />}
                            </div>
                            <div className="min-w-0">
                                <p className="text-sm text-white font-medium truncate">{u.alias}</p>

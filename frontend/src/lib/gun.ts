@@ -1,5 +1,9 @@
 import Gun from 'gun/gun';
 import 'gun/sea';
+import 'gun/lib/radix';
+import 'gun/lib/radisk';
+import 'gun/lib/store';
+import 'gun/lib/rindexed';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'http://localhost:8080';
 
@@ -11,8 +15,8 @@ export const PEERS = [
 
 const gun = Gun({
   peers: PEERS,
-  localStorage: true, // Persist local data
-  radisk: true, // Use Radisk for storage
+  localStorage: false, // Disable default localStorage (5MB limit)
+  radisk: true, // Use Radisk (which now uses IndexedDB via rindexed)
   axe: false // Explicitly disable AXE
 });
 

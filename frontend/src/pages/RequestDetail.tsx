@@ -831,7 +831,8 @@ export function RequestDetail() {
                                         if (currentTrack?.id === sub.id && isPlaying) {
                                             pause();
                                         } else {
-                                            play(sub, submissions, {
+                                            const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
+                                            play(sub, visibleSubmissions, {
                                                 type: 'request',
                                                 id: request.id!,
                                                 name: request.title,

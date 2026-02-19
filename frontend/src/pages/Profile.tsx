@@ -554,7 +554,7 @@ export function Profile() {
                                     <button 
                                         onClick={() => {
                                              if (currentTrack?.id === sub.id && isPlaying) pause();
-                                             else play(sub, submissions);
+                                             else play(sub, visibleSubmissions);
                                         }}
                                         className="text-white hover:scale-110 transition"
                                     >

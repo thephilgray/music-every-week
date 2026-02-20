@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useGun } from '../contexts/GunContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import type { Playlist, Submission } from '../types';
-import { Play, Trash2, ListMusic, Loader2, Edit, X } from 'lucide-react';
+import type { Playlist, Submission, FileRequest } from '../types';
+import { Play, Trash2, ListMusic, Loader2, Edit, X, Globe } from 'lucide-react';
+import { RequestCard } from '../components/RequestCard';
 
 export function Playlists() {
   const { user, gun } = useGun();
@@ -10,6 +11,9 @@ export function Playlists() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+
+  const [publicPlaylists, setPublicPlaylists] = useState<FileRequest[]>([]);
+  const processedRequests = useRef<Set<string>>(new Set());
 
   useEffect(() => {
      setPlaylists([]);
@@ -43,6 +47,44 @@ export function Playlists() {
          }
      });
   }, [user, selectedPlaylist?.id]);
+
+  useEffect(() => {
+      if (!user) return;
+      
+      // Fetch user's submissions to find participated requests
+      user.get('submissions').map().on((submission: any) => {
+          if (submission && submission.requestId) {
+              const reqId = submission.requestId;
+              if (processedRequests.current.has(reqId)) return;
+              
+              processedRequests.current.add(reqId);
+              
+              gun.get('file_requests').get(reqId).once((req: any) => {
+                  if (req && req.title) {
+                      const now = Date.now();
+                      const deadline = req.deadline ? new Date(req.deadline).getTime() : Infinity;
+                      const liveDate = req.playlistLiveDate ? new Date(req.playlistLiveDate).getTime() : Infinity;
+                      
+                      const isClosed = now > deadline;
+                      const isPastLiveDate = now > liveDate;
+
+                      // Only show if closed or past live date
+                      if (isClosed || isPastLiveDate) {
+                           setPublicPlaylists(prev => {
+                               if (prev.find(p => p.id === reqId)) return prev;
+                               return [...prev, { ...req, id: reqId }];
+                           });
+                      }
+                  }
+              });
+          }
+      });
+      
+      return () => {
+          processedRequests.current.clear();
+          setPublicPlaylists([]);
+      };
+  }, [user, gun]);
 
   const handlePlay = async (playlist: Playlist, startIndex = 0) => {
       console.log("handlePlay initiated for playlist:", playlist.id);
@@ -243,6 +285,24 @@ export function Playlists() {
                             <Play className="w-4 h-4 fill-current" /> Play All
                         </button>
                     </div>
+                </div>
+            </div>
+        )}
+
+        {/* Public Playlists (Past Requests) */}
+        {publicPlaylists.length > 0 && (
+            <div className="mt-12 pt-8 border-t border-gray-800">
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                    <Globe className="w-6 h-6 text-purple-500" />
+                    Public Playlists
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {publicPlaylists.map(req => {
+                         const isClosed = req.deadline ? Date.now() > new Date(req.deadline).getTime() : false;
+                         return (
+                            <RequestCard key={req.id} request={req} isClosed={isClosed} />
+                         );
+                    })}
                 </div>
             </div>
         )}

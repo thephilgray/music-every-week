@@ -1,5 +1,6 @@
 import { X, Play, Music } from 'lucide-react';
 import type { Submission } from '../../types';
+import { fixUrl } from '../../lib/url';
 
 interface QueueModalProps {
     queue: Submission[];
@@ -39,7 +40,7 @@ export function QueueModal({ queue, currentTrack, onPlay, onClose }: QueueModalP
                                    >
                                        <div className="w-10 h-10 bg-gray-800 rounded overflow-hidden flex-shrink-0 relative">
                                             {track.artworkUrl ? (
-                                                <img src={track.artworkUrl} alt={track.title} className="w-full h-full object-cover" />
+                                                <img src={fixUrl(track.artworkUrl)} alt={track.title} className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center bg-gray-700">
                                                     <Music className="w-4 h-4 text-gray-500" />

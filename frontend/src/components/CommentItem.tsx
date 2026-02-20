@@ -26,6 +26,8 @@ export function CommentItem({ comment, onDelete, onEdit }: CommentItemProps) {
   const isAuthor = pubKey && comment.authorPub === pubKey;
 
   useEffect(() => {
+    if (!comment.authorPub) return;
+    
     // Fetch user profile
     gun.get('all_users').get(comment.authorPub).once((user: any) => {
         if (user) {

@@ -27,15 +27,85 @@ export function Community() {
   const [filterAI, setFilterAI] = useState(false);
 
   useEffect(() => {
+      let isMounted = true;
+      let updateTimeout: ReturnType<typeof setTimeout> | null = null;
+      
       // Load Filter AI setting
       if (user) {
           user.get('settings').get('content').get('filterAI').on((data: any) => {
-              setFilterAI(!!data);
+              if (isMounted) setFilterAI(!!data);
           });
       }
 
       const feedMap = new Map<string, FeedItem>();
-      
+      const userCache = new Map<string, { alias: string, avatarUrl: string }>(); // Local cache for this mount
+      const pendingUserFetches = new Set<string>(); // Track in-flight fetches
+
+      const updateFeedState = () => {
+          if (!isMounted) return;
+          setFeed(Array.from(feedMap.values()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 100));
+          setLoading(false);
+          updateTimeout = null;
+      };
+
+      const triggerUpdate = () => {
+          if (!updateTimeout) {
+              updateTimeout = setTimeout(updateFeedState, 100); // Debounce 100ms
+          }
+      };
+
+      // Helper to process feed item
+      const processItem = (data: any, key: string) => {
+          if (!isMounted) return;
+
+          if (data && data.text) {
+              // Initial Item
+              let item: FeedItem = { ...data, id: key };
+              
+              // Check Cache first
+              if (data.authorPub) {
+                  const cached = userCache.get(data.authorPub);
+                  if (cached) {
+                      item.authorAlias = cached.alias;
+                      item.authorAvatar = cached.avatarUrl;
+                  } else if (!pendingUserFetches.has(data.authorPub)) {
+                      // Fetch if not cached and not pending
+                      pendingUserFetches.add(data.authorPub);
+                      
+                      gun.get('all_users').get(data.authorPub).once((u: any) => {
+                          if (!isMounted) return;
+                          
+                          // Update Cache
+                          if (u) {
+                              const profile = { alias: u.alias || 'Unknown', avatarUrl: u.avatarUrl || '' };
+                              userCache.set(data.authorPub, profile);
+                              
+                              // Update all items in feedMap belonging to this user
+                              let updatedCount = 0;
+                              feedMap.forEach((val, k) => {
+                                  if (val.authorPub === data.authorPub) {
+                                      feedMap.set(k, { ...val, authorAlias: profile.alias, authorAvatar: profile.avatarUrl });
+                                      updatedCount++;
+                                  }
+                              });
+                              
+                              if (updatedCount > 0) triggerUpdate();
+                          }
+                          pendingUserFetches.delete(data.authorPub);
+                      });
+                  }
+              }
+
+              feedMap.set(key, item);
+              triggerUpdate();
+              
+          } else if (data === null) {
+              // Handle deletion
+              feedMap.delete(key);
+              triggerUpdate();
+          }
+      };
+
       // Time-Bucketing: Subscribe to Today and Yesterday
       const today = new Date();
       const yesterday = new Date(today);
@@ -48,49 +118,32 @@ export function Community() {
 
       dates.forEach(dateStr => {
           const bucketKey = `global_pulse_${dateStr}`;
-          
-          // Helper to process feed item
-          const processItem = (data: any, key: string) => {
-              if (data && data.text) {
-                  const item: FeedItem = { ...data, id: key };
-                  
-                  // Resolve Author Profile
-                  gun.get('all_users').get(data.authorPub).once((u: any) => {
-                      if (u) {
-                          setFeed(_prev => {
-                               // Update existing or add new
-                               feedMap.set(key, { ...item, authorAlias: u.alias, authorAvatar: u.avatarUrl });
-                               return Array.from(feedMap.values()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 100);
-                          });
-                      }
-                  });
-
-                  feedMap.set(key, item);
-                  setFeed(Array.from(feedMap.values()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 100));
-                  setLoading(false);
-              } else if (data === null) {
-                  // Handle deletion
-                  feedMap.delete(key);
-                  setFeed(Array.from(feedMap.values()).sort((a, b) => b.createdAt - a.createdAt));
-              }
-          };
-
           // 1. Subscribe to Global Pulse
           gun.get(bucketKey).map().on(processItem);
+      });
 
-          // 2. Subscribe to Participated Requests Pulse
-          if (user) {
-              user.get('participation').map().on((status: string, reqId: string) => {
-                  if (status === 'accepted' || status === 'joined' || status === 'invited') { // Include invited? Maybe just accepted.
+      // 2. Subscribe to Participated Requests Pulse
+      if (user) {
+          user.get('participation').map().on((status: string, reqId: string) => {
+              if (!isMounted) return;
+              if (status === 'accepted' || status === 'joined' || status === 'invited') { 
+                  dates.forEach(dateStr => {
                       const reqBucket = `request_pulse_${reqId}_${dateStr}`;
                       gun.get(reqBucket).map().on(processItem);
-                  }
-              });
-          }
-      });
+                  });
+              }
+          });
+      }
       
-      const timer = setTimeout(() => setLoading(false), 2000);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => {
+          if (isMounted) setLoading(false);
+      }, 2000);
+      
+      return () => {
+          isMounted = false;
+          clearTimeout(timer);
+          if (updateTimeout) clearTimeout(updateTimeout);
+      };
   }, [gun, user]);
 
   const filteredFeed = feed.filter(item => {

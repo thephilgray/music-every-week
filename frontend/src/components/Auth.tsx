@@ -18,6 +18,7 @@ export function Auth() {
     return !!params.get('inviteCode');
   });
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Parse URL for invite code and request ID
   const checkPendingInvites = (pub: string, userEmail?: string) => {
@@ -64,14 +65,20 @@ export function Auth() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+
     console.log("Auth: handleSubmit initiated.");
     setError(null);
+    setIsLoading(true);
+
+    const finalize = () => setIsLoading(false);
 
     if (isSignup) {
       console.log("Auth: Entering Signup flow.");
       if (pass !== confirmPass) {
           setError("Passwords do not match.");
           console.log("Auth: Signup validation failed - Passwords do not match.");
+          finalize();
           return;
       }
 
@@ -86,6 +93,7 @@ export function Auth() {
           if (ack.err) {
             setError(ack.err);
             console.error("Auth: user.create() failed:", ack.err);
+            finalize();
             return;
           }
           console.log("Auth: user.create() successful. Auto-logging in.");
@@ -95,6 +103,7 @@ export function Auth() {
              if (authAck.err) {
                  setError(authAck.err);
                  console.error("Auth: user.auth() (after create) failed:", authAck.err);
+                 finalize();
                  return;
              }
              console.log("Auth: Auto-login successful after create.");
@@ -169,6 +178,7 @@ export function Auth() {
              } else {
                  console.error("Auth: Could not get pub key after successful create and auth.");
              }
+             finalize();
           });
         });
       };
@@ -184,6 +194,7 @@ export function Auth() {
               } else {
                   setError("Invalid or Expired Invite Code");
                   console.error(`Auth: Global invite code ${code} invalid or expired.`);
+                  finalize();
               }
           });
       };
@@ -219,6 +230,7 @@ export function Auth() {
       } else {
           setError("Invite Code is required");
           console.log("Auth: Signup validation failed - Invite Code is required.");
+          finalize();
       }
 
     } else {
@@ -293,6 +305,7 @@ export function Auth() {
                }
            }
         }
+        finalize();
       });
     }
   };
@@ -309,8 +322,9 @@ export function Auth() {
             type="text"
             value={alias}
             onChange={(e) => setAlias(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             required
+            disabled={isLoading}
           />
         </div>
         
@@ -321,9 +335,10 @@ export function Auth() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     placeholder="you@example.com"
                     required
+                    disabled={isLoading}
                 />
             </div>
         )}
@@ -334,8 +349,9 @@ export function Auth() {
             type="password"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             required
+            disabled={isLoading}
           />
         </div>
 
@@ -346,8 +362,9 @@ export function Auth() {
                     type="password"
                     value={confirmPass}
                     onChange={(e) => setConfirmPass(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     required
+                    disabled={isLoading}
                 />
                 <p className="text-xs text-yellow-500 mt-1">
                     Warning: Passwords cannot be reset. Don't forget it!
@@ -362,9 +379,10 @@ export function Auth() {
               type="text"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               placeholder="Enter invite code"
               required
+              disabled={isLoading}
             />
           </div>
         )}
@@ -377,8 +395,10 @@ export function Auth() {
 
         <button
           type="submit"
-          className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition shadow-lg shadow-blue-900/20"
+          disabled={isLoading}
+          className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
+          {isLoading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
           {isSignup ? 'Sign Up' : 'Log In'}
         </button>
       </form>

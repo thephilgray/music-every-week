@@ -100,7 +100,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
 
   useEffect(() => {
     // 1. Fetch Uploader Name
-    if (!names[uploaderPub]) {
+    if (uploaderPub && !names[uploaderPub]) {
         gun.get('all_users').get(uploaderPub).once((u: any) => {
             if (u && (u.alias || u.displayName)) {
                 setNames(prev => ({ ...prev, [uploaderPub]: u.displayName || u.alias }));
@@ -112,7 +112,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
     const keys = Object.keys(loadedCollaborators).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
     
     keys.forEach(pub => {
-        if (!names[pub]) {
+        if (pub && !names[pub]) {
             gun.get('all_users').get(pub).once((u: any) => {
                 if (u && (u.alias || u.displayName)) {
                     setNames(prev => ({ ...prev, [pub]: u.displayName || u.alias }));

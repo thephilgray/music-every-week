@@ -15,8 +15,9 @@ export const PEERS = [
 
 const gun = Gun({
   peers: PEERS,
-  localStorage: false, // Disable default localStorage (5MB limit)
-  radisk: true, // Use Radisk (which now uses IndexedDB via rindexed)
+  localStorage: true, // Enable simple localStorage for stability and auth persistence
+  radisk: false, // Keep Radisk (IndexedDB) disabled to avoid 'radix' corruption errors
+  file: 'mew-radata-v1', // This file name is used by localStorage as a prefix
   axe: false // Explicitly disable AXE
 });
 

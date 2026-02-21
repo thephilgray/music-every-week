@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, Music, MessageSquare } from 'lucide-react';
+import { User, Music } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { fixUrl } from '../lib/url';
 

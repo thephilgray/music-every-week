@@ -312,8 +312,11 @@ export function Settings() {
       
       try {
           // 1. Reseed Public Directory
-          gun.get('all_users').map().once((data: any, key: string) => {
+          gun.get('all_users').map().once((data: any) => {
               if (data) {
+                  // Just reading 'once' triggers Gun to evaluate sync status. 
+                  // For owned nodes, we could 'put', but for others we rely on Gun's mesh.
+                  // We touch the node to ensure it's active in memory.
                   count++;
               }
           });

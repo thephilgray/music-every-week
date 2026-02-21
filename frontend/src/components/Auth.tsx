@@ -72,23 +72,57 @@ export function Auth() {
     setIsRecovering(true);
     let count = 0;
 
+    const processObject = (obj: any, prefix = '') => {
+        if (!obj || typeof obj !== 'object') return;
+        
+        Object.keys(obj).forEach(key => {
+            const val = obj[key];
+            if (key === '_' || key === '#') return; // Skip metadata
+            
+            // If it looks like a graph node (has an ID/soul)
+            if (val && typeof val === 'object' && val._ && val._['#']) {
+                 try {
+                     // We found a node! Put it into Gun.
+                     const soul = val._['#'];
+                     console.log("Restoring node:", soul);
+                     gun.get(soul).put(val);
+                     count++;
+                 } catch (e) {
+                     console.warn("Error restoring node:", val, e);
+                 }
+            } else if (val && typeof val === 'object') {
+                // Recurse deeper
+                processObject(val, prefix + key + '/');
+            } else if (typeof val === 'string' && val.startsWith('{')) {
+                // Try parsing stringified JSON (common in localStorage)
+                try {
+                    const parsed = JSON.parse(val);
+                    processObject(parsed, prefix + key + '/');
+                } catch (e) {}
+            }
+        });
+    };
+
     try {
-        // 1. Recover from LocalStorage (if any)
+        // 1. Recover from LocalStorage (Big Keys)
         console.log("Starting LocalStorage recovery...");
-        const prefix = 'mew-radata-v1/';
+        
+        // Scan ALL keys, because sometimes prefixes vary
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith(prefix)) {
+            if (!key) continue;
+
+            const val = localStorage.getItem(key);
+            if (!val) continue;
+
+            // Targeted keys we suspect hold the graph
+            if (key === 'gun/' || key === 'mew-radata-v1' || key.startsWith('mew-radata-v1')) {
+                console.log(`Scanning large LS key: ${key} (${(val.length/1024).toFixed(2)} KB)`);
                 try {
-                    const cleanKey = key.replace(prefix, '');
-                    const val = localStorage.getItem(key);
-                    if (val) {
-                        const parsed = JSON.parse(val);
-                        gun.get(cleanKey).put(parsed);
-                        count++;
-                    }
+                    const parsed = JSON.parse(val);
+                    processObject(parsed);
                 } catch (e) {
-                    console.warn("Failed to migrate LS key:", key);
+                    console.warn(`Failed to parse LS key ${key}`, e);
                 }
             }
         }

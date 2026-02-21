@@ -610,7 +610,7 @@ export function Auth() {
              Recover Legacy Data (Fix "User Not Found")
           </button>
 
-          <button 
+          {/* <button 
             type="button"
             onClick={async () => {
                 if (confirm("This will delete ALL local data (IndexedDB, LocalStorage) to fix corruption. Continue?")) {
@@ -633,7 +633,7 @@ export function Auth() {
               className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mx-auto"
           >
               <Key className="w-3 h-3" /> Restore from Backup
-          </button>
+          </button> */}
       </div>
       )}
 

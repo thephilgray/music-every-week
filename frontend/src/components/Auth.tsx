@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGun } from '../contexts/GunContext';
-import { Key } from 'lucide-react';
+import { Key, Database } from 'lucide-react';
 
 export function Auth() {
   const { gun, user, refreshAuth } = useGun();
@@ -18,6 +18,7 @@ export function Auth() {
   });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
   
   // Import State
   const [showImport, setShowImport] = useState(false);
@@ -64,6 +65,93 @@ export function Auth() {
               }
           });
       }
+  };
+
+  const handleRecoverLegacyData = async () => {
+    if (!confirm("This will read data from the old IndexedDB AND LocalStorage and attempt to sync it to the new server. Use this if you are unable to login but have data on this device.")) return;
+    setIsRecovering(true);
+    let count = 0;
+
+    try {
+        // 1. Recover from LocalStorage (if any)
+        console.log("Starting LocalStorage recovery...");
+        const prefix = 'mew-radata-v1/';
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(prefix)) {
+                try {
+                    const cleanKey = key.replace(prefix, '');
+                    const val = localStorage.getItem(key);
+                    if (val) {
+                        const parsed = JSON.parse(val);
+                        gun.get(cleanKey).put(parsed);
+                        count++;
+                    }
+                } catch (e) {
+                    console.warn("Failed to migrate LS key:", key);
+                }
+            }
+        }
+
+        // 2. Recover from IndexedDB
+        const dbName = 'mew-radata-v1';
+        const req = window.indexedDB.open(dbName);
+        
+        req.onerror = () => { 
+            // If IDB fails, we still report LS success
+            if (count > 0) alert(`Recovered ${count} nodes from LocalStorage. IndexedDB skipped.`);
+            else alert("Could not open legacy database."); 
+            setIsRecovering(false); 
+        };
+
+        req.onsuccess = async (e: any) => {
+            const db = e.target.result;
+            if (db.objectStoreNames.length === 0) {
+                 if (count > 0) alert(`Recovered ${count} nodes from LocalStorage. IndexedDB was empty.`);
+                 else alert("Legacy database is empty.");
+                 setIsRecovering(false);
+                 return;
+            }
+            
+            const storeName = db.objectStoreNames[0]; 
+            console.log("Found legacy store:", storeName);
+            
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const cursorReq = store.openCursor();
+            
+            cursorReq.onsuccess = (ev: any) => {
+                const cursor = ev.target.result;
+                if (cursor) {
+                    const key = cursor.key;
+                    const val = cursor.value;
+                    
+                    if (val && typeof val === 'object') {
+                        try {
+                             if (typeof key === 'string' && !key.startsWith('!')) {
+                                  gun.get(key).put(val);
+                                  count++;
+                             }
+                        } catch (err) {
+                            console.warn("Failed to migrate key:", key, err);
+                        }
+                    }
+                    cursor.continue();
+                } else {
+                    alert(`Migration finished. Processed ${count} nodes (LocalStorage + IndexedDB). Please try logging in now.`);
+                    setIsRecovering(false);
+                }
+            };
+            cursorReq.onerror = () => {
+                alert("Error reading legacy data.");
+                setIsRecovering(false);
+            };
+        };
+    } catch (e) {
+        console.error(e);
+        alert("Recovery failed.");
+        setIsRecovering(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -470,6 +558,16 @@ export function Auth() {
       
       {!showImport && (
       <div className="mt-4 pt-4 border-t border-gray-700 text-center space-y-3">
+          <button 
+            type="button"
+            onClick={handleRecoverLegacyData}
+            disabled={isRecovering}
+            className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1 mx-auto disabled:opacity-50"
+          >
+             {isRecovering ? <div className="w-3 h-3 border-2 border-orange-400/30 border-t-orange-400 rounded-full animate-spin" /> : <Database className="w-3 h-3" />}
+             Recover Legacy Data (Fix "User Not Found")
+          </button>
+
           <button 
             type="button"
             onClick={async () => {

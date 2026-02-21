@@ -211,7 +211,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
           }
 
-          // If we found a pair, re-hydrate gunUser.is
+          // If we found a pair, re-hydrate gunUser.is AND Force Auth
           if (resolvedPair) {
                // @ts-ignore
                if (gunUser.is && (!gunUser.is.priv || !gunUser.is.pub)) {
@@ -220,6 +220,18 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   // @ts-ignore
                   gunUser._.is = gunUser.is; // Internal update for Gun instance
                   console.log("Re-hydrated gunUser.is with recovered pair.");
+              }
+              
+              // Explicitly call auth with the pair to ensure Gun internals are happy
+              // This is critical if the session was restored manually
+              // @ts-ignore
+              if (!gunUser.is || !gunUser.is.pub) {
+                  console.log("Session restored but not authenticated. Calling user.auth()...");
+                  // @ts-ignore
+                  gunUser.auth(resolvedPair, (ack: any) => {
+                      if (ack.err) console.error("Restored session auth failed:", ack.err);
+                      else console.log("Restored session authenticated successfully via user.auth().");
+                  });
               }
           }
       }

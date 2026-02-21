@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug, Music, ShieldCheck, ArrowRight, Copy, Key } from 'lucide-react';
+import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Bug, Music, ShieldCheck, ArrowRight, Copy, Key, Database } from 'lucide-react';
 import { useGun } from '../contexts/GunContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadFile } from '../lib/upload';
@@ -40,6 +40,7 @@ export function Settings() {
   
   // Disaster Recovery State
   const [isReseeding, setIsReseeding] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
 
   // Migration Tool State
   const [migrationOldPub, setMigrationOldPub] = useState('');
@@ -218,6 +219,93 @@ export function Settings() {
       const newValue = !lockHostCreation;
       setLockHostCreation(newValue);
       gun.get('application_settings').get('lockHostCreation').put(newValue);
+  };
+
+  const handleRecoverLegacyData = async () => {
+    if (!confirm("This will read data from the old IndexedDB AND LocalStorage and attempt to sync it to the new server. Only do this if you are missing data but have it on this device.")) return;
+    setIsRecovering(true);
+    let count = 0;
+
+    try {
+        // 1. Recover from LocalStorage (if any)
+        console.log("Starting LocalStorage recovery...");
+        const prefix = 'mew-radata-v1/';
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(prefix)) {
+                try {
+                    const cleanKey = key.replace(prefix, '');
+                    const val = localStorage.getItem(key);
+                    if (val) {
+                        const parsed = JSON.parse(val);
+                        gun.get(cleanKey).put(parsed);
+                        count++;
+                    }
+                } catch (e) {
+                    console.warn("Failed to migrate LS key:", key);
+                }
+            }
+        }
+
+        // 2. Recover from IndexedDB
+        const dbName = 'mew-radata-v1';
+        const req = window.indexedDB.open(dbName);
+        
+        req.onerror = () => { 
+            // If IDB fails, we still report LS success
+            if (count > 0) success(`Recovered ${count} nodes from LocalStorage. IndexedDB skipped.`);
+            else error("Could not open legacy database."); 
+            setIsRecovering(false); 
+        };
+
+        req.onsuccess = async (e: any) => {
+            const db = e.target.result;
+            if (db.objectStoreNames.length === 0) {
+                 if (count > 0) success(`Recovered ${count} nodes from LocalStorage. IndexedDB was empty.`);
+                 else error("Legacy database is empty.");
+                 setIsRecovering(false);
+                 return;
+            }
+            
+            const storeName = db.objectStoreNames[0]; 
+            console.log("Found legacy store:", storeName);
+            
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const cursorReq = store.openCursor();
+            
+            cursorReq.onsuccess = (ev: any) => {
+                const cursor = ev.target.result;
+                if (cursor) {
+                    const key = cursor.key;
+                    const val = cursor.value;
+                    
+                    if (val && typeof val === 'object') {
+                        try {
+                             if (typeof key === 'string' && !key.startsWith('!')) {
+                                  gun.get(key).put(val);
+                                  count++;
+                             }
+                        } catch (err) {
+                            console.warn("Failed to migrate key:", key, err);
+                        }
+                    }
+                    cursor.continue();
+                } else {
+                    success(`Migration finished. Processed ${count} nodes (LocalStorage + IndexedDB). Allow time for sync.`);
+                    setIsRecovering(false);
+                }
+            };
+            cursorReq.onerror = () => {
+                error("Error reading legacy data.");
+                setIsRecovering(false);
+            };
+        };
+    } catch (e) {
+        console.error(e);
+        error("Recovery failed.");
+        setIsRecovering(false);
+    }
   };
 
 
@@ -705,6 +793,25 @@ export function Settings() {
                         </p>
                     </div>
                 )}
+            </div>
+
+            <div className="border-t border-gray-800 pt-6">
+                <h3 className="text-white font-medium mb-2 flex items-center gap-2">
+                    <Database className="w-4 h-4 text-orange-400" />
+                    Legacy Data Recovery
+                </h3>
+                <p className="text-gray-400 text-xs mb-3">
+                    If you used the app before the recent update and are missing content, it might be trapped in the old database. 
+                    Run this to push your local history to the new server.
+                </p>
+                <button 
+                    onClick={handleRecoverLegacyData}
+                    disabled={isRecovering}
+                    className="bg-orange-900/20 hover:bg-orange-900/40 text-orange-400 border border-orange-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition text-sm"
+                >
+                    {isRecovering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Recover Data from IndexedDB
+                </button>
             </div>
 
             <div className="border-t border-gray-800 pt-6">

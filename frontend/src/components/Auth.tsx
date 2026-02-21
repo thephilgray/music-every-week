@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useGun } from '../contexts/GunContext';
+import { Key } from 'lucide-react';
 
 export function Auth() {
   const { gun, user, refreshAuth } = useGun();
@@ -13,12 +14,14 @@ export function Auth() {
   });
   const [isSignup, setIsSignup] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    // Explicit 'inviteCode' implies a direct invite link -> Signup
-    // 'requestInvite' implies a request share link -> Default to Login (returning users)
     return !!params.get('inviteCode');
   });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Import State
+  const [showImport, setShowImport] = useState(false);
+  const [importData, setImportData] = useState('');
 
   // Parse URL for invite code and request ID
   const checkPendingInvites = (pub: string, userEmail?: string) => {
@@ -237,7 +240,17 @@ export function Auth() {
       // Login Flow
       console.log(`Auth: Entering Login flow for alias: ${alias}.`);
       
+      // Safety Timeout
+      const timeout = setTimeout(() => {
+          if (isLoading) {
+              console.error("Auth: Login timed out.");
+              setError("Login timed out. The server may be offline or corrupted.");
+              finalize();
+          }
+      }, 15000);
+
       user.auth(alias, pass, (ack: any) => {
+        clearTimeout(timeout);
         console.log("Auth: user.auth() ack received:", ack);
         if (ack.err) {
           setError(ack.err);
@@ -310,11 +323,27 @@ export function Auth() {
     }
   };
 
+  const handleImportSession = () => {
+      try {
+          const session = JSON.parse(importData);
+          if (session && session.priv && session.pub) {
+              localStorage.setItem('mew_user_session', JSON.stringify(session));
+              window.location.reload();
+          } else {
+              setError("Invalid session data. Ensure it contains 'priv' and 'pub' keys.");
+          }
+      } catch (e) {
+          setError("Invalid JSON format.");
+      }
+  };
+
   return (
     <div className="max-w-md mx-auto mt-10 p-6 bg-gray-800 rounded-lg shadow-xl border border-gray-700">
       <h2 className="text-2xl font-bold mb-6 text-center text-white">
-        {isSignup ? 'Create Account' : 'Member Login'}
+        {showImport ? 'Restore Session' : (isSignup ? 'Create Account' : 'Member Login')}
       </h2>
+      
+      {!showImport ? (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">Username (Alias)</label>
@@ -402,8 +431,45 @@ export function Auth() {
           {isSignup ? 'Sign Up' : 'Log In'}
         </button>
       </form>
+      ) : (
+          <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+              <div className="text-center">
+                  <Key className="w-12 h-12 text-blue-500 mx-auto mb-2" />
+                  <h3 className="text-white font-bold">Restore Session</h3>
+                  <p className="text-xs text-gray-400">Paste your session keypair (JSON) exported from another device to log in without password.</p>
+              </div>
+              
+              <textarea 
+                  value={importData}
+                  onChange={e => setImportData(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-xs text-white font-mono h-32 focus:border-blue-500 outline-none"
+                  placeholder='{"pub":"...","priv":"...","epub":"...","epriv":"..."}'
+              />
+              
+              {error && (
+                <div className="bg-red-900/50 border border-red-800 text-red-200 p-3 rounded text-sm text-center">
+                    {error}
+                </div>
+              )}
+
+              <button
+                  onClick={handleImportSession}
+                  className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition"
+              >
+                  Restore Session
+              </button>
+              
+              <button
+                  onClick={() => setShowImport(false)}
+                  className="w-full text-gray-400 hover:text-white text-sm"
+              >
+                  Cancel
+              </button>
+          </div>
+      )}
       
-      <div className="mt-4 pt-4 border-t border-gray-700 text-center">
+      {!showImport && (
+      <div className="mt-4 pt-4 border-t border-gray-700 text-center space-y-3">
           <button 
             type="button"
             onClick={async () => {
@@ -417,12 +483,21 @@ export function Auth() {
                     window.location.reload();
                 }
             }}
-            className="text-xs text-red-500 hover:text-red-400 underline"
+            className="text-xs text-red-500 hover:text-red-400 underline block mx-auto"
           >
               Troubleshoot: Hard Reset / Clear Data
           </button>
+          
+          <button
+              onClick={() => { setShowImport(true); setError(null); }}
+              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mx-auto"
+          >
+              <Key className="w-3 h-3" /> Restore from Backup
+          </button>
       </div>
+      )}
 
+      {!showImport && (
       <div className="mt-2 text-center">
         <button
           onClick={() => {
@@ -435,6 +510,7 @@ export function Auth() {
           {isSignup ? 'Already have an account? Log in' : "Have an invite? Sign up"}
         </button>
       </div>
+      )}
     </div>
   );
 }

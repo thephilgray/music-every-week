@@ -101,15 +101,25 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+const path = require('path');
+
+// ... (rest of imports)
+
 const PORT = process.env.PORT || 8765;
 const server = app.listen(PORT, () => {
   console.log(`MEW2 Relay listening on port ${PORT}`);
 });
 
 // Configure Gun
+// Enforce absolute path to avoid FUSE/CWD ambiguity
+// Default to /data/radata which matches the Cloud Run GCS Mount
+const dbFile = process.env.GUN_FILE ? path.resolve(process.env.GUN_FILE) : '/data/radata';
+
+console.log(`GunDB Storage Path: ${dbFile}`);
+
 const gun = Gun({ 
   web: server,
-  file: process.env.GUN_FILE || 'radata' 
+  file: dbFile
 });
 
 console.log('GunDB Relay initialized.');

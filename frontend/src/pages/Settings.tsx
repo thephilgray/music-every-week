@@ -807,11 +807,23 @@ export function Settings() {
                 <button 
                     onClick={handleRecoverLegacyData}
                     disabled={isRecovering}
-                    className="bg-orange-900/20 hover:bg-orange-900/40 text-orange-400 border border-orange-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition text-sm"
+                    className="bg-orange-900/20 hover:bg-orange-900/40 text-orange-400 border border-orange-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition text-sm mb-4"
                 >
                     {isRecovering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                     Recover Data from IndexedDB
                 </button>
+
+                {/* Debug Info */}
+                <div className="bg-black/50 p-2 rounded text-xs font-mono text-gray-400">
+                    <p className="mb-1 font-bold text-gray-300">LocalStorage Keys (Debug):</p>
+                    <ul className="max-h-32 overflow-y-auto space-y-1">
+                        {Object.keys(localStorage).map(key => (
+                            <li key={key} className="break-all">
+                                <span className="text-blue-400">{key}</span>: {(localStorage.getItem(key)?.length || 0) / 1024 > 1 ? ((localStorage.getItem(key)?.length || 0) / 1024).toFixed(2) + ' KB' : (localStorage.getItem(key)?.length || 0) + ' bytes'}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
 
             <div className="border-t border-gray-800 pt-6">

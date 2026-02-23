@@ -5,12 +5,51 @@ import { SongDetailsModal } from '../SongDetailsModal';
 import { QueueModal } from './QueueModal';
 import { Waveform } from '../ui/Waveform';
 import { ArtworkDisplay } from '../ui/ArtworkDisplay';
+import type { UserProfile } from '../../types'; // Assuming UserProfile is defined in types.ts
+import { db } from '../../lib/firebase'; // Import db
+import { collection, query, where, getDocs } from 'firebase/firestore'; // Import Firestore functions
 
-export function Player() {
+
+export function Player() { // Removed props
   const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, volume, muted, setVolume, toggleMute, queue, play } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
+
+  // Manage currentUserEmail and userProfile internally
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | undefined>(undefined);
+
+  // Effect to load currentUserEmail from sessionStorage
+  useEffect(() => {
+    const email = sessionStorage.getItem('mew_auth_email');
+    setCurrentUserEmail(email);
+  }, []);
+
+  // Effect to fetch userProfile based on currentUserEmail
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (currentUserEmail) {
+        try {
+          const q = query(collection(db, 'profiles'), where('email', '==', currentUserEmail));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const profileData = querySnapshot.docs[0].data() as UserProfile;
+            setUserProfile(profileData);
+          } else {
+            setUserProfile(undefined); // No profile found
+          }
+        } catch (error) {
+          console.error("Error fetching user profile in Player:", error);
+          setUserProfile(undefined);
+        }
+      } else {
+        setUserProfile(undefined);
+      }
+    }
+    fetchUserProfile();
+  }, [currentUserEmail]);
+
 
   // Auto-expand on track change
   useEffect(() => {
@@ -30,13 +69,15 @@ export function Player() {
       return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // If no track, hide player? Or show empty state? usually hide or show disabled.
-  // For now keeping it visible but disabled/empty if null.
-
   return (
     <>
-      {showLyrics && currentTrack && (
-        <SongDetailsModal currentTrack={currentTrack} onClose={() => setShowLyrics(false)} />
+      {showLyrics && currentTrack && currentUserEmail && ( // Ensure currentUserEmail exists before rendering
+        <SongDetailsModal 
+            currentTrack={currentTrack} 
+            onClose={() => setShowLyrics(false)} 
+            currentUserEmail={currentUserEmail} 
+            userProfile={userProfile} 
+        />
       )}
 
       {showQueue && (

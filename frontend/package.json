@@ -11,8 +11,11 @@
     "deploy": "cd .. && vercel --prod"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.995.0",
+    "@aws-sdk/s3-request-presigner": "^3.995.0",
     "@tailwindcss/vite": "^4.1.18",
     "buffer": "^6.0.3",
+    "firebase": "^12.9.0",
     "gun": "^0.2020.1241",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
@@ -24,6 +27,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^11.0.0",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.23",
     "eslint": "^9.39.1",

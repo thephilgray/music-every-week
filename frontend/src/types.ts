@@ -24,6 +24,7 @@ export interface FileRequest {
   accessMode: 'direct' | 'invite' | 'volunteer';
   artworkUrl?: string;
   ownerPub: string;
+  hostEmail?: string; // Add hostEmail
   createdAt: number;
   inviteCode?: string; // Reusable invite code
   poolSeats?: number; // Number of open seats for volunteer pool
@@ -47,6 +48,7 @@ export interface Submission {
   artworkUrl?: string;
   lyrics?: string;
   uploaderPub: string;
+  uploaderEmail?: string;
   createdAt: number;
   title: string;
   byline?: string; // Custom artist/project name

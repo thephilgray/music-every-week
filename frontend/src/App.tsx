@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useGun } from './contexts/GunContext';
 import { AppLayout } from './components/Layout/AppLayout';
@@ -18,14 +18,50 @@ import { IdleMonitor } from './components/IdleMonitor';
 import { LandingPage } from './pages/LandingPage';
 import { ScrollToTop } from './components/ScrollToTop';
 
+// Authless Pages
+import { HostLogin } from './pages/authless/HostLogin';
+import { HostDashboard } from './pages/authless/HostDashboard';
+import { HostCreate } from './pages/authless/HostCreate';
+import { RequestView } from './pages/authless/RequestView';
+import { PlaylistView } from './pages/authless/PlaylistView';
+import { MigrateGunToFirebase } from './pages/authless/MigrateGunToFirebase';
+import { AuthlessLayout } from './components/Layout/AuthlessLayout';
+
 function App() {
   const { isLoggedIn, isAuthorized, user, isAuthLoading } = useGun();
   const [showReset, setShowReset] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
       const timer = setTimeout(() => setShowReset(true), 3000);
       return () => clearTimeout(timer);
   }, []);
+
+  // Check for Authless Routes
+  const isAuthless = 
+    location.pathname.startsWith('/s/') || 
+    location.pathname.startsWith('/p/') || 
+    location.pathname.startsWith('/host/');
+
+  if (isAuthless) {
+    return (
+      <ToastProvider>
+        <ScrollToTop />
+        <Routes>
+          <Route path="/host/login" element={<HostLogin />} />
+          <Route path="/host/dashboard" element={<HostDashboard />} />
+          <Route path="/host/create" element={<HostCreate />} />
+          <Route path="/host/edit/:id" element={<HostCreate />} />
+          <Route path="/host/migrate" element={<MigrateGunToFirebase />} />
+          
+          <Route element={<AuthlessLayout />}>
+            <Route path="/s/:id" element={<RequestView />} />
+            <Route path="/p/:id" element={<PlaylistView />} />
+          </Route>
+        </Routes>
+      </ToastProvider>
+    );
+  }
 
   if (isAuthLoading) {
     return (
@@ -109,7 +145,6 @@ function App() {
 
   return (
     <ToastProvider>
-      <BrowserRouter>
         <ScrollToTop />
         <IdleMonitor />
         <Routes>
@@ -128,7 +163,6 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </BrowserRouter>
     </ToastProvider>
   );
 }

@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { X, Music, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { CommentSection } from './CommentSection';
+import { AuthlessComments as CommentSection } from '../pages/authless/components/AuthlessComments'; // Corrected import path and alias
 import { fixUrl } from '../lib/url';
+
+// Define a basic UserProfile type for consistency
+interface UserProfile {
+    displayName?: string;
+    avatarUrl?: string;
+}
 
 interface Track {
     id?: string; // Submission ID
@@ -11,7 +17,7 @@ interface Track {
     byline?: string;
     lyrics?: string;
     artworkUrl?: string;
-    uploaderPub?: string;
+    uploaderPub?: string; // This would typically be an ID in Firestore, not a GunDB pub key
     linkProfile?: boolean;
     stage?: string;
     feedbackFocus?: string[];
@@ -24,10 +30,15 @@ interface Track {
 interface SongDetailsModalProps {
     currentTrack: Track;
     onClose: () => void;
+    currentUserEmail: string; // Add currentUserEmail prop
+    userProfile?: UserProfile; // Optional userProfile prop
 }
 
-export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProps) {
+export function SongDetailsModal({ currentTrack, onClose, currentUserEmail, userProfile }: SongDetailsModalProps) {
     const [imgError, setImgError] = useState(false);
+    const draftKey = `comment_draft_${currentTrack.requestId}_${currentTrack.id || 'request'}`;
+    const hasDraft = localStorage.getItem(draftKey) !== null;
+
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
@@ -74,42 +85,51 @@ export function SongDetailsModal({ currentTrack, onClose }: SongDetailsModalProp
                        </div>
                    </div>
 
-                   <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                       {(currentTrack.stage || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
-                           <div className="flex flex-wrap gap-2">
-                                {currentTrack.stage && (
-                                    <span className="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
-                                        Stage: {currentTrack.stage}
-                                    </span>
-                                )}
-                                {currentTrack.feedbackFocus?.map((focus, i) => (
-                                    <span key={i} className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">
-                                        {focus}
-                                    </span>
-                                ))}
-                           </div>
-                       )}
-
-                       <div>
-                           <h4 className="text-sm font-bold text-gray-500 uppercase mb-3">Lyrics / Notes</h4>
-                           <div className="bg-gray-950 p-2 md:p-4 rounded-lg text-gray-300 whitespace-pre-wrap break-words font-mono text-sm border border-gray-800">
-                               {currentTrack.lyrics || "No notes or lyrics available for this track."}
-                           </div>
-                       </div>
-
-                       {/* Comment Section Integration */}
-                       {currentTrack.requestId && currentTrack.id && (
-                           <div className="pt-6 border-t border-gray-800">
-                               <h4 className="text-sm font-bold text-gray-500 uppercase mb-4">Discussion</h4>
-                               <CommentSection 
-                                   key={currentTrack.id}
-                                   requestId={currentTrack.requestId} 
-                                   submissionId={currentTrack.id} 
-                               />
-                           </div>
-                       )}
-                   </div>
-               </div>
+                                      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+                                          {(currentTrack.stage || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
+                                              <div className="flex flex-wrap gap-2">
+                                                   {currentTrack.stage && (
+                                                       <span className="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
+                                                           Stage: {currentTrack.stage}
+                                                       </span>
+                                                   )}
+                                                   {currentTrack.feedbackFocus?.map((focus, i) => (
+                                                       <span key={i} className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">
+                                                           {focus}
+                                                       </span>
+                                                   ))}
+                                              </div>
+                                          )}
+                   
+                                          <div>
+                                              <h4 className="text-sm font-bold text-gray-500 uppercase mb-3">Lyrics / Notes</h4>
+                                              <div className="bg-gray-950 p-2 md:p-4 rounded-lg text-gray-300 whitespace-pre-wrap break-words font-mono text-sm border border-gray-800">
+                                                  {currentTrack.lyrics || "No notes or lyrics available for this track."}
+                                              </div>
+                                          </div>
+                   
+                                          {/* Comment Section Integration */}
+                                          {currentTrack.requestId && currentTrack.id && (
+                                              <div className="pt-6 border-t border-gray-800">
+                                                  <h4 className="text-sm font-bold text-gray-500 uppercase mb-4 flex items-center gap-2">
+                                                      Discussion
+                                                      {hasDraft && (
+                                                          <span className="relative flex h-3 w-3">
+                                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                                          </span>
+                                                      )}
+                                                  </h4>
+                                                  <CommentSection
+                                                      key={currentTrack.id}
+                                                      requestId={currentTrack.requestId}
+                                                      submissionId={currentTrack.id}
+                                                      currentUserEmail={currentUserEmail}
+                                                      userProfile={userProfile}
+                                                  />
+                                              </div>
+                                          )}
+                                      </div>               </div>
            </div>
         </div>
     );

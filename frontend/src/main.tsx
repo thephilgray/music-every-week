@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { Buffer } from 'buffer';
 
 // Polyfill Buffer and Global for Gun/SEA
@@ -39,10 +40,12 @@ import { PlayerProvider } from './contexts/PlayerContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <GunProvider>
-      <PlayerProvider>
-        <App />
-      </PlayerProvider>
-    </GunProvider>
+    <BrowserRouter>
+      <GunProvider>
+        <PlayerProvider>
+          <App />
+        </PlayerProvider>
+      </GunProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

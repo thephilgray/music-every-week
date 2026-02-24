@@ -2,12 +2,13 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Loader2, FileText } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Waveform } from '../components/ui/Waveform';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { SubmitTrack } from '../components/SubmitTrack';
+import { CommentSection } from '../components/CommentSection';
 import { fixUrl } from '../lib/url';
 import type { FileRequest, Submission } from '../types';
 
@@ -25,8 +26,31 @@ export function RequestDetail() {
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
+  const [submissionCommentCounts, setSubmissionCommentCounts] = useState<Record<string, number>>({});
   
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
+    
+    const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
+      const counts: Record<string, number> = {};
+      commentsSnap.docs.forEach(commentDoc => {
+        const commentData = commentDoc.data();
+        if (commentData.submissionId) {
+          counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
+        }
+      });
+      setSubmissionCommentCounts(counts);
+    }, (err) => {
+      console.error("Error fetching submission comment counts:", err);
+      setSubmissionCommentCounts({}); // Clear counts on error
+    });
+
+    return () => unsubscribe(); // Unsubscribe on cleanup
+  }, [id]); // Depend only on id
 
   // Load Request Data
   useEffect(() => {
@@ -224,7 +248,8 @@ export function RequestDetail() {
          );
     }
 
-    return (
+
+  return (
         <div className="max-w-5xl mx-auto p-2 md:p-8">
             <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
                 <ArrowLeft className="w-4 h-4" /> Back to Requests
@@ -417,11 +442,21 @@ export function RequestDetail() {
                                             )}
 
                                             <button 
-                                                disabled
-                                                className={`p-2 rounded-full transition text-gray-600 cursor-not-allowed`}
-                                                title="Comments (Coming Soon)"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const isExpanding = expandedSubmissionId !== sub.id;
+                                                    setExpandedSubmissionId(isExpanding ? (sub.id || null) : null);
+                                                }}
+                                                className={`relative p-2 rounded-full transition ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                title="View Comments"
+                                                disabled={locked}
                                             >
                                                 <MessageSquare className="w-4 h-4" />
+                                                {submissionCommentCounts[sub.id!] > 0 && (
+                                                    <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
+                                                        {submissionCommentCounts[sub.id!]}
+                                                    </span>
+                                                )}
                                             </button>
                                             
                                             <button                                      
@@ -480,8 +515,11 @@ export function RequestDetail() {
                                 )}
                                 
                                 {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-                                    <div className="mt-4 px-4 py-2 bg-gray-950 rounded border border-gray-800 text-gray-500 text-sm italic text-center">
-                                        Comments and feedback features are being migrated. Check back soon.
+                                    <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+                                        <CommentSection 
+                                            requestId={id} 
+                                            submissionId={sub.id} 
+                                        />
                                     </div>
                                 )}
                             </div>

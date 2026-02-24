@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Mic, Square, Trash2, Loader2, User } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
+import { Send, Mic, Square, Loader2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../lib/firebase';
+import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { uploadFile } from '../lib/upload';
-import { CommentItem } from './CommentItem';
+import { CommentItemUI } from './ui/CommentItemUI';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { fixUrl } from '../lib/url';
@@ -14,10 +16,11 @@ interface CommentSectionProps {
   highlightCommentId?: string;
   accessMode?: string;
   requestTitle?: string;
+  onCommentsLoaded?: (submissionId: string, count: number) => void; // Updated prop signature
 }
 
-export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle }: CommentSectionProps) {
-  const { gun, pubKey, user, userProfile, isAuthorized, userPair } = useGun();
+export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle, onCommentsLoaded }: CommentSectionProps) {
+  const { participantEmail, user, isAdmin } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -32,15 +35,22 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   
-  // Mentions State
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionResults, setMentionResults] = useState<UserProfile[]>([]);
-  const [mentionedUsers, setMentionedUsers] = useState<Record<string, string>>({}); // Alias -> Pub
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Derive current user's profile for comments
+  const currentUserProfile = user ? {
+    displayName: user.displayName || user.email || 'Admin',
+    avatarUrl: user.photoURL || undefined
+  } : (participantEmail ? {
+    displayName: participantEmail.split('@')[0], // Default name from email
+    avatarUrl: undefined
+  } : undefined);
+
+  const isAuthorized = !!participantEmail || !!user;
 
   // Debounced Draft Saving
   useEffect(() => {
@@ -67,52 +77,56 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
   }, [newComment, submissionId]);
 
   useEffect(() => {
-    // Clear previous
+    // Clear previous comments
     setComments([]);
 
-    // Subscribe
-    const commentsMap = new Map<string, Comment>();
+    const commentsCollectionRef = collection(db, 'comments');
+    const queryConstraints = [
+      where('requestId', '==', requestId),
+      orderBy('createdAt', 'asc')
+    ];
 
-    // Use Public Comments Node
-    gun.get('submission_comments')
-       .get(submissionId)
-       .map()
-       .on((data: any, key: string) => {
-          // Handle Deletion (data is null)
-          if (data === null) {
-              commentsMap.delete(key);
-              setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
-              return;
-          }
+    if (submissionId) { // Only add submissionId filter if it exists
+      queryConstraints.push(where('submissionId', '==', submissionId));
+    }
+    
+    const q = query(commentsCollectionRef, ...queryConstraints);
 
-          // Check for Gun pointer { '#': 'soul' }
-          const soul = data && data['#'];
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedComments = snapshot.docs.map(doc => {
+        const data = doc.data();
+        let createdAtTimestamp: number;
+        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+            // It's a Firestore Timestamp object
+            createdAtTimestamp = data.createdAt.toDate().getTime();
+        } else if (typeof data.createdAt === 'number') {
+            // It's already a number timestamp
+            createdAtTimestamp = data.createdAt;
+        } else {
+            // Fallback to current time if format is unexpected
+            console.warn("Unexpected createdAt format for comment:", doc.id, data.createdAt);
+            createdAtTimestamp = Date.now();
+        }
 
-          if (soul) {
-              // Resolve using the soul
-              gun.get(soul).once((resolvedData: any) => {
-                  if (resolvedData && (resolvedData.text || resolvedData.audioUrl)) {
-                      const comment: Comment = { ...resolvedData, id: key };
-                      commentsMap.set(key, comment);
-                      setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
-                  } else if (resolvedData === null) {
-                      // Handle resolved node being deleted
-                      commentsMap.delete(key);
-                      setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
-                  }
-              });
-          } else if (data && (data.text || data.audioUrl)) {
-             // Direct data (fallback or legacy)
-             const comment: Comment = { ...data, id: key };
-             commentsMap.set(key, comment);
-             setComments(Array.from(commentsMap.values()).sort((a, b) => a.createdAt - b.createdAt));
-          }
-       });
-       
+        return {
+          id: doc.id,
+          ...data, // Spread original data first
+          createdAt: createdAtTimestamp, // Then override with the correctly formatted timestamp
+        } as Comment;
+      });
+
+      setComments(loadedComments);
+      onCommentsLoaded?.(submissionId, loadedComments.length); // Call the new prop with submissionId
+    }, (err) => {
+        console.error("Firestore comments subscription error:", err);
+        onCommentsLoaded?.(submissionId, 0); // Pass 0 on error
+    });
+
     return () => {
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
+      unsubscribe();
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
-  }, [requestId, submissionId, gun]);
+  }, [requestId, submissionId, onCommentsLoaded]);
 
   // Scroll to highlighted comment
   useEffect(() => {
@@ -194,177 +208,47 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
       setNewComment(val);
-
-      // Simple Mention Detection: Check if current word starts with @
-      const cursor = e.target.selectionStart || 0;
-      const textUpToCursor = val.substring(0, cursor);
-      const words = textUpToCursor.split(/\s+/);
-      const lastWord = words[words.length - 1];
-
-      if (lastWord.startsWith('@') && lastWord.length > 1) {
-          const query = lastWord.substring(1);
-          setMentionQuery(query);
-          
-          // Search Users
-          // Using a temporary map to dedup results from Gun stream
-          const resultsMap = new Map<string, UserProfile>();
-          gun.get('all_users').map().once((u: any, pub: string) => {
-              if (u && u.alias && u.alias.toLowerCase().includes(query.toLowerCase())) {
-                   if (!resultsMap.has(pub)) {
-                       resultsMap.set(pub, { ...u, pub });
-                       // Limit results to 5
-                       if (resultsMap.size <= 5) {
-                           setMentionResults(Array.from(resultsMap.values()));
-                       }
-                   }
-              }
-          });
-      } else {
-          setMentionQuery(null);
-          setMentionResults([]);
-      }
-  };
-
-  const selectMention = (user: UserProfile) => {
-      if (!mentionQuery) return;
-      
-      const val = newComment;
-      const cursor = inputRef.current?.selectionStart || val.length;
-      const textUpToCursor = val.substring(0, cursor);
-      const textAfterCursor = val.substring(cursor);
-      
-      // Replace the last word (the query) with the mention
-      const words = textUpToCursor.split(/\s+/);
-      words.pop(); // remove query
-      const newVal = [...words, `@${user.alias} `].join(' ') + textAfterCursor;
-      
-      setNewComment(newVal);
-      setMentionedUsers(prev => ({ ...prev, [user.alias]: user.pub }));
-      
-      setMentionQuery(null);
-      setMentionResults([]);
-      inputRef.current?.focus();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() && !recordedFile) return;
 
+    // Check if user is authenticated via participantEmail or Firebase user
+    const authorEmail = participantEmail || user?.email;
+    if (!authorEmail) {
+        alert('You must be logged in to post a comment.');
+        return;
+    }
+
     setIsUploading(true);
 
     try {
         let audioUrl = '';
         if (recordedFile) {
-            // @ts-ignore
-            if (!userPair) throw new Error("Authentication error: Missing keys.");
-            const result = await uploadFile(recordedFile, userPair);
+            const result = await uploadFile(recordedFile); // uploadFile no longer needs userPair explicitly
             audioUrl = result.url;
         }
 
-        const id = crypto.randomUUID();
-        // Construct object without undefined fields
-        const comment: any = {
-            id,
-            text: newComment,
-            authorPub: pubKey as string,
-            createdAt: Date.now()
+        const commentData: any = {
+            requestId,
+            submissionId: submissionId || null, // Ensure submissionId is stored, or null if not present
+            authorEmail,
+            text: newComment.trim(),
+            createdAt: serverTimestamp(),
+            userProfile: currentUserProfile, // Use the derived current user profile
         };
         
         if (audioUrl) {
-            comment.audioUrl = audioUrl;
+            commentData.audioUrl = audioUrl;
         }
 
-        const userCommentNode = user.get('comments').get(id);
-        userCommentNode.put(comment);
-
-        // Write to Public Comments Node
-        gun.get('submission_comments')
-        .get(submissionId)
-        .get(id)
-        .put(userCommentNode);
-
-        // Write to Global Feed if Public
-        if (accessMode === 'direct') {
-            const pulseId = crypto.randomUUID();
-            const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-            const bucketKey = `global_pulse_${dateStr}`;
-
-            // Fetch submission title for context
-            gun.get('request_submissions').get(requestId).get(submissionId).once((subData: any) => {
-                const feedItem = {
-                    id: pulseId,
-                    type: 'comment',
-                    text: newComment,
-                    authorPub: pubKey as string,
-                    submissionId,
-                    requestId,
-                    submissionTitle: subData?.title || 'Unknown Track',
-                    requestTitle: requestTitle || 'Unknown Request',
-                    createdAt: Date.now()
-                };
-                gun.get(bucketKey).get(pulseId).put(feedItem);
-                
-                // Store pulseId & bucket ref in comment for future updates/deletes
-                user.get('comments').get(id).get('globalPulseId').put(pulseId);
-                user.get('comments').get(id).get('globalBucket').put(bucketKey);
-            });
-        }
-
-        // Notify Submission Uploader
-        gun.get('request_submissions')
-        .get(requestId)
-        .get(submissionId)
-        .once((subData: any) => {
-            const processNotification = (sub: any) => {
-                 // Notify Uploader if not self
-                 if (sub && sub.uploaderPub && sub.uploaderPub !== pubKey) {
-                    const notifId = crypto.randomUUID();
-                    const notification: Notification = {
-                        id: notifId,
-                        type: 'comment',
-                        message: `New comment on your track "${sub.title}"`,
-                        link: `/request/${requestId}?submission=${submissionId}&comment=${id}`,
-                        fromPub: pubKey as string,
-                        createdAt: Date.now(),
-                        read: false
-                    };
-                    gun.get('inboxes').get(sub.uploaderPub).get(notifId).put(notification);
-                 }
-            };
-            processNotification(subData);
-        });
-
-        // Notify Mentioned Users
-        const processedPubs = new Set<string>();
-        // Scan for @Alias in the final text
-        const words = newComment.split(/\s+/);
-        words.forEach(word => {
-            if (word.startsWith('@')) {
-                const alias = word.substring(1).replace(/[^a-zA-Z0-9_-]/g, ''); // Simple sanitization
-                const pub = mentionedUsers[alias];
-                
-                if (pub && pub !== pubKey && !processedPubs.has(pub)) {
-                    processedPubs.add(pub);
-                    const notifId = crypto.randomUUID();
-                    const n: Notification = {
-                       id: notifId,
-                       type: 'comment',
-                       message: `You were mentioned in a comment by ${userProfile?.alias || 'someone'}`,
-                       link: `/request/${requestId}?submission=${submissionId}&comment=${id}`,
-                       fromPub: pubKey as string,
-                       createdAt: Date.now(),
-                       read: false
-                    };
-                    gun.get('inboxes').get(pub).get(notifId).put(n);
-                }
-            }
-        });
+        await addDoc(collection(db, 'comments'), commentData);
         
         setNewComment('');
         localStorage.removeItem(`draft_comment_${submissionId}`);
         window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: false } }));
         cancelRecording();
-        setMentionedUsers({});
 
     } catch (err) {
         console.error('Error posting comment:', err);
@@ -378,37 +262,26 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       setDeleteCandidateId(commentId);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
       if (!deleteCandidateId) return;
       const commentId = deleteCandidateId;
       setDeleteCandidateId(null);
 
-      // Check for Global Pulse ID to delete from feed
-      user.get('comments').get(commentId).once((cData: any) => {
-          if (cData && cData.globalPulseId) {
-              const bucket = cData.globalBucket || 'global_pulse'; // Fallback for legacy
-              gun.get(bucket).get(cData.globalPulseId).put(null as any);
-          }
-      });
-
-      // Delete from Public List (Pointer)
-      gun.get('submission_comments').get(submissionId).get(commentId).put(null);
-      
-      // Delete from User Graph (Actual Data)
-      user.get('comments').get(commentId).put(null);
+      try {
+          await deleteDoc(doc(db, 'comments', commentId));
+      } catch (e) {
+          console.error("Delete failed", e);
+          alert("Failed to delete comment. Please try again.");
+      }
   };
 
-  const handleEditComment = (commentId: string, newText: string) => {
-      // Update User Graph (Source of Truth)
-      user.get('comments').get(commentId).get('text').put(newText);
-      
-      // Update Global Pulse if exists
-      user.get('comments').get(commentId).once((cData: any) => {
-          if (cData && cData.globalPulseId) {
-              const bucket = cData.globalBucket || 'global_pulse'; // Fallback
-              (gun.get(bucket).get(cData.globalPulseId) as any).get('text').put(newText);
-          }
-      });
+  const handleEditComment = async (commentId: string, newText: string) => {
+      try {
+          await updateDoc(doc(db, 'comments', commentId), { text: newText });
+      } catch (e) {
+          console.error(`Error updating comment ${commentId} in Firestore:`, e);
+          alert("Failed to edit comment. Please try again.");
+      }
   };
 
   return (
@@ -418,10 +291,17 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
        <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
           {comments.map(c => (
              <div key={c.id} id={`comment-${c.id}`} className="rounded transition-all duration-1000">
-                <CommentItem 
-                    comment={c} 
-                    onDelete={handleDeleteComment} 
-                    onEdit={handleEditComment}
+                <CommentItemUI 
+                    id={c.id}
+                    text={c.text}
+                    authorEmail={c.authorEmail}
+                    authorName={c.userProfile?.displayName || c.authorEmail.split('@')[0]}
+                    authorAvatarUrl={c.userProfile?.avatarUrl}
+                    createdAt={c.createdAt}
+                    audioUrl={c.audioUrl}
+                    isOwnComment={c.authorEmail === (participantEmail || user?.email)}
+                    onDelete={c.authorEmail === (participantEmail || user?.email) ? handleDeleteComment : undefined}
+                    onEdit={c.authorEmail === (participantEmail || user?.email) ? handleEditComment : undefined}
                 />
              </div>
           ))}
@@ -429,27 +309,6 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
        </div>
 
        <form onSubmit={handleSubmit} className="flex flex-col gap-2 relative">
-           {/* Mentions Dropdown */}
-           {mentionQuery && mentionResults.length > 0 && (
-               <div className="absolute bottom-full left-0 mb-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-20">
-                   {mentionResults.map(u => (
-                       <button
-                           key={u.pub}
-                           type="button"
-                           onClick={() => selectMention(u)}
-                           className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2 transition"
-                       >
-                           <div className="w-6 h-6 rounded-full bg-gray-600 overflow-hidden flex-shrink-0">
-                               {u.avatarUrl ? <img src={fixUrl(u.avatarUrl)} className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-gray-300 mx-auto mt-1" />}
-                           </div>
-                           <div className="min-w-0">
-                               <p className="text-sm text-white font-medium truncate">{u.alias}</p>
-                           </div>
-                       </button>
-                   ))}
-               </div>
-           )}
-
            {/* Recording UI */}
            {(isRecording || recordedFile) && (
                <div className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-700">
@@ -483,7 +342,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                   type="text" 
                   value={newComment}
                   onChange={handleInputChange}
-                  placeholder="Write a comment... (@ to mention)"
+                  placeholder="Write a comment..."
                   className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-base md:text-sm text-white focus:border-blue-500 outline-none"
                   disabled={isRecording || isUploading}
                />

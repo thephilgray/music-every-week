@@ -1,145 +1,172 @@
-import React from 'react';
-import { Trash2, Edit2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom'; // Import Link
+import { User as UserIcon, MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { MiniPlayer } from './MiniPlayer';
 import { fixUrl } from '../../lib/url';
 
-export interface CommentUIProps {
+interface CommentItemUIProps {
   id: string;
+  text: string;
+  authorEmail: string;
   authorName: string;
-  authorEmail: string; // NEW
   authorAvatarUrl?: string;
   createdAt: number;
-  text: string;
   audioUrl?: string;
-  isOwnComment?: boolean;
+  isOwnComment: boolean;
   onDelete?: (id: string) => void;
   onEdit?: (id: string, newText: string) => void;
-  onAuthorClick?: (email: string) => void; // NEW
+  profileLinkPub?: string; // New prop for profile linking
 }
 
-export function CommentItemUI({
-  id,
-  authorName,
-  authorEmail,
-  authorAvatarUrl,
-  createdAt,
-  text,
-  audioUrl,
-  isOwnComment,
-  onDelete,
+export function CommentItemUI({ 
+  id, 
+  text, 
+  authorEmail, 
+  authorName, 
+  authorAvatarUrl, 
+  createdAt, 
+  audioUrl, 
+  isOwnComment, 
+  onDelete, 
   onEdit,
-  onAuthorClick 
-}: CommentUIProps) {
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [editText, setEditText] = React.useState(text);
+  profileLinkPub
+}: CommentItemUIProps) {
+  
+  // Edit State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState(text);
+  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
 
-  // Sync editText with text prop when text changes from parent (e.g., after Firestore update)
-  React.useEffect(() => {
-    setEditText(text);
+  useEffect(() => {
+    setEditedText(text); // Update editedText if original text changes
   }, [text]);
 
   const handleSaveEdit = () => {
-      console.log("handleSaveEdit called.");
-      console.log("Current id:", id);
-      console.log("Current editText:", editText);
-      console.log("Original text prop:", text);
-      if (onEdit && editText.trim() !== text) {
-          console.log("Calling onEdit with:", id, editText);
-          onEdit(id, editText);
-      } else {
-          console.log("onEdit not called. Reason: onEdit is missing OR editText is same as text prop after trim.");
+      if (editedText.trim() !== text) {
+          onEdit?.(id, editedText);
       }
       setIsEditing(false);
+      setMenuPos(null);
   };
+
+  const handleCancelEdit = () => {
+    setEditedText(text); // Reset to original text
+    setIsEditing(false);
+    setMenuPos(null);
+  };
+
+  const toggleMenu = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (menuPos) {
+          setMenuPos(null);
+      } else {
+          const rect = e.currentTarget.getBoundingClientRect();
+          // w-24 is 6rem (96px). We align right edge of menu with right edge of button.
+          setMenuPos({ 
+              top: rect.bottom + 4, 
+              left: rect.right - 96 
+          });
+      }
+  };
+
   return (
-    <div className={`flex gap-3 p-3 rounded-lg hover:bg-gray-900/40 transition group ${isOwnComment ? 'bg-blue-900/10 border border-blue-900/30' : ''}`}>
-      <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden flex items-center justify-center">
-              {authorAvatarUrl ? (
-                  <img src={fixUrl(authorAvatarUrl)} alt={authorName} className="w-full h-full object-cover" />
-              ) : (
-                  <div className="text-xs font-bold text-gray-400">
-                      {authorName?.[0]?.toUpperCase() || '?'}
-                  </div>
-              )}
-          </div>
-      </div>
-      
-      <div className="flex-1 min-w-0">
-          <div className="flex items-baseline justify-between">
-              <span 
-                  className={`font-bold text-sm text-gray-300 mr-2 truncate ${onAuthorClick ? 'cursor-pointer hover:text-blue-400' : ''}`}
-                  onClick={() => onAuthorClick && onAuthorClick(authorEmail)}
-              >
-                  {authorName}
-              </span>
-              <span className="text-[10px] text-gray-500 flex-shrink-0">
-                  {(() => {
-                      const commentDate = new Date(createdAt);
-                      const today = new Date();
-                      
-                      const isToday = commentDate.getDate() === today.getDate() &&
-                                      commentDate.getMonth() === today.getMonth() &&
-                                      commentDate.getFullYear() === today.getFullYear();
+    <div className="flex gap-2 group relative">
+         <div className="w-6 h-6 bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden mt-1">
+             {authorAvatarUrl ? (
+                 <img src={fixUrl(authorAvatarUrl)} alt={authorName} className="w-full h-full object-cover" />
+             ) : (
+                 <UserIcon className="w-3 h-3 text-gray-400" />
+             )}
+         </div>
+         <div className="flex-1 min-w-0">
+             <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-2">
+                    {profileLinkPub ? (
+                        <Link to={`/profile/${profileLinkPub}`} className="text-xs font-bold text-gray-300 hover:text-white hover:underline">
+                            {authorName}
+                        </Link>
+                    ) : (
+                        <span className="text-xs font-bold text-gray-300">
+                            {authorName}
+                        </span>
+                    )}
+                    <span className="text-xs text-gray-600">{new Date(createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+                
+                {isOwnComment && !isEditing && (
+                    <div className="relative">
+                        <button 
+                            onClick={toggleMenu}
+                            className={`text-gray-500 hover:text-white transition p-1 ${menuPos ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                        >
+                            <MoreVertical className="w-3 h-3" />
+                        </button>
+                        
+                        {menuPos && createPortal(
+                            <>
+                                <div 
+                                    className="fixed inset-0 z-[9998]" 
+                                    onClick={(e) => { e.stopPropagation(); setMenuPos(null); }}
+                                />
+                                <div 
+                                    className="fixed z-[9999] w-24 bg-gray-800 border border-gray-700 rounded shadow-xl py-1"
+                                    style={{ top: menuPos.top, left: menuPos.left }}
+                                >
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setIsEditing(true); setMenuPos(null); }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 flex items-center gap-2"
+                                    >
+                                        <Edit2 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onDelete?.(id); setMenuPos(null); }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700 flex items-center gap-2"
+                                    >
+                                        <Trash2 className="w-3 h-3" /> Delete
+                                    </button>
+                                </div>
+                            </>,
+                            document.body
+                        )}
+                    </div>
+                )}
+             </div>
 
-                      if (isToday) {
-                          return commentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      } else {
-                          // Display date and time for other days
-                          return commentDate.toLocaleString([], { 
-                              month: 'short', 
-                              day: 'numeric', 
-                              year: 'numeric', 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                          });
-                      }
-                  })()}
-              </span>
-          </div>
-
-          {isEditing ? (
-              <div className="mt-1">
-                  <textarea 
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none"
-                      rows={2}
-                  />
-                  <div className="flex gap-2 mt-2 justify-end">
-                      <button onClick={() => setIsEditing(false)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
-                      <button onClick={handleSaveEdit} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-500">Save</button>
-                  </div>
-              </div>
-          ) : (
-              <>
-                  <p className="text-sm text-gray-300 mt-0.5 whitespace-pre-wrap break-words leading-snug">
-                      {text}
-                  </p>
-                  
-                  {audioUrl && (
-                      <div className="mt-2 w-full max-w-[200px]">
-                          <MiniPlayer src={fixUrl(audioUrl)} />
-                      </div>
-                  )}
-              </>
-          )}
-      </div>
-
-      {isOwnComment && !isEditing && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end justify-start">
-              {onEdit && (
-                  <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-blue-400 p-1" title="Edit">
-                      <Edit2 className="w-3 h-3" />
-                  </button>
-              )}
-              {onDelete && (
-                  <button onClick={() => onDelete(id)} className="text-gray-500 hover:text-red-400 p-1" title="Delete">
-                      <Trash2 className="w-3 h-3" />
-                  </button>
-              )}
-          </div>
-      )}
-    </div>
+             {isEditing ? (
+                 <div className="mt-1">
+                     <textarea 
+                        value={editedText}
+                        onChange={e => setEditedText(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-blue-500 outline-none min-h-[60px]"
+                        autoFocus
+                     />
+                     <div className="flex justify-end gap-2 mt-2">
+                         <button 
+                            onClick={handleCancelEdit}
+                            className="p-1 text-gray-400 hover:text-white"
+                         >
+                             Cancel
+                         </button>
+                         <button 
+                            onClick={handleSaveEdit}
+                            className="p-1 text-green-400 hover:text-green-300"
+                         >
+                             Save
+                         </button>
+                     </div>
+                 </div>
+             ) : (
+                 <>
+                    {text && <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">{text}</p>}
+                    {audioUrl && (
+                        <div className="mt-1">
+                            <MiniPlayer src={audioUrl} />
+                        </div>
+                    )}
+                 </>
+             )}
+         </div>
+     </div>
   );
 }

@@ -29,7 +29,7 @@ Detailed Plan: [MIGRATION_STEP_5.md](./MIGRATION_STEP_5.md)
 **Objective:** Allow users to submit tracks to the new backend.
 Detailed Plan: [MIGRATION_STEP_6.md](./MIGRATION_STEP_6.md)
 
-### [ ] Step 7: Refactor Comments (Read/Write)
+### [x] Step 7: Refactor Comments (Read/Write)
 **Objective:** Move the discussion features to Firestore.
 Detailed Plan: [MIGRATION_STEP_7.md](./MIGRATION_STEP_7.md)
 

@@ -68,10 +68,14 @@ export interface Submission {
 export interface Comment {
   id: string;
   text: string;
-  authorPub: string;
-  authorEmail?: string; // Added for Firestore
-  createdAt: number;
+  authorPub?: string; // Keep for legacy reference/migration? Or remove?
+  authorEmail: string; // Added for Firestore
+  createdAt: number | any; // Firebase Timestamp is not a number
   audioUrl?: string;
+  userProfile?: {
+      displayName?: string;
+      avatarUrl?: string;
+  }
 }
 
 export interface Notification {

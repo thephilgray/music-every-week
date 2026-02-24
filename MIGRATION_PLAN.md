@@ -21,7 +21,7 @@ Detailed Plan: [MIGRATION_STEP_3.md](./MIGRATION_STEP_3.md)
 **Objective:** Make the deep-link pages (Request and Playlist views) read from Firestore.
 Detailed Plan: [MIGRATION_STEP_4.md](./MIGRATION_STEP_4.md)
 
-### [ ] Step 5: Refactor Player Context
+### [x] Step 5: Refactor Player Context
 **Objective:** Ensure the global player can play tracks from the new data source.
 Detailed Plan: [MIGRATION_STEP_5.md](./MIGRATION_STEP_5.md)
 

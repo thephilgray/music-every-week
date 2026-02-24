@@ -90,11 +90,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!audio) return;
 
     if (currentTrack) {
-        audio.src = fixUrl(currentTrack.audioUrl);
-        audio.play().then(() => {
-            setIsPlaying(true);
-            updateMediaSession();
-        }).catch(e => console.error("Playback failed", e));
+        const url = fixUrl(currentTrack.audioUrl);
+        if (url) {
+            audio.src = url;
+            audio.play().then(() => {
+                setIsPlaying(true);
+                updateMediaSession();
+            }).catch(e => console.error("Playback failed", e));
+        } else {
+            console.warn("Track has no valid audio URL:", currentTrack);
+            setIsPlaying(false);
+        }
     } else {
         audio.pause();
         if (isPlaying) setIsPlaying(false);

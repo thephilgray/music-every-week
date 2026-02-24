@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Loader2, FileText } from 'lucide-react';
 import { db } from '../lib/firebase';
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Waveform } from '../components/ui/Waveform';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
+import { SubmitTrack } from '../components/SubmitTrack';
 import { fixUrl } from '../lib/url';
 import type { FileRequest, Submission } from '../types';
 
@@ -24,6 +25,8 @@ export function RequestDetail() {
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
+  
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
   // Load Request Data
   useEffect(() => {
@@ -64,23 +67,24 @@ export function RequestDetail() {
   }, [id]);
 
   // Load Submissions
-  useEffect(() => {
-      async function loadSubmissions() {
-          if (!id) return;
-          try {
-              const q = query(collection(db, 'submissions'), where('requestId', '==', id));
-              const querySnapshot = await getDocs(q);
-              const loadedSubmissions: Submission[] = [];
-              querySnapshot.forEach((doc) => {
-                  loadedSubmissions.push({ id: doc.id, ...doc.data() } as Submission);
-              });
-              setSubmissions(loadedSubmissions);
-          } catch (err) {
-              console.error("Error fetching submissions:", err);
-          }
+  const loadSubmissions = useCallback(async () => {
+      if (!id) return;
+      try {
+          const q = query(collection(db, 'submissions'), where('requestId', '==', id));
+          const querySnapshot = await getDocs(q);
+          const loadedSubmissions: Submission[] = [];
+          querySnapshot.forEach((doc) => {
+              loadedSubmissions.push({ id: doc.id, ...doc.data() } as Submission);
+          });
+          setSubmissions(loadedSubmissions);
+      } catch (err) {
+          console.error("Error fetching submissions:", err);
       }
-      loadSubmissions();
   }, [id]);
+
+  useEffect(() => {
+      loadSubmissions();
+  }, [loadSubmissions]);
 
   // Determine Access & Roles
   const isOwner = useMemo(() => {
@@ -167,6 +171,10 @@ export function RequestDetail() {
       navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmissionSuccess = () => {
+      loadSubmissions();
   };
 
     if (isLoading) {
@@ -289,13 +297,14 @@ export function RequestDetail() {
                         <div>ID: {id?.substring(0, 8)}...</div>
                     </div>
 
-                    {/* Submission Button (Disabled/Stubbed) */}
+                    {/* Submission Button */}
                     {( (isParticipant && request.allowParticipantSubmissions !== false) || hasSubmitted || isOwner ) && (
                     <button 
-                        disabled
-                        className={`w-full md:w-auto bg-gray-700 text-gray-400 px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition cursor-not-allowed`}
+                        onClick={() => !isPastDeadline && setIsSubmitModalOpen(true)}
+                        disabled={isPastDeadline}
+                        className={`w-full md:w-auto ${isPastDeadline ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition`}
                     >
-                        {isPastDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission (Coming Soon)' : 'Submit Track (Coming Soon)')}
+                        {isPastDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission' : 'Submit Track')}
                         {hasSubmitted ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                     </button>
                     )}
@@ -480,6 +489,18 @@ export function RequestDetail() {
                     </div>
                 )}
             </div>
+            
+            {/* Submit Modal */}
+            {isSubmitModalOpen && request && (
+                <SubmitTrack 
+                    requestId={request.id!}
+                    participants={request.participants}
+                    existingSubmission={userSubmission}
+                    onClose={() => setIsSubmitModalOpen(false)}
+                    onSuccess={handleSubmissionSuccess}
+                    accessMode={request.accessMode}
+                />
+            )}
             
             {/* Bottom Spacer for Player */}
             <div className="h-32" />

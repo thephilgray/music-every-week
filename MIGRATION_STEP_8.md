@@ -3,14 +3,15 @@
 **Objective:** Allow Admins to create and manage requests via the new backend, including separate access controls for requests and playlists.
 
 **Tasks:**
-- Update `frontend/src/pages/CreatorTools.tsx` (and/or `CreateRequest.tsx`).
-    - Save new Requests to Firestore.
+- [x] Update `frontend/src/components/CreateRequest.tsx`.
+    - [x] Save new Requests to Firestore.
+    - [x] Manage "Access Lists" (emails) in the Firestore document.
+- Update `frontend/src/pages/CreatorTools.tsx`.
     - **Separate Access Control UI:**
         - Add a checkbox/toggle to "Use different access list for playlist?".
         - If checked, show a separate text area for "Playlist Access Emails".
         - If unchecked, use the Request's access list for both.
     - **Separate Live Date:** Ensure the UI allows setting a `playlistLiveDate` that is distinct from the Request `deadline`.
-    - Manage "Access Lists" (emails) in the Firestore document.
 - Update `frontend/src/pages/Profile.tsx` to read/write Admin profile data from Firestore `profiles` collection.
 
 ## Relevant POC Code

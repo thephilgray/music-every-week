@@ -25,7 +25,7 @@ Detailed Plan: [MIGRATION_STEP_4.md](./MIGRATION_STEP_4.md)
 **Objective:** Ensure the global player can play tracks from the new data source.
 Detailed Plan: [MIGRATION_STEP_5.md](./MIGRATION_STEP_5.md)
 
-### [ ] Step 6: Refactor Submissions (Write)
+### [x] Step 6: Refactor Submissions (Write)
 **Objective:** Allow users to submit tracks to the new backend.
 Detailed Plan: [MIGRATION_STEP_6.md](./MIGRATION_STEP_6.md)
 

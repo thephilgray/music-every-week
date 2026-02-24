@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { uploadFile } from '../lib/upload';
-import type { FileRequest, UserProfile, Notification } from '../types';
-import { Check, Copy, ArrowRight, Filter } from 'lucide-react';
+import { uploadToR2 } from '../lib/r2';
+import type { FileRequest } from '../types';
+import { Check, Copy, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Tooltip } from './ui/Tooltip';
-
-// Define a timeout for GunDB acknowledgments (e.g., 30 seconds)
-const GUN_ACK_TIMEOUT = 30000;
+import { db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 
 export function CreateRequest() {
-  const { gun, user, pubKey, userPair } = useGun();
+  const { user } = useAuth(); // Use Auth Context
   const { error } = useToast();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -28,14 +27,9 @@ export function CreateRequest() {
   const [poolSeats, setPoolSeats] = useState(3);
   const [allowSubmissions, setAllowSubmissions] = useState(true);
 
-  // Import & Search Logic
+  // Import Logic
   const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
   const [selectedImportId, setSelectedImportId] = useState<string>('');
-  const [importFilter, setImportFilter] = useState<'all' | 'accepted' | 'submitted'>('all'); // New Filter
-  const [selectedParticipants, setSelectedParticipants] = useState<Record<string, { alias?: string, status: 'pending' | 'accepted' }>>({});
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
 
   // Success State
   const [showSuccess, setShowSuccess] = useState(false);
@@ -43,136 +37,42 @@ export function CreateRequest() {
   const [inviteLink, setInviteLink] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const searchUsers = (term: string) => {
-    setSearchTerm(term);
-    if (term.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    
-    const results: UserProfile[] = [];
-    gun.get('all_users').map().once((user: any, pub: string) => {
-      if (user && user.alias && user.alias.toLowerCase().includes(term.toLowerCase())) {
-        if (!selectedParticipants[pub]) {
-             results.push({ ...user, pub });
-             // Simple de-dupe could be done here if needed
-             setSearchResults(prev => {
-                const existing = new Set(prev.map(p => p.pub));
-                if (!existing.has(pub)) return [...prev, { ...user, pub }];
-                return prev;
-             });
-        }
-      }
-    });
-  };
-
-  const addParticipant = (user: UserProfile) => {
-    setSelectedParticipants(prev => ({
-      ...prev,
-      [user.pub]: { alias: user.alias, status: 'pending' }
-    }));
-    setSearchTerm('');
-    setSearchResults([]);
-  };
-
-  const removeParticipant = (pub: string) => {
-     const newParts = { ...selectedParticipants };
-     delete newParts[pub];
-     setSelectedParticipants(newParts);
+  const removeEmail = (email: string) => {
+    setEmails(emails.filter(e => e !== email));
   };
 
   useEffect(() => {
-    // Fetch existing requests for the import dropdown
-    const requests: FileRequest[] = [];
-    gun.get('file_requests').map().once((data: any, id: string) => {
-      if (data && data.title) {
-        // Filter: Only show my requests or public/direct requests
-        if (data.ownerPub === pubKey || data.accessMode === 'direct') {
-            requests.push({ ...data, id });
-            setExistingRequests([...requests]); 
+    if (!user?.email) return;
+    
+    // Fetch existing requests for import (Firestore)
+    const fetchRequests = async () => {
+        try {
+            const q = query(collection(db, 'requests'), where('ownerEmail', '==', user.email));
+            const querySnapshot = await getDocs(q);
+            const reqs: FileRequest[] = [];
+            querySnapshot.forEach((doc) => {
+                reqs.push({ id: doc.id, ...doc.data() } as FileRequest);
+            });
+            // Sort by createdAt desc
+            reqs.sort((a, b) => b.createdAt - a.createdAt);
+            setExistingRequests(reqs);
+        } catch (e) {
+            console.error("Error fetching existing requests:", e);
         }
-      }
-    });
-  }, [gun, pubKey]);
+    };
+    fetchRequests();
+  }, [user]);
 
   const handleImportSelect = async (requestId: string) => {
     setSelectedImportId(requestId);
-    
-    // Clear previous selection as requested
-    setSelectedParticipants({}); 
-
     if (!requestId) return; 
     
-    console.log('Importing participants from:', requestId, 'Filter:', importFilter);
-
-    // We need to track submissions if filtering by 'submitted'
-    const submitters = new Set<string>();
-    if (importFilter === 'submitted') {
-         // This might be slow if there are many submissions, but necessary for filter
-         await new Promise<void>(resolve => {
-             let count = 0;
-             let done = false;
-             // Timeout safety
-             setTimeout(() => { done = true; resolve(); }, 1000);
-             
-             gun.get('file_requests').get(requestId).get('submissions').map().once((sub: any) => {
-                 if (done) return;
-                 if (sub && sub.uploaderPub) submitters.add(sub.uploaderPub);
-                 count++; 
-                 // Gun doesn't tell us when map is done, so we rely on stream or timeout
-             });
-         });
+    // Find the request locally
+    const req = existingRequests.find(r => r.id === requestId);
+    if (req && req.accessList) {
+        // Merge unique emails
+        setEmails(prev => Array.from(new Set([...prev, ...req.accessList!])));
     }
-
-    // Subscribe to the participant list
-    gun.get('request_participants').get(requestId).map().once(async (data: any, pub: string) => {
-        if (!data || !pub) return;
-        if (pub === pubKey) return; // Skip self
-
-        // Filter Logic
-        if (importFilter === 'accepted' && data.status !== 'accepted') return;
-        
-        if (importFilter === 'submitted') {
-            const hasPass = data.hasPass === true;
-            const hasSubmitted = submitters.has(pub);
-            if (!hasPass && !hasSubmitted) return;
-        }
-        
-        console.log("Importing participant:", pub, data);
-
-        let alias = data.alias;
-        
-        // If alias is missing or 'Unknown', try to fetch from directory
-        if (!alias || alias === 'Unknown') {
-            await new Promise<void>(resolve => {
-                gun.get('all_users').get(pub).once((u: any) => {
-                    if (u && u.alias) alias = u.alias;
-                    resolve();
-                });
-            });
-        }
-
-        // Add to selection
-        setSelectedParticipants(prev => ({
-            ...prev,
-            [pub]: {
-                status: 'pending', 
-                alias: alias || 'Unknown' 
-            }
-        }));
-    });
-  };
-
-  // Re-run import if filter changes and an ID is selected
-  useEffect(() => {
-      if (selectedImportId) {
-          handleImportSelect(selectedImportId);
-      }
-  }, [importFilter]);
-
-
-  const removeEmail = (email: string) => {
-    setEmails(emails.filter(e => e !== email));
   };
 
   const copyLink = () => {
@@ -187,7 +87,6 @@ export function CreateRequest() {
       setDeadline('');
       setFile(null);
       setEmails([]);
-      setSelectedParticipants({});
       setSelectedImportId('');
       setShowSuccess(false);
       setCreatedRequestId('');
@@ -197,258 +96,92 @@ export function CreateRequest() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
-    console.log("CreateRequest: handleSubmit initiated.");
-    console.time("CreateRequest_handleSubmit_total");
 
-    if (!pubKey) {
-      console.log("CreateRequest: Validation failed - pubKey is missing.");
+    if (!user) {
       error("Authentication required to create a request.");
-      setLoading(false); // Ensure loading is turned off
-      console.timeEnd("CreateRequest_handleSubmit_total");
       return;
     }
     setLoading(true);
-    console.log("CreateRequest: Request creation process started, setLoading(true).");
 
     try {
       // Process any lingering email input
       let finalEmails = [...emails];
       if (emailInput.trim()) {
-          console.log("CreateRequest: Processing lingering email input.");
           const lingering = emailInput
               .split(/[\n, ]+/)
               .map(s => s.trim())
               .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
           if (lingering.length > 0) {
               finalEmails = Array.from(new Set([...finalEmails, ...lingering]));
-              setEmails(finalEmails); // Update state for UI consistency (though we use var below)
+              setEmails(finalEmails);
               setEmailInput('');
-              console.log("CreateRequest: Lingering emails processed:", lingering);
           }
       }
 
       let artworkUrl = '';
       if (file) {
-        console.log('CreateRequest: Artwork file detected. Starting upload.');
-        console.time("CreateRequest_uploadArtwork");
-        
-        if (!userPair || !userPair.pub || !userPair.priv) { 
-            error("Authentication error: Please log in again to upload artwork.");
-            console.error("CreateRequest: Upload failed: User pair (with private key) is not available.");
+        try {
+            const result = await uploadToR2(file);
+            artworkUrl = result.url;
+        } catch (e: any) {
+            error("Artwork upload failed: " + e.message);
             setLoading(false);
-            console.timeEnd("CreateRequest_handleSubmit_total");
             return;
         }
-        const result = await uploadFile(file, userPair);
-        artworkUrl = result.url;
-        console.timeEnd("CreateRequest_uploadArtwork");
-        console.log(`CreateRequest: Artwork uploaded. URL: ${artworkUrl}`);
-      } else {
-        console.log("CreateRequest: No new artwork file to upload, using null.");
       }
 
-      const requestId = crypto.randomUUID();
-      console.log(`CreateRequest: Generated Request ID: ${requestId}`);
-      
-      const finalParticipants = { ...selectedParticipants };
-      Object.keys(finalParticipants).forEach(pub => {
-          finalParticipants[pub].status = accessMode === 'direct' ? 'accepted' : 'pending';
-      });
-      console.log("CreateRequest: Final participants after status enforcement:", finalParticipants);
-      
-      // Helper function to create a GunDB put promise with a timeout
-      const createGunPutPromise = (node: any, data: any, logMessage: string) => {
-        let timer: ReturnType<typeof setTimeout>;
-        return Promise.race([
-            new Promise<void>((resolve, reject) => {
-                node.put(data, (ack: any) => {
-                    clearTimeout(timer);
-                    if (ack.err) {
-                        console.error(`CreateRequest: ${logMessage} FAILED:`, ack.err, 'Full ACK:', ack);
-                        return reject(new Error(`${logMessage} failed: ${ack.err}`));
-                    }
-                    console.log(`CreateRequest: ${logMessage} SUCCESS. ACK:`, ack);
-                    resolve();
-                });
-            }),
-            new Promise<void>((_, reject) => {
-                timer = setTimeout(() => {
-                    console.warn(`CreateRequest: ${logMessage} TIMEOUT after ${GUN_ACK_TIMEOUT / 1000}s. No ACK received.`);
-                    reject(new Error(`${logMessage} timed out.`));
-                }, GUN_ACK_TIMEOUT);
-            })
-        ]);
-      };
-
-      // Always generate an invite code to enable "magic link" sharing for onboarding
-      console.log("CreateRequest: Generating invite code.");
+      // Generate Invite Code (Optional, but good for direct links)
       const inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
-      
-      await createGunPutPromise(
-          gun.get('invites').get(inviteCode),
-          {
-              from: pubKey,
-              createdAt: Date.now(),
-              status: 'active',
-              forRequest: requestId
-          },
-          "Invite code write"
-      );
-      console.log('CreateRequest: Created Invite Code for Request:', inviteCode);
 
-      const request: any = {
-        id: requestId, 
+      const requestData: any = {
         title,
         description: desc,
-        deadline,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
+        playlistLiveDate: playlistLiveDate ? new Date(playlistLiveDate).toISOString() : null,
         accessMode,
         artworkUrl: artworkUrl || null,
-        ownerPub: pubKey,
-        createdAt: Date.now(),
-        pending_emails: JSON.stringify(finalEmails),
-        inviteCode: inviteCode || null,
+        ownerEmail: user.email, // Use Email as identifier
+        ownerPub: user.uid, // Keep UID as ownerPub equivalent for compatibility? Or just use ownerEmail. 
+                            // Let's store uid as ownerUid just in case.
+        createdAt: Date.now(), // Firestore timestamp is better, but number is used in types
+        // accessList: finalEmails, // Store emails directly
+        pending_emails: finalEmails, // Keeping legacy name or mapping to accessList? 
+                                     // Let's use accessList as the standard going forward,
+                                     // but keep pending_emails if the type definition requires it or migration expects it.
+                                     // Type definition has accessList.
+        accessList: finalEmails,
+        inviteCode,
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
+        hostEmail: user.email, // Explicit host email
       };
-      
-      // Convert Deadline to UTC ISO String for storage if present
-      // The input[type="datetime-local"] gives us a local time string (e.g. "2023-10-27T17:00")
-      // We convert this to a simplified ISO string (UTC) to ensure it's timezone aware across clients.
-      if (request.deadline) {
-          request.deadline = new Date(request.deadline).toISOString();
-      }
-      
-      if (playlistLiveDate) {
-          request.playlistLiveDate = new Date(playlistLiveDate).toISOString();
-      }
 
-      console.log('CreateRequest: Constructed request object:', request);
-      console.log('CreateRequest: Starting GunDB save operations for request metadata.');
-      console.time("CreateRequest_metadataSave");
-      
-      const metadataSavePromises: Promise<any>[] = [];
-
-      metadataSavePromises.push(createGunPutPromise(
-        user.get('requests').get(requestId), 
-        request, 
-        'Saved to user graph (requests)'
-      ));
-      metadataSavePromises.push(createGunPutPromise(
-        gun.get('file_requests').get(requestId), 
-        user.get('requests').get(requestId), 
-        'Linked to global file_requests'
-      ));
-
-      await Promise.all(metadataSavePromises);
-      console.timeEnd("CreateRequest_metadataSave");
-      console.log("CreateRequest: All metadata save operations resolved.");
-
-      console.log("CreateRequest: Starting participant graph node updates.");
-      console.time("CreateRequest_participantsSave");
-      
-      const participantsNode = gun.get('request_participants').get(requestId);
-      const participantPromises: Promise<any>[] = [];
-      Object.entries(finalParticipants).forEach(([pPub, pData]) => {
-          participantPromises.push(createGunPutPromise(
-            participantsNode.get(pPub), 
-            pData, 
-            `Writing participant ${pPub} to participantsNode`
-          ));
+      // Create in Firestore
+      const docRef = await addDoc(collection(db, 'requests'), {
+          ...requestData,
+          createdAt: serverTimestamp() // Use server timestamp for sorting
       });
-      await Promise.all(participantPromises);
-      console.timeEnd("CreateRequest_participantsSave");
-      console.log("CreateRequest: All initial participant writes resolved.");
+      
+      const requestId = docRef.id;
 
-      if (accessMode === 'volunteer') {
-          console.log("CreateRequest: Scanning for volunteers for volunteer pool (async).");
-          console.time("CreateRequest_volunteerScan");
-          gun.get('all_users').map().once((u: any, uPub: string) => {
-              if (u && u.isVolunteer && uPub !== pubKey && !finalParticipants[uPub]) {
-                  console.log(`CreateRequest: Found volunteer ${uPub}. Inviting.`);
-                  
-                  // Add as Invited (Fire and Forget / Non-blocking)
-                  createGunPutPromise(
-                    participantsNode.get(uPub), 
-                    {
-                        alias: u.alias,
-                        status: 'invited',
-                        invitedAt: Date.now()
-                    }, 
-                    `Writing volunteer ${uPub} to participantsNode`
-                  ).catch(e => console.error(e));
-                  
-                  // Notify (Fire and Forget / Non-blocking)
-                  const notifId = crypto.randomUUID();
-                  const notification: Notification = {
-                      id: notifId,
-                      type: 'invite',
-                      message: `Volunteer Opportunity: "${title}" needs feedback!`, 
-                      link: `/request/${requestId}`,
-                      fromPub: pubKey as string,
-                      createdAt: Date.now(),
-                      read: false,
-                      requestId: requestId
-                  };
-                  createGunPutPromise(
-                    gun.get('inboxes').get(uPub).get(notifId), 
-                    notification, 
-                    `Sending volunteer notification to ${uPub}`
-                  ).catch(e => console.error(e));
-              }
-          });
-          console.timeEnd("CreateRequest_volunteerScan");
-          console.log("CreateRequest: Volunteer scan initiated (async, non-blocking).");
-      }
-
-      console.log("CreateRequest: Starting notifications to explicitly invited participants.");
-      console.time("CreateRequest_participantNotifications");
-      const participantNotificationPromises: Promise<any>[] = [];
-      Object.keys(finalParticipants).forEach(partPub => {
-        if (partPub === pubKey) return;
-        
-        const notifId = crypto.randomUUID();
-        const message = accessMode === 'direct' 
-            ? `You were added to "${title}"`
-            : `You've been invited to contribute to "${title}"`;
-
-        const notification: Notification = {
-            id: notifId,
-            type: 'invite',
-            message,
-            link: `/request/${requestId}`,
-            fromPub: pubKey as string,
-            createdAt: Date.now(),
-            read: false,
-            requestId: requestId
-        };
-        
-        participantNotificationPromises.push(createGunPutPromise(
-            gun.get('inboxes').get(partPub).get(notifId), 
-            notification, 
-            `Sending notification to participant ${partPub}`
-        ));
-      });
-      await Promise.all(participantNotificationPromises);
-      console.timeEnd("CreateRequest_participantNotifications");
-      console.log("CreateRequest: All explicit participant notifications resolved.");
+      // Note: We are NOT sending notifications yet (Step 8 might add cloud functions or client-side emails).
+      // Since we don't have a reliable way to map emails to users without a directory search (which we removed from client),
+      // we rely on the Invite Link or manual distribution for now.
 
       let link = `${window.location.origin}/request/${requestId}`;
-      if (inviteCode) {
-          link += `?requestInvite=${inviteCode}`;
+      if (accessMode === 'invite') {
+           // Maybe include invite code if needed?
       }
       
       setInviteLink(link);
       setCreatedRequestId(requestId);
       setShowSuccess(true);
-      console.log("CreateRequest: Success view prepared.");
       
     } catch (err: any) {
-      console.error("CreateRequest: Request creation failed in catch block.", err);
+      console.error("CreateRequest: Request creation failed.", err);
       error('Error creating request: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
-      console.log("CreateRequest: finally block executed. setLoading(false).");
-      console.timeEnd("CreateRequest_handleSubmit_total");
     }
   };
 
@@ -554,7 +287,6 @@ export function CreateRequest() {
                    const newMode = e.target.value;
                    setAccessMode(newMode);
                    if (newMode === 'volunteer') {
-                       setSelectedParticipants({});
                        setEmails([]);
                        setEmailInput('');
                    }
@@ -645,53 +377,9 @@ export function CreateRequest() {
                     ))}
                 </select>
             </div>
-            <div className="w-1/3">
-                <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
-                    Filter
-                    <Tooltip content="Choose which users to copy: All invited, only those who accepted, or only those who submitted tracks." icon />
-                </label>
-                <div className="relative">
-                    <Filter className="w-4 h-4 absolute left-2 top-2.5 text-gray-500" />
-                    <select
-                        value={importFilter}
-                        onChange={(e: any) => setImportFilter(e.target.value)}
-                        className="w-full bg-gray-900 border border-gray-600 rounded p-2 pl-8 text-white focus:border-blue-500 outline-none"
-                    >
-                        <option value="all">All Invited</option>
-                        <option value="accepted">Accepted Only</option>
-                        <option value="submitted">Submitted</option>
-                    </select>
-                </div>
-            </div>
           </div>
 
-          {/* 2. Search Directory */}
-          <div className="relative">
-             <label className="block text-gray-500 text-xs mb-1">Search Directory</label>
-             <input
-               type="text"
-               value={searchTerm}
-               onChange={(e) => searchUsers(e.target.value)}
-               className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
-               placeholder="Search user by alias..."
-             />
-             {searchResults.length > 0 && (
-               <div className="absolute z-10 w-full bg-gray-800 border border-gray-600 rounded mt-1 max-h-40 overflow-y-auto shadow-xl">
-                 {searchResults.map(user => (
-                   <div 
-                     key={user.pub}
-                     onClick={() => addParticipant(user)}
-                     className="p-2 hover:bg-gray-700 cursor-pointer text-white text-sm flex justify-between items-center"
-                   >
-                     <span>{user.alias}</span>
-                     <span className="text-xs text-gray-400">Add</span>
-                   </div>
-                 ))}
-               </div>
-             )}
-          </div>
-
-          {/* 3. Email Invites */}
+          {/* 2. Email Invites */}
           <div>
             <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
                 Invite by Email (Comma or newline separated)
@@ -734,7 +422,7 @@ export function CreateRequest() {
                     // Process remaining on blur
                     if (!emailInput.trim()) return;
                     const valid = emailInput
-                        .split(/[\n, ]+/)
+                        .split(/[\n, ]+/) 
                         .map(s => s.trim())
                         .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
                     
@@ -751,17 +439,10 @@ export function CreateRequest() {
           </div>
 
           {/* Selected Participants List */}
-          {(Object.keys(selectedParticipants).length > 0 || emails.length > 0) && (
+          {(emails.length > 0) && (
             <div className="bg-gray-900 p-3 rounded border border-gray-700">
                <label className="block text-gray-400 text-xs mb-2 uppercase tracking-wide">Selected Participants</label>
                <div className="flex flex-wrap gap-2">
-                 {/* Directory Users */}
-                 {Object.entries(selectedParticipants).map(([pub, user]) => (
-                    <span key={pub} className="bg-indigo-900 text-indigo-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-indigo-700">
-                      <span title={pub}>{user.alias || 'Unknown'}</span>
-                      <button type="button" onClick={() => removeParticipant(pub)} className="hover:text-white font-bold px-1">×</button>
-                    </span>
-                 ))}
                  {/* Email Invites */}
                  {emails.map(email => (
                    <span key={email} className="bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-blue-700">

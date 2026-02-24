@@ -17,7 +17,7 @@ Detailed Plan: [MIGRATION_STEP_2.md](./MIGRATION_STEP_2.md)
 **Objective:** Make the main landing pages display data from Firestore.
 Detailed Plan: [MIGRATION_STEP_3.md](./MIGRATION_STEP_3.md)
 
-### [ ] Step 4: Refactor Request Detail & Playlist (Read)
+### [x] Step 4: Refactor Request Detail & Playlist (Read)
 **Objective:** Make the deep-link pages (Request and Playlist views) read from Firestore.
 Detailed Plan: [MIGRATION_STEP_4.md](./MIGRATION_STEP_4.md)
 

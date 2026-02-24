@@ -63,6 +63,7 @@ function App() {
                 <Route path="/creator" element={<CreatorTools />} />
                 <Route path="/directory" element={<Directory />} />
                 <Route path="/playlists" element={<Playlists />} />
+                <Route path="/playlists/:id" element={<Playlists />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/profile/:pub" element={<Profile />} />
                 <Route path="/archive" element={<Archive />} />

@@ -100,4 +100,5 @@ export interface Playlist {
     artist?: string;
   }[];
   artworkUrl?: string;
+  accessList?: string[];
 }

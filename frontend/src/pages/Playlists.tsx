@@ -1,11 +1,33 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { db } from '../lib/firebase';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import type { Playlist, Submission, FileRequest } from '../types';
-import { Play, Trash2, ListMusic, Loader2, Edit, X, Globe } from 'lucide-react';
+import { Play, Trash2, ListMusic, Loader2, Edit, X, Globe, Pause, Lock, Shuffle, Filter, FileText, FileAudio } from 'lucide-react';
 import { RequestCard } from '../components/RequestCard';
+import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
+import { Waveform } from '../components/ui/Waveform';
+import { seededRandom } from '../lib/utils';
+import { FilterPopover } from '../components/ui/FilterPopover';
+import { fixUrl } from '../lib/url';
 
 export function Playlists() {
+  const { id } = useParams<{ id: string }>();
+
+  if (id) {
+    return <PlaylistDetail id={id} />;
+  }
+
+  return <PlaylistList />;
+}
+
+// ==========================================
+// EXISTING GunDB LIST VIEW
+// ==========================================
+function PlaylistList() {
   const { user, gun } = useGun();
   const { play } = usePlayer();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -17,6 +39,7 @@ export function Playlists() {
 
   useEffect(() => {
      setPlaylists([]);
+     if (!user) return; // Guard
      user.get('playlists').map().on((data: any, key: string) => {
          if (data && data.title) {
              let tracks = [];
@@ -119,8 +142,6 @@ export function Playlists() {
       console.log(`Loaded ${validTracks.length} valid tracks out of ${playlist.tracks.length}`);
       
       if (validTracks.length > 0) {
-          // Adjust validTracks start index based on original playlist index if valid
-          // This is tricky if some tracks failed. We'll play from 0 relative to valid list.
           play(validTracks[startIndex < validTracks.length ? startIndex : 0], validTracks, {
               type: 'playlist',
               id: playlist.id,
@@ -150,7 +171,6 @@ export function Playlists() {
       user.get('playlists').get(selectedPlaylist.id).put({
           tracks: JSON.stringify(newTracks)
       });
-      // State updates automatically via listener
   };
 
   return (
@@ -203,7 +223,6 @@ export function Playlists() {
                              </button>
                         </div>
                         
-                        {/* Mini Track List Preview */}
                         <div 
                             className="mt-4 space-y-1 cursor-pointer hover:bg-gray-800/50 p-2 rounded -mx-2 transition"
                             onClick={() => setSelectedPlaylist(pl)}
@@ -226,7 +245,7 @@ export function Playlists() {
             </div>
         )}
 
-        {/* Edit Modal */}
+        {/* Edit Modal (Existing GunDB Implementation) */}
         {selectedPlaylist && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                 <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[80vh] flex flex-col">
@@ -310,3 +329,312 @@ export function Playlists() {
   );
 }
 
+// ==========================================
+// NEW Firestore DETAIL VIEW
+// ==========================================
+function PlaylistDetail({ id }: { id: string }) {
+    const { participantEmail, isAdmin } = useAuth();
+    const { play, currentTrack, isPlaying, pause } = usePlayer(); // removed unused 'resume'
+    
+    const [loading, setLoading] = useState(true);
+    const [playlist, setPlaylist] = useState<Playlist | null>(null);
+    const [request, setRequest] = useState<FileRequest | null>(null);
+    const [submissions, setSubmissions] = useState<Submission[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [hostName, setHostName] = useState<string>('');
+    
+    const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+    // removed unused expandedSubmissionId/setExpandedSubmissionId
+    const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
+    
+    // Filters State
+    const [showFilterPopover, setShowFilterPopover] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha'>('newest');
+    const [filterByAI, setFilterByAI] = useState(false);
+    const [filterByFragile, setFilterByFragile] = useState(false);
+    const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>([]);
+
+    const areFiltersActive = useMemo(() => {
+        return searchTerm !== '' || sortBy !== 'newest' || filterByAI || filterByFragile || filterByFeedbackFocus.length > 0;
+    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus]);
+
+    // Fetch Data
+    useEffect(() => {
+        async function loadData() {
+            setLoading(true);
+            try {
+                // Fetch Playlist
+                const plDoc = await getDoc(doc(db, 'playlists', id));
+                if (!plDoc.exists()) {
+                    setError('Playlist not found');
+                    setLoading(false);
+                    return;
+                }
+                const plData = { id: plDoc.id, ...plDoc.data() } as Playlist;
+                setPlaylist(plData);
+                
+                // Fetch Related Request (for locking logic, host name, etc.)
+                const qReq = query(collection(db, 'requests'), where('playlistId', '==', id));
+                const reqSnap = await getDocs(qReq);
+                if (!reqSnap.empty) {
+                    const r = reqSnap.docs[0].data() as FileRequest;
+                    setRequest({ id: reqSnap.docs[0].id, ...r });
+                    
+                    if (r.hostEmail) {
+                        setHostName(r.hostEmail.split('@')[0]); // Fallback
+                    }
+                }
+                
+                // Fetch Submissions
+                const qSub = query(collection(db, 'submissions'), where('playlistId', '==', id));
+                const subSnap = await getDocs(qSub);
+                const loadedSubs: Submission[] = [];
+                subSnap.forEach(d => loadedSubs.push({ id: d.id, ...d.data() } as Submission));
+                setSubmissions(loadedSubs);
+
+            } catch (e) {
+                console.error(e);
+                setError('Failed to load playlist');
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadData();
+    }, [id]);
+
+    const handleClearAllFilters = useCallback(() => {
+        setSearchTerm('');
+        setSortBy('newest');
+        setFilterByAI(false);
+        setFilterByFragile(false);
+        setFilterByFeedbackFocus([]);
+    }, []);
+
+    // Filter Logic
+    const computedVisibleSubmissions = useMemo(() => {
+        let filtered = submissions;
+        
+        // Search
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(s => 
+                s.title.toLowerCase().includes(term) || 
+                s.byline?.toLowerCase().includes(term) ||
+                s.uploaderEmail?.toLowerCase().includes(term)
+            );
+        }
+
+        if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
+        if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+        if (filterByFeedbackFocus.length > 0) {
+            filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
+        }
+
+        // Sort
+        filtered.sort((a, b) => {
+            if (sortBy === 'newest') return (b.createdAt || 0) - (a.createdAt || 0);
+            if (sortBy === 'oldest') return (a.createdAt || 0) - (b.createdAt || 0);
+            if (sortBy === 'alpha') return a.title.localeCompare(b.title);
+            // Comment sort is mocked as 0 diff for now since we don't have comments loaded here easily without extra fetch
+            return 0; 
+        });
+
+        // Lock Logic (Preview)
+        let lockMessage = "";
+        const isHost = request?.hostEmail?.toLowerCase() === participantEmail?.toLowerCase() || isAdmin;
+        const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
+        
+        if (!isHost && request?.playlistLiveDate) {
+            const liveDate = new Date(request.playlistLiveDate).getTime();
+            if (Date.now() < liveDate) {
+                if (hasSubmitted) {
+                    // Preview Mode: Show own track + random others
+                    const seed = `${id}-${participantEmail}`;
+                    const random = seededRandom(seed);
+                    const myTrack = filtered.find(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
+                    const others = filtered.filter(s => s.uploaderEmail?.toLowerCase() !== participantEmail?.toLowerCase());
+                    const shuffledOthers = [...others].sort(() => random() - 0.5).slice(0, 2);
+                    
+                    filtered = myTrack ? [myTrack, ...shuffledOthers] : shuffledOthers;
+                    lockMessage = `Playlist is not live yet. Preview mode active.`;
+                } else {
+                    filtered = [];
+                    lockMessage = "Playlist is locked until the live date.";
+                }
+            }
+        }
+
+        return { filtered, lockMessage, isHost };
+    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isAdmin]);
+
+    const { filtered: visibleSubmissions, lockMessage, isHost } = computedVisibleSubmissions;
+
+    const handlePlayAll = () => {
+        if (visibleSubmissions.length > 0) {
+            if (isPlaying && visibleSubmissions.some(s => s.id === currentTrack?.id)) {
+                pause();
+            } else {
+                play(visibleSubmissions[0], visibleSubmissions, {
+                    type: 'playlist',
+                    id: id,
+                    name: playlist?.title || 'Playlist',
+                    link: `/playlists/${id}`
+                });
+            }
+        }
+    };
+
+    const handleShufflePlay = () => {
+        if (visibleSubmissions.length > 0) {
+            const seed = `${id}-${Date.now()}`;
+            const random = seededRandom(seed);
+            const shuffled = [...visibleSubmissions].sort(() => random() - 0.5);
+            play(shuffled[0], shuffled, {
+                type: 'playlist',
+                id: id,
+                name: playlist?.title || 'Playlist',
+                link: `/playlists/${id}`
+            });
+        }
+    };
+
+    if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500" /></div>;
+    if (error || !playlist) return <div className="text-center p-20 text-red-500">{error || "Not Found"}</div>;
+
+    // Access Check using isAllowed properly
+    const isAllowed = isHost || playlist.accessList?.some((e: string) => e.toLowerCase() === participantEmail?.toLowerCase()) || (playlist as any).accessMode === 'public';
+    
+    if (!isAllowed) {
+        return (
+            <div className="flex flex-col items-center justify-center p-20 text-center">
+                 <Lock className="w-12 h-12 text-red-500 mb-4" />
+                 <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+                 <p className="text-gray-500">You do not have permission to view this playlist.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-5xl mx-auto p-4 md:p-8">
+            <div className="bg-gradient-to-b from-purple-900/20 to-black p-8 rounded-xl mb-8 border border-gray-800">
+                <div className="flex flex-col md:flex-row gap-8 items-start">
+                    <div className="w-48 h-48 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700 mx-auto">
+                        <ArtworkDisplay src={fixUrl(playlist.artworkUrl)} alt="Art" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 w-full">
+                        <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">{playlist.title}</h1>
+                        <p className="text-gray-400 text-sm mb-4">Hosted by {hostName || 'Unknown'}</p>
+                        <p className={`text-gray-300 whitespace-pre-wrap ${isDescriptionExpanded ? '' : 'line-clamp-3'}`}>
+                            {playlist.description}
+                        </p>
+                         {playlist.description && playlist.description.length > 150 && (
+                            <button onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)} className="text-blue-400 text-sm mt-2">
+                                {isDescriptionExpanded ? 'Show Less' : 'Show More'}
+                            </button>
+                        )}
+                        
+                        {lockMessage && (
+                            <div className="mt-4 inline-flex items-center gap-2 bg-yellow-900/30 text-yellow-200 px-3 py-1 rounded-full text-xs font-bold border border-yellow-700/50">
+                                <Lock className="w-3 h-3" /> {lockMessage}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Controls */}
+            <div className="flex justify-between items-center mb-6 relative">
+                 <div className="flex gap-2">
+                     <button onClick={handlePlayAll} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold transition">
+                         {isPlaying && visibleSubmissions.some(s => s.id === currentTrack?.id) ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                         Play All
+                     </button>
+                     <button onClick={handleShufflePlay} className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition" title="Shuffle">
+                         <Shuffle className="w-5 h-5" />
+                     </button>
+                 </div>
+                 
+                 <div className="flex gap-2 relative">
+                     <button 
+                         onClick={() => setShowFilterPopover(!showFilterPopover)} 
+                         className={`p-2 rounded-lg transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                     >
+                         <Filter className="w-5 h-5" />
+                     </button>
+                     
+                     {showFilterPopover && (
+                         <FilterPopover
+                             searchTerm={searchTerm}
+                             setSearchTerm={setSearchTerm}
+                             sortBy={sortBy}
+                             setSortBy={setSortBy}
+                             filterByAI={filterByAI}
+                             setFilterByAI={setFilterByAI}
+                             filterByFragile={filterByFragile}
+                             setFilterByFragile={setFilterByFragile}
+                             filterByFeedbackFocus={filterByFeedbackFocus}
+                             setFilterByFeedbackFocus={setFilterByFeedbackFocus}
+                             onClose={() => setShowFilterPopover(false)}
+                         />
+                     )}
+                 </div>
+            </div>
+            
+            {visibleSubmissions.length === 0 ? (
+                <div className="text-center py-20 text-gray-500 border border-gray-800 border-dashed rounded-lg">
+                    {areFiltersActive ? (
+                        <>
+                            <p>No tracks match your filters.</p>
+                            <button onClick={handleClearAllFilters} className="text-blue-400 mt-2 hover:underline">Clear Filters</button>
+                        </>
+                    ) : (
+                        <p>{lockMessage || "No tracks yet."}</p>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {visibleSubmissions.map((sub) => (
+                        <div key={sub.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col gap-4 hover:border-gray-700 transition">
+                             <div className="flex items-center gap-4">
+                                 <div className="w-12 h-12 bg-gray-800 rounded overflow-hidden flex-shrink-0 relative">
+                                     <ArtworkDisplay src={fixUrl(sub.artworkUrl)} alt="Art" className="w-full h-full object-cover" FallbackIcon={FileAudio} />
+                                 </div>
+                                 <div className="flex-1 min-w-0">
+                                     <h4 className="text-white font-medium truncate">{sub.title}</h4>
+                                     <p className="text-gray-400 text-sm truncate">{sub.byline || 'Anonymous'}</p>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                     {sub.lyrics && (
+                                         <button onClick={() => setExpandedLyricsMap(p => ({...p, [sub.id!]: !p[sub.id!]}))} className={`p-2 rounded-full ${expandedLyricsMap[sub.id!] ? 'text-blue-400 bg-gray-800' : 'text-gray-500 hover:text-white'}`}>
+                                             <FileText className="w-4 h-4" />
+                                         </button>
+                                     )}
+                                     <button 
+                                         onClick={() => {
+                                             if (isPlaying && currentTrack?.id === sub.id) pause();
+                                             else play(sub, visibleSubmissions, { type: 'playlist', id: id, name: playlist.title, link: `/playlists/${id}` });
+                                         }}
+                                         className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition"
+                                     >
+                                         {isPlaying && currentTrack?.id === sub.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                                     </button>
+                                 </div>
+                             </div>
+                             
+                             {sub.waveform && <div className="hidden md:block opacity-50 hover:opacity-100 transition"><Waveform data={sub.waveform} /></div>}
+                             
+                             {expandedLyricsMap[sub.id!] && (
+                                 <div className="bg-gray-950 p-4 rounded text-sm text-gray-300 font-mono whitespace-pre-wrap border border-gray-800">
+                                     {sub.lyrics}
+                                 </div>
+                             )}
+                        </div>
+                    ))}
+                </div>
+            )}
+            
+            <div className="h-32" />
+        </div>
+    );
+}

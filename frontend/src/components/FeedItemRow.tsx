@@ -8,7 +8,9 @@ export interface FeedItemData {
     id: string;
     type: 'comment' | 'submission';
     text: string;
-    authorPub: string;
+    authorPub?: string; // Optional now
+    authorEmail?: string; // Add email support
+    authorName?: string; // Add direct name support (byline)
     submissionId: string;
     requestId: string;
     submissionTitle: string;
@@ -23,28 +25,43 @@ interface FeedItemRowProps {
 
 export function FeedItemRow({ item }: FeedItemRowProps) {
     const { gun } = useGun();
-    const [authorAlias, setAuthorAlias] = useState<string>('Unknown User');
+    const [authorAlias, setAuthorAlias] = useState<string>(item.authorName || 'Unknown User');
     const [authorAvatar, setAuthorAvatar] = useState<string | null>(null);
 
     useEffect(() => {
         let isMounted = true;
-        if (!item.authorPub) return;
+        
+        // If we have a direct name (byline), use it as primary, but still try to fetch avatar if pub exists
+        if (item.authorName) {
+            setAuthorAlias(item.authorName);
+        }
 
-        gun.get('all_users').get(item.authorPub).once((u: any) => {
-            if (isMounted && u) {
-                setAuthorAlias(u.alias || 'Unknown User');
-                setAuthorAvatar(u.avatarUrl);
+        if (item.authorPub && gun) {
+            gun.get('all_users').get(item.authorPub).once((u: any) => {
+                if (isMounted && u) {
+                    // Only override alias if we don't have a direct name (or maybe we prefer the profile alias?)
+                    // Let's prefer the profile alias if available, as byline might be ad-hoc?
+                    // Or prefer byline if it's a submission?
+                    // Current logic: Profile alias > "Unknown".
+                    if (u.alias) setAuthorAlias(u.alias);
+                    setAuthorAvatar(u.avatarUrl);
+                }
+            });
+        } else if (item.authorEmail) {
+            // Fallback to email if no pub and no name
+            if (!item.authorName) {
+                setAuthorAlias(item.authorEmail.split('@')[0]);
             }
-        });
+        }
 
         return () => { isMounted = false; };
-    }, [gun, item.authorPub]);
+    }, [gun, item.authorPub, item.authorName, item.authorEmail]);
 
     return (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-4 flex gap-2 md:gap-4 hover:border-gray-700 transition">
             {/* Avatar */}
             <div className="flex-shrink-0">
-                <Link to={`/profile/${item.authorPub}`}>
+                <Link to={item.authorPub ? `/profile/${item.authorPub}` : '#'}>
                     <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-800 overflow-hidden">
                         {authorAvatar ? (
                             <img src={fixUrl(authorAvatar)} alt={authorAlias} className="w-full h-full object-cover" />
@@ -59,7 +76,7 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
             <div className="flex-1 min-w-0">
                 <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-1 gap-1 md:gap-0">
                     <div className="text-sm">
-                        <Link to={`/profile/${item.authorPub}`} className="font-bold text-white hover:underline">
+                        <Link to={item.authorPub ? `/profile/${item.authorPub}` : '#'} className="font-bold text-white hover:underline">
                             {authorAlias}
                         </Link>
                         <span className="text-gray-500 ml-1">

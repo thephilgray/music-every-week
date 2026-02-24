@@ -21,10 +21,11 @@ export interface FileRequest {
   title: string;
   description: string;
   deadline: string;
-  accessMode: 'direct' | 'invite' | 'volunteer';
+  accessMode: 'direct' | 'invite' | 'volunteer' | 'public'; // Added 'public' if needed, or map 'direct' to public
   artworkUrl?: string;
-  ownerPub: string;
+  ownerPub: string; // Keep for legacy reference? Or remove?
   hostEmail?: string; // Add hostEmail
+  accessList?: string[]; // List of allowed emails
   createdAt: number;
   inviteCode?: string; // Reusable invite code
   poolSeats?: number; // Number of open seats for volunteer pool
@@ -39,6 +40,7 @@ export interface FileRequest {
   pending_emails?: string[];
   hiddenFromProfile?: boolean;
   playlistLiveDate?: string;
+  playlistId?: string; // Linked playlist
 }
 
 export interface Submission {
@@ -67,6 +69,7 @@ export interface Comment {
   id: string;
   text: string;
   authorPub: string;
+  authorEmail?: string; // Added for Firestore
   createdAt: number;
   audioUrl?: string;
 }

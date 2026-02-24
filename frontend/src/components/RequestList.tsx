@@ -1,80 +1,32 @@
-import { useState, useEffect } from 'react';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext';
 import { RequestCard } from './RequestCard';
 import { Skeleton } from './ui/Skeleton';
 import type { FileRequest } from '../types';
 import { Music } from 'lucide-react';
 
 interface RequestListProps {
-  requests?: FileRequest[];
-  loading?: boolean;
+  requests: FileRequest[];
+  loading: boolean;
   filter?: 'active' | 'archived' | 'mine';
 }
 
-export function RequestList({ requests: propRequests, loading: propLoading, filter = 'active' }: RequestListProps) {
-  const { gun, user, pubKey, userProfile } = useGun();
-  const [internalRequests, setInternalRequests] = useState<FileRequest[]>([]);
-  const [internalLoading, setInternalLoading] = useState(true);
-  const [participation, setParticipation] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (!user) return;
-    
-    // Subscribe to participation statuses (Scoped)
-    user.get('participation').map().on((status: any, reqId: string) => {
-        setParticipation(prev => ({ ...prev, [reqId]: status }));
-    });
-  }, [user]);
-
-  // Internal Fetch if no props provided
-  useEffect(() => {
-      if (propRequests) {
-          setInternalLoading(false);
-          return;
-      }
-
-      const reqMap = new Map<string, FileRequest>();
-      let batchTimeout: ReturnType<typeof setTimeout> | null = null;
-
-      const updateState = () => {
-          setInternalRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
-          setInternalLoading(false);
-          batchTimeout = null;
-      };
-      
-      gun.get('file_requests').map().on((data: any, key: string) => {
-          if (data && data.title) {
-              reqMap.set(key, { ...data, id: key });
-              
-              if (!batchTimeout) {
-                batchTimeout = setTimeout(updateState, 100);
-              }
-          }
-      });
-      
-      const timer = setTimeout(() => setInternalLoading(false), 2000);
-      return () => {
-          if (batchTimeout) clearTimeout(batchTimeout);
-          clearTimeout(timer);
-      };
-  }, [gun, propRequests]);
-
-  const requestsToFilter = propRequests || internalRequests;
-  const isLoading = propLoading !== undefined ? propLoading : internalLoading;
+export function RequestList({ requests, loading, filter = 'active' }: RequestListProps) {
+  const { user, participantEmail, isAdmin } = useAuth();
 
   // Filter Logic based on deadline and status
-  const filtered = requestsToFilter.filter(req => {
+  const filtered = requests.filter(req => {
       const isExpired = req.deadline ? new Date(req.deadline).getTime() < Date.now() : false;
-      const myStatus = participation[req.id!];
-      const isOwner = req.ownerPub === pubKey;
-      const isDirect = req.accessMode === 'direct';
-      const isJoined = myStatus === 'accepted' || myStatus === 'joined';
+      
+      const currentUserEmail = user?.email || participantEmail;
+      
+      const isOwner = req.hostEmail && currentUserEmail && req.hostEmail === currentUserEmail;
+      const isDirect = req.accessMode === 'direct' || req.accessMode === 'public'; // Assuming 'direct' means public/direct access
+      const isJoined = currentUserEmail && req.accessList?.includes(currentUserEmail);
 
       // 1. Privacy Check: Must be Owner, Public, or Joined
       // If requests are passed via props (e.g. from Home), they are already filtered by the parent?
       // Home.tsx filters for "Active Requests" using similar logic.
-      // Archive.tsx does NOT filter. So we need this check here for Archive view security.
-      const isAdmin = userProfile?.isAdmin;
+      // Archive.tsx might use this component too.
       if (!isAdmin && !isOwner && !isDirect && !isJoined) return false;
       
       if (filter === 'active') {
@@ -86,7 +38,7 @@ export function RequestList({ requests: propRequests, loading: propLoading, filt
       return true;
   });
 
-  if (isLoading && filtered.length === 0) {
+  if (loading && filtered.length === 0) {
       return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-64 rounded-xl" />)}

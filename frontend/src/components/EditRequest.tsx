@@ -48,7 +48,9 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       return request.playlistLiveDate;
   });
 
-  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(request.accessMode || 'direct');
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(
+      (request.accessMode === 'public' ? 'direct' : request.accessMode) as 'direct' | 'invite' | 'volunteer' || 'direct'
+  );
   const [file, setFile] = useState<File | null>(null);
   const [currentArtworkUrl] = useState(request.artworkUrl || ''); // Removed unused setter
   const [loading, setLoading] = useState(false);

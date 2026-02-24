@@ -13,7 +13,7 @@ Detailed Plan: [MIGRATION_STEP_1.md](./MIGRATION_STEP_1.md)
 **Objective:** Secure the application using the new Auth Context.
 Detailed Plan: [MIGRATION_STEP_2.md](./MIGRATION_STEP_2.md)
 
-### [ ] Step 3: Refactor Home & Feed (Read)
+### [x] Step 3: Refactor Home & Feed (Read)
 **Objective:** Make the main landing pages display data from Firestore.
 Detailed Plan: [MIGRATION_STEP_3.md](./MIGRATION_STEP_3.md)
 

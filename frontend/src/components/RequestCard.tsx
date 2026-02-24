@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useGun } from '../contexts/GunContext';
 import { fixUrl } from '../lib/url';
 import type { FileRequest } from '../types';
 
@@ -10,28 +8,8 @@ interface RequestCardProps {
 }
 
 export function RequestCard({ request, isClosed }: RequestCardProps) {
-  const { gun } = useGun();
-  const [submissionCount, setSubmissionCount] = useState(0);
-
-  useEffect(() => {
-    if (!request.id) return;
-
-    const submissionIds = new Set<string>();
-    
-    // Listen for submissions to this request (Global Node)
-    gun.get('request_submissions').get(request.id).map().on((data: any, key: any) => {
-      if (data) {
-        submissionIds.add(key);
-        setSubmissionCount(submissionIds.size);
-      }
-    });
-
-    return () => {
-        // Cleanup subscription
-        gun.get('request_submissions').get(request.id!).off();
-    };
-  }, [gun, request.id]);
-
+  // TODO: Add submission count from Firestore (denormalized field on request or separate query)
+  
   return (
     <Link to={`/request/${request.id}`} className="block group">
       <div className={`bg-gray-800 border ${isClosed ? 'border-red-900/50 opacity-80' : 'border-gray-700'} rounded-lg overflow-hidden hover:border-blue-500 transition-colors h-full flex flex-col`}>
@@ -72,7 +50,6 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
               {isClosed ? 'Ended: ' : 'Due: '} 
               {request.deadline ? new Date(request.deadline).toLocaleDateString() : 'No Deadline'}
             </span>
-            <span>{submissionCount} Track{submissionCount !== 1 ? 's' : ''}</span>
           </div>
         </div>
       </div>

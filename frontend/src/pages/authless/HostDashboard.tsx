@@ -3,7 +3,6 @@ import { db, auth } from '../../lib/firebase';
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Loader2, Plus, ExternalLink, Music2, Share2, Archive, Edit, Trash2, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { HostAuthGuard } from '../../components/HostAuthGuard';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { ExtensionModal } from './components/ExtensionModal';
 
@@ -15,7 +14,7 @@ interface RequestSummary {
   createdAt: any;
 }
 
-function HostDashboardContent() {
+export function HostDashboard() {
   const [requests, setRequests] = useState<RequestSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -285,13 +284,5 @@ function HostDashboardContent() {
       </div>
     </div>
   );
-}
-
-export function HostDashboard() {
-    return (
-        <HostAuthGuard>
-            <HostDashboardContent />
-        </HostAuthGuard>
-    );
 }
 

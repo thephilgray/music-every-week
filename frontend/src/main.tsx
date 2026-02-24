@@ -37,15 +37,18 @@ import './index.css'
 import App from './App.tsx'
 import { GunProvider } from './contexts/GunContext'
 import { PlayerProvider } from './contexts/PlayerContext'
+import { AuthProvider } from './contexts/AuthContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <GunProvider>
-        <PlayerProvider>
-          <App />
-        </PlayerProvider>
-      </GunProvider>
+      <AuthProvider>
+        <GunProvider>
+          <PlayerProvider>
+            <App />
+          </PlayerProvider>
+        </GunProvider>
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 )

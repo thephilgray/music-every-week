@@ -5,9 +5,8 @@ import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'fire
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { fixUrl } from '../../lib/url';
 import { useNavigate } from 'react-router-dom';
-import { HostAuthGuard } from '../../components/HostAuthGuard';
 
-function MigrateContent() {
+export function MigrateGunToFirebase() {
   const { gun } = useGun();
   const navigate = useNavigate();
   const [requestId, setRequestId] = useState('');
@@ -391,12 +390,4 @@ function MigrateContent() {
       </div>
     </div>
   );
-}
-
-export function MigrateGunToFirebase() {
-    return (
-        <HostAuthGuard>
-            <MigrateContent />
-        </HostAuthGuard>
-    );
 }

@@ -2,10 +2,16 @@ import { useState } from 'react';
 import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, UserPlus, Copy, X } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { fixUrl } from '../../lib/url';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { gun, user, pubKey, userProfile, isConnected, isIdle, isInternetOnline } = useGun();
+  const { gun, pubKey, userProfile, isConnected, isIdle, isInternetOnline, user: gunUser } = useGun(); // Aliased Gun user to avoid conflict if needed, or just let it be.
+  // Actually, useAuth provides 'user' (Firebase) and 'logout'. 
+  // useGun provides 'user' (Gun SEA). 
+  // Let's destructure what we need carefully.
+  const { logout } = useAuth();
+
   const location = useLocation();
   const navigate = useNavigate();
   const pathnames = location.pathname.split('/').filter((x) => x);
@@ -31,9 +37,11 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       statusTitle = "Disconnected";
   }
 
-  const handleLogout = () => {
-    user.leave();
-    window.location.reload();
+  const handleLogout = async () => {
+    if (window.confirm("Log out?")) {
+        await logout();
+        navigate('/login');
+    }
   };
 
   const generateInvite = () => {
@@ -48,7 +56,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       });
       
       // Link to user profile (Scoped)
-      user.get('my_invites').get(code).put(true);
+      gunUser.get('my_invites').get(code).put(true);
       
       // Generate full URL
       const url = `${window.location.origin}/?inviteCode=${code}`;

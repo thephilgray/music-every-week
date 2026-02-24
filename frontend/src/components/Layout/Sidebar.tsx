@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut, Globe } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useGun } from '../../contexts/GunContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useGun } from '../../contexts/GunContext'; // Keep for now if other parts rely on it, but we are migrating logout.
 import { BugReportModal } from '../BugReportModal';
 
 interface SidebarProps {
@@ -11,7 +12,8 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, pubKey, gun } = useGun();
+  const { logout } = useAuth(); // Use new AuthContext
+  const { user, pubKey, gun } = useGun(); // Still used for unread count logic for now
   const [unreadCount, setUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
 
@@ -54,6 +56,13 @@ export function Sidebar({ onClose }: SidebarProps) {
       if (onClose) onClose();
       // Small delay to ensure sidebar close animation starts/state clears before heavy routing
       setTimeout(() => navigate(path), 50);
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm("Log out?")) {
+        await logout();
+        navigate('/login');
+    }
   };
 
   return (
@@ -109,12 +118,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             Report Bug
         </button>
         <button 
-            onClick={() => {
-                if (window.confirm("Log out?")) {
-                    user.leave();
-                    window.location.reload();
-                }
-            }}
+            onClick={handleLogout}
             className="w-full text-left px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-900/10 rounded transition mb-2 text-sm font-medium flex items-center gap-3"
         >
             <LogOut className="w-5 h-5" />

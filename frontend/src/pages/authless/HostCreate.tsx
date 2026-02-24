@@ -3,10 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { db, auth } from '../../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader2, Copy, Check, ArrowLeft, ImageIcon } from 'lucide-react';
-import { HostAuthGuard } from '../../components/HostAuthGuard';
 import { uploadToR2 } from '../../lib/r2';
 
-function HostCreateContent() {
+export function HostCreate() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditMode = !!id;
@@ -392,13 +391,5 @@ function HostCreateContent() {
         </form>
       </div>
     </div>
-  );
-}
-
-export function HostCreate() {
-  return (
-    <HostAuthGuard>
-      <HostCreateContent />
-    </HostAuthGuard>
   );
 }

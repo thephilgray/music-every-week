@@ -1,4 +1,4 @@
-import { Auth } from '../components/Auth';
+import { ParticipantAuth } from '../components/ParticipantAuth';
 
 export function LandingPage() {
   return (
@@ -44,7 +44,7 @@ export function LandingPage() {
             {/* Login Column */}
             <div className="flex flex-col items-center w-full">
                 <div className="w-full max-w-md">
-                    <Auth />
+                    <ParticipantAuth />
                 </div>
             </div>
         </div>

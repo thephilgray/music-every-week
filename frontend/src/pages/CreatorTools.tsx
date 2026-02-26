@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon, Lock, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
@@ -21,8 +21,32 @@ interface ParticipantRow {
 }
 
 export function CreatorTools() {
-  const { user, participantEmail } = useAuth(); 
+  const { user, participantEmail, loginAdmin, isLoading } = useAuth(); 
   const { success, error } = useToast();
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.16))] text-gray-500">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+        </div>
+    );
+  }
+
+  if (!user) {
+    return (
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-theme(spacing.16))] p-4 text-center">
+            <Lock className="w-16 h-16 text-gray-600 mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">Host Access Required</h2>
+            <p className="text-gray-400 mb-6">Please log in with your Google account to access Creator Tools.</p>
+            <button 
+                onClick={loginAdmin} 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition"
+            >
+                Log in with Google
+            </button>
+        </div>
+    );
+  }
   
   // Tabs
   const [activeTab, setActiveTab] = useState<'requests' | 'submissions'>('requests');
@@ -75,6 +99,8 @@ export function CreatorTools() {
   useEffect(() => {
     if (!user?.uid && !participantEmail) return;
     
+    console.log("CreatorTools: Fetching requests for UID:", user?.uid, "and Email:", user?.email || participantEmail);
+
     const unsubs: (() => void)[] = [];
 
     // 1. Query by UID (ownerPub)
@@ -90,6 +116,7 @@ export function CreatorTools() {
                 if (data.deleted) return;
                 if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
             });
+            console.log("CreatorTools: Requests by UID (snapshot.empty:", snapshot.empty, "):", res);
             setRequestsByUid(res);
         }));
     }
@@ -108,6 +135,7 @@ export function CreatorTools() {
                 if (data.deleted) return;
                 if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
             });
+            console.log("CreatorTools: Requests by Email (snapshot.empty:", snapshot.empty, "):", res);
             setRequestsByEmail(res);
         }));
     }
@@ -194,19 +222,52 @@ export function CreatorTools() {
           return;
       }
 
-      const rows = new Map<string, ParticipantRow>();
-      
       const processData = async () => {
-          // Process Participants from selectedRequest
+          // STEP 1: Build a comprehensive lookup for profiles (GunPub, Email -> UID)
+          // This will help standardize keys in our 'rows' map
+          const userProfileLookup = new Map<string, UserProfile>(); // Key: UID, Value: Profile
+          const emailToUidMap = new Map<string, string>(); // Key: email, Value: UID
+          const gunPubToUidMap = new Map<string, string>(); // Key: GunPub, Value: UID
+
+          // Fetch all profiles involved (optimization: fetch only relevant profiles)
+          const allProfilesQuery = query(collection(db, 'profiles')); // Potentially wide query, could optimize
+          const profileSnapshot = await getDocs(allProfilesQuery);
+          profileSnapshot.forEach(docSnap => {
+              const rawProfileData = docSnap.data();
+              const profile: UserProfile = { 
+                uid: docSnap.id, 
+                alias: rawProfileData.alias || rawProfileData.displayName || rawProfileData.email || docSnap.id, // Ensure alias is always set
+                ...rawProfileData 
+              } as UserProfile; // Cast to UserProfile
+              userProfileLookup.set(profile.uid, profile); // Key by Firebase UID
+              if (profile.email) emailToUidMap.set(profile.email.toLowerCase(), profile.uid);
+              if (rawProfileData.migratedFromGunPub) gunPubToUidMap.set(rawProfileData.migratedFromGunPub, profile.uid);
+          });
+
+          const rows = new Map<string, ParticipantRow>(); // Key: Firebase UID or Email
+
+          // STEP 2: Process Participants from selectedRequest (from request.participants object)
+          // Standardize keys to Firebase UID when possible and add to rows
           const participantsData = selectedRequest.participants || {};
-          for (const pub of Object.keys(participantsData)) {
-              const data = participantsData[pub];
+          for (const key of Object.keys(participantsData)) { // 'key' could be GunPub or Firebase UID
+              const data = participantsData[key];
               if (typeof data === 'object' && data !== null) {
-                  rows.set(pub, {
-                      id: pub,
-                      name: data.alias || 'Unknown User',
-                      contact: data.email || pub,
-                      status: data.status || 'pending',
+                  let participantId = key;
+                  
+                  // Try to resolve GunPub to Firebase UID
+                  if (gunPubToUidMap.has(key)) {
+                      participantId = gunPubToUidMap.get(key)!;
+                  } else if (emailToUidMap.has(key.toLowerCase())) { // If key is email directly, resolve to UID
+                      participantId = emailToUidMap.get(key.toLowerCase())!;
+                  }
+                  
+                  const resolvedProfile = userProfileLookup.get(participantId);
+
+                  rows.set(participantId, {
+                      id: participantId,
+                      name: data.alias || resolvedProfile?.displayName || resolvedProfile?.alias || 'Unknown User',
+                      contact: data.email || resolvedProfile?.email || participantId,
+                      status: data.status || 'pending', // Initial status from request.participants
                       type: 'user',
                       extensionHours: data.extensionHours || 0,
                       hasPass: data.hasPass || false
@@ -214,27 +275,48 @@ export function CreatorTools() {
               }
           }
 
-          // Process Pending Emails (accessList)
+          // STEP 3: Process Pending Emails (from request.accessList)
+          // Add to rows if not already present (ensuring UID-based entries take precedence)
           if (selectedRequest.accessList) {
-              selectedRequest.accessList.forEach((email: string) => {
-                  if (!rows.has(email)) { 
-                      rows.set(email, {
-                          id: email,
-                          name: email,
-                          contact: email,
-                          status: 'invited',
-                          type: 'email'
-                      });
+              for (const email of selectedRequest.accessList) {
+                  const normalizedEmail = email.toLowerCase();
+                  let resolvedUid = emailToUidMap.get(normalizedEmail);
+                  
+                  if (resolvedUid) {
+                      // If email resolves to a UID, and we don't have a UID-based entry yet
+                      if (!rows.has(resolvedUid)) {
+                           rows.set(resolvedUid, {
+                              id: resolvedUid,
+                              name: userProfileLookup.get(resolvedUid)?.displayName || userProfileLookup.get(resolvedUid)?.alias || email,
+                              contact: email,
+                              status: 'invited',
+                              type: 'user',
+                              extensionHours: 0,
+                              hasPass: false
+                          });
+                      }
+                  } else {
+                      // No UID found for this email, keep email as the ID if not already there
+                      if (!rows.has(normalizedEmail)) { 
+                           rows.set(normalizedEmail, {
+                              id: normalizedEmail,
+                              name: email,
+                              contact: email,
+                              status: 'invited',
+                              type: 'email'
+                          });
+                      }
                   }
-              });
+              }
           }
 
-          // Ensure Host is Listed
+          // STEP 4: Ensure Host is Listed (by Firebase UID)
           if (selectedRequest.ownerPub && !rows.has(selectedRequest.ownerPub)) {
+              const hostProfile = userProfileLookup.get(selectedRequest.ownerPub);
               rows.set(selectedRequest.ownerPub, {
                   id: selectedRequest.ownerPub,
-                  name: 'Host (You)',
-                  contact: selectedRequest.ownerPub,
+                  name: hostProfile?.displayName || hostProfile?.alias || 'Host (You)',
+                  contact: hostProfile?.email || selectedRequest.ownerPub,
                   status: 'joined', 
                   type: 'user',
                   extensionHours: 0,
@@ -242,44 +324,76 @@ export function CreatorTools() {
               });
           }
 
-          // Fetch Submissions to update status
+
+          // STEP 5: Fetch Submissions and update participant statuses to 'submitted'
           if (selectedRequest.id) {
               const submissionsQuery = query(
-                  collection(db, 'requests', selectedRequest.id, 'submissions'),
+                  collection(db, 'submissions'), // Query global submissions collection
+                  where('requestId', '==', selectedRequest.id),
                   where('deleted', '!=', true)
               );
               const submissionSnapshot = await getDocs(submissionsQuery);
               submissionSnapshot.forEach(subDoc => {
                   const subData = subDoc.data();
-                  const uid = subData.uploaderUid;
-                  const email = subData.uploaderEmail;
+                  const uploaderUid = subData.uploaderUid; 
+                  const uploaderEmail = subData.uploaderEmail?.toLowerCase();
 
-                  let p = uid ? rows.get(uid) : undefined;
-                  
-                  // Deduplicate: Check if we have an invited row by email for this submitter
-                  if (!p && email) {
-                      const emailRow = rows.get(email);
-                      if (emailRow) {
-                          if (uid) {
-                              // Convert email row to user row
-                              p = { ...emailRow, id: uid, type: 'user', contact: email };
-                              rows.delete(email);
-                              rows.set(uid, p);
-                          }
+                  let participantToUpdate: ParticipantRow | undefined;
+                  let effectiveParticipantKey: string | undefined;
+                  let keyToDeleteIfReplaced: string | undefined; 
+                  let currentKeyInRows: string | undefined; // Declare currentKeyInRows here
+
+                  // --- Lookup priority: 1. Uploader UID, 2. Email resolved to UID, 3. Direct Email ---
+
+                  // Try by uploaderUid (most reliable)
+                  if (uploaderUid) {
+                      if (rows.has(uploaderUid)) {
+                          participantToUpdate = rows.get(uploaderUid);
+                          effectiveParticipantKey = uploaderUid;
+                      } else if (uploaderEmail && rows.has(uploaderEmail)) {
+                          // Found by email, but we have a UID. Mark for re-keying.
+                          participantToUpdate = rows.get(uploaderEmail);
+                          keyToDeleteIfReplaced = uploaderEmail;
+                          effectiveParticipantKey = uploaderUid; // New effective key
                       }
                   }
 
-                  if (p) {
-                      if (p.status !== 'submitted') {
-                          rows.set(uid || p.id, { ...p, status: 'submitted' });
+                  // If not found by UID, or UID was missing, try by email (resolved to UID first, then direct email key)
+                  if (!participantToUpdate && uploaderEmail) {
+                      const resolvedUidFromEmail = emailToUidMap.get(uploaderEmail);
+                      if (resolvedUidFromEmail && rows.has(resolvedUidFromEmail)) {
+                          participantToUpdate = rows.get(resolvedUidFromEmail);
+                          effectiveParticipantKey = resolvedUidFromEmail;
+                      } else if (rows.has(uploaderEmail)) {
+                          participantToUpdate = rows.get(uploaderEmail);
+                          effectiveParticipantKey = uploaderEmail;
                       }
-                  } else if (uid) {
-                      rows.set(uid, {
-                          id: uid,
-                          name: 'Loading...', 
-                          contact: email || uid,
+                  }
+
+
+                  if (participantToUpdate && effectiveParticipantKey) {
+                      if (participantToUpdate.status !== 'submitted') {
+                           // If we found the participant by an old key (e.g., email or GunPub)
+                           // but now have a definitive Firebase UID from the submission (uploaderUid)
+                           // and the current key in rows is *not* the uploaderUid, re-key the entry.
+                          if (uploaderUid && currentKeyInRows !== uploaderUid && keyToDeleteIfReplaced) { 
+                              rows.delete(keyToDeleteIfReplaced); // Remove old entry
+                              rows.set(uploaderUid, { ...participantToUpdate, id: uploaderUid, type: 'user', status: 'submitted' });
+                          } else {
+                              // Otherwise, just update the status of the existing entry
+                              rows.set(effectiveParticipantKey, { ...participantToUpdate, status: 'submitted' });
+                          }
+                      }
+                  } 
+                  // Fallback: If no existing row found, but a submission exists, create a new 'submitted' entry.
+                  // This handles cases where a submitter was never in accessList or request.participants initially.
+                  else if (effectiveParticipantKey) {
+                      rows.set(effectiveParticipantKey, {
+                          id: effectiveParticipantKey,
+                          name: userProfileLookup.get(effectiveParticipantKey)?.displayName || uploaderEmail || 'Unknown User', 
+                          contact: uploaderEmail || effectiveParticipantKey,
                           status: 'submitted',
-                          type: 'user',
+                          type: uploaderUid ? 'user' : 'email',
                           extensionHours: 0,
                           hasPass: false
                       });
@@ -287,26 +401,18 @@ export function CreatorTools() {
               });
           }
 
-          // Fetch Profiles (aliases) for user participants
-          const profilePromises: Promise<void>[] = [];
+          // Fetch Profiles (aliases) for any remaining 'Loading...' user participants
+          const finalProfilePromises: Promise<void>[] = [];
           rows.forEach((row, id) => {
-              if (row.type === 'user' && row.name === 'Loading...') { 
-                  profilePromises.push((async () => {
+              if (row.type === 'user' && row.name === 'Loading...') {
+                  finalProfilePromises.push((async () => {
                       try {
                           const profileDoc = await getDoc(doc(db, 'profiles', id));
                           if (profileDoc.exists()) {
                               const profileData = profileDoc.data() as UserProfile;
-                              if (profileData.alias) {
-                                  rows.set(id, { ...row, name: profileData.alias, contact: profileData.email || profileData.uid });
-                              }
-                              
-                              // Final Deduplication: Remove any lingering invited rows that match this profile email
-                              if (profileData.email && rows.has(profileData.email)) {
-                                  const invitedRow = rows.get(profileData.email);
-                                  if (invitedRow && invitedRow.type === 'email') {
-                                      rows.delete(profileData.email);
-                                  }
-                              }
+                              rows.set(id, { ...row, name: profileData.displayName || profileData.alias || id, contact: profileData.email || id });
+                          } else {
+                              rows.set(id, { ...row, name: row.id.substring(0, 8) + '...', contact: row.id }); // Fallback for UID without profile
                           }
                       } catch (e) {
                           console.error("Error fetching profile for", id, e);
@@ -314,7 +420,7 @@ export function CreatorTools() {
                   })());
               }
           });
-          await Promise.all(profilePromises);
+          await Promise.all(finalProfilePromises);
           
           setParticipants(Array.from(rows.values()));
       };

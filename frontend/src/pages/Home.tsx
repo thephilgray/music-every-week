@@ -8,21 +8,11 @@ import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import type { FileRequest } from '../types';
 
 export function Home() {
-  const { user } = useAuth();
+  const { user, isHost } = useAuth(); // Destructure isHost
   const [showCreate, setShowCreate] = useState(false);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is host (admin or has host claim/profile)
-  // For now, assume admin is host. 
-  // TODO: Fetch user profile to check isHost if it's separate from AuthContext properties.
-  // AuthContext has isAdmin.
-  // We might need to fetch the user profile from Firestore 'users' collection to check 'isHost'.
-  // But for now, let's use isAdmin or just show the button if they are logged in (and let the component handle permission? No, CreateRequest needs permission).
-  // The original code checked `userProfile?.isHost`.
-  // Let's assume we can add `isHost` to `useAuth` later or fetch it here.
-  // For now, I'll just check if user exists.
-  
   useEffect(() => {
     // Listen to Requests (Real-time)
     const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
@@ -51,7 +41,7 @@ export function Home() {
            </div>
            <p className="text-gray-400">Submit tracks, listen, and provide feedback</p>
         </div>
-        {user && ( // TODO: Check isHost properly
+        {user && isHost && ( // Conditionally render based on user and isHost
         <button 
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-blue-900/20"

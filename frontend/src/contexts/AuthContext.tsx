@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   participantEmail: string | null;
   isAdmin: boolean;
+  isHost: boolean; // Added isHost to AuthContextType
   settings: any;
   isLoading: boolean;
   loginAdmin: () => Promise<void>;
@@ -20,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [participantEmail, setParticipantEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isHost, setIsHost] = useState(false); // Added isHost state
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -83,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       avatarUrl: user.photoURL,
                       createdAt: serverTimestamp(),
                       isAdmin: false, 
-                      isHost: true,
+                      isHost: false, // Changed from true to false for security
                       ...existingData
                   });
             }
@@ -95,9 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setIsAdmin(!!data.isAdmin);
+                    setIsHost(!!data.isHost); // Set isHost state
                     setSettings(data.settings || {});
                 } else {
                     setIsAdmin(false);
+                    setIsHost(false); // Reset isHost on no profile
                     setSettings({});
                 }
                 setIsLoading(false);
@@ -122,9 +126,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginAdmin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      // Check if user is an admin by fetching their profile
+      const profileRef = doc(db, 'profiles', user.uid);
+      const profileSnap = await getDoc(profileRef);
+
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data();
+        if (!profileData.isAdmin) {
+          await firebaseSignOut(auth);
+          // Temporarily use window.alert as useToast is not available here easily.
+          // For a robust solution, consider passing a toast function or using a global event.
+          window.alert("Access Denied: Only administrators can log in here."); 
+          throw new Error("Non-admin user attempted admin login.");
+        }
+      } else {
+        // If no profile exists, assume not an admin and log out
+        await firebaseSignOut(auth);
+        window.alert("Access Denied: Your profile does not have administrator privileges.");
+        throw new Error("Profile not found, non-admin user attempted admin login.");
+      }
+    } catch (error: any) {
       console.error("Admin login failed", error);
+      // Only show alert for Firebase auth errors, not for our custom access denied errors
+      if (!(error instanceof Error && (error.message.includes("Non-admin user") || error.message.includes("Profile not found")))) {
+         window.alert(`Login failed: ${error.message}`);
+      }
       throw error;
     }
   };
@@ -169,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     participantEmail,
     isAdmin,
+    isHost, // Added isHost to context value
     settings,
     isLoading,
     loginAdmin,

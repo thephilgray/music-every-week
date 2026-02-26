@@ -1,13 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
-import { useGun } from '../../contexts/GunContext';
+import Gun from 'gun/gun'; // Local Gun import for migration tools
 import { db, auth } from '../../lib/firebase';
 import { collection, addDoc, updateDoc, serverTimestamp, getDocs, query, where, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { fixUrl } from '../../lib/url';
 import { useNavigate } from 'react-router-dom';
 
+const gun = Gun({
+    peers: [import.meta.env.MODE === 'production' ? 'https://mew2-relay-service-c0b302f-6xaixpnemq-uw.a.run.app/gun' : 'http://localhost:8765/gun'],
+    multicast: false, // Disable UDP multicast by default in browser
+    ws: undefined, // Let Gun choose WebSocket polyfill
+});
+
 export function MigrateGunToFirebase() {
-  const { gun } = useGun();
   const navigate = useNavigate();
   const [requestId, setRequestId] = useState('');
   const [cleanupRequestId, setCleanupRequestId] = useState('');
@@ -109,7 +114,7 @@ export function MigrateGunToFirebase() {
           }, 5000); 
           void timeoutId; // Explicitly mark as 'read' for TS
           
-          gun.get('request_submissions').get(requestId).map((_data, key) => {
+          gun.get('request_submissions').get(requestId).map((_data: any, key: any) => {
               if (key && !keys.includes(key)) {
                   keys.push(key);
               }
@@ -373,7 +378,7 @@ export function MigrateGunToFirebase() {
                 resolve(keys);
             }, 5000);
             void timeoutId;
-            gun.get('request_submissions').get(commentMigrationRequestId).map((_data, key) => {
+            gun.get('request_submissions').get(commentMigrationRequestId).map((_data: any, key: any) => {
                 if (key && !keys.includes(key)) keys.push(key);
             });
         });
@@ -446,7 +451,7 @@ export function MigrateGunToFirebase() {
                      // Or just fetch from Gun quickly.
                      
                      const profileData: any = await new Promise((resolve) => {
-                         gun.get('all_users').get(authorPub).once((d) => resolve(d));
+                         gun.get('all_users').get(authorPub).once((d: any) => resolve(d));
                      });
                      
                      if (profileData) {

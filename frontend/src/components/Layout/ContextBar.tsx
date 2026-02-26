@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, UserPlus, Copy, X } from 'lucide-react';
+import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, Wifi, WifiOff, UserPlus } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { useGun } from '../../contexts/GunContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fixUrl } from '../../lib/url';
 import { db } from '../../lib/firebase';
@@ -9,11 +8,7 @@ import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/fir
 import type { UserProfile } from '../../types';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { gun, pubKey, isConnected, isIdle, isInternetOnline, user: gunUser } = useGun(); // Aliased Gun user to avoid conflict if needed, or just let it be.
-  // Actually, useAuth provides 'user' (Firebase) and 'logout'. 
-  // useGun provides 'user' (Gun SEA). 
-  // Let's destructure what we need carefully.
-  const { user, participantEmail, logout } = useAuth();
+  const { user, participantEmail, logout, isLoading } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -31,7 +26,6 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
             });
         } else if (participantEmail) {
             // Fetch by email (One-time fetch usually sufficient, or could set up watcher if needed)
-            // For participants, profile might not change often or doesn't exist yet.
             try {
                 const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
                 const querySnapshot = await getDocs(q);
@@ -58,68 +52,29 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
   const pathnames = location.pathname.split('/').filter((x) => x);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   
-  // Invite Modal State
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  // Status Logic
+  // Status Logic (Firebase/General Network Status)
   let statusClass = "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse-slow";
   let statusTitle = "Online";
+  let StatusIcon = Wifi;
 
-  if (!isInternetOnline) {
-      statusClass = "bg-gray-500";
+  if (isLoading) {
+      statusClass = "bg-gray-500 animate-pulse";
+      statusTitle = "Connecting...";
+  } else if (!navigator.onLine) {
+      statusClass = "bg-red-500";
       statusTitle = "Offline";
-  } else if (isIdle) {
-      statusClass = "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]";
-      statusTitle = "Idle";
-  } else if (!isConnected) {
+      StatusIcon = WifiOff;
+  } else if (!user && !participantEmail) {
       statusClass = "bg-gray-500";
-      statusTitle = "Disconnected";
+      statusTitle = "Not Logged In";
+      StatusIcon = WifiOff; // Or a custom icon for not logged in
   }
 
   const handleLogout = async () => {
-    if (window.confirm("Log out?")) {
+    if (window.confirm("Are you sure you want to log out?")) {
         await logout();
-        navigate('/login');
+        navigate('/login'); // Redirect to a general login page after logout
     }
-  };
-
-  const generateInvite = () => {
-      // Use Firebase UID if available, otherwise fallback to PubKey if still using Gun for invites
-      const fromId = user?.uid || pubKey;
-      if (!fromId) return;
-
-      const code = crypto.randomUUID().substring(0, 8).toUpperCase();
-      
-      // Save to global invites list (Gun - kept for compatibility or needs migration?)
-      // Assuming we are migrating, we should probably write to Firestore 'invites' collection?
-      // For now, let's keep Gun logic if invites are still Gun-based, or just disable if not.
-      // The prompt didn't ask to migrate invites yet, so I'll leave it but guard against missing objects.
-      
-      if (gun && gunUser) {
-        gun.get('invites').get(code).put({
-            from: fromId,
-            createdAt: Date.now(),
-            status: 'active'
-        });
-        
-        // Link to user profile (Scoped)
-        gunUser.get('my_invites').get(code).put(true);
-      }
-      
-      // Generate full URL
-      const url = `${window.location.origin}/?inviteCode=${code}`;
-      setInviteCode(url);
-      setCopied(false);
-      setShowInvite(true);
-      setDropdownOpen(false);
-  };
-
-  const copyToClipboard = () => {
-      navigator.clipboard.writeText(inviteCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
   };
 
   // Determine display name and avatar
@@ -176,14 +131,14 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
 
       {/* User Dropdown */}
       <div className="relative flex items-center gap-3">
-        {/* Status Indicator */}
+        {/* Status Indicator (Firebase/Network) */}
         <div className="group relative flex items-center justify-center">
             <div 
                 className={`w-2 h-2 rounded-full cursor-help ${statusClass}`}
             />
             {/* Tooltip */}
             <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-max px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg whitespace-nowrap">
-                {statusTitle}
+                <StatusIcon className="w-3 h-3 inline-block mr-1" /> {statusTitle}
             </div>
         </div>
 
@@ -230,7 +185,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
 
                     {userProfile?.isHost && (
                     <button 
-                        onClick={generateInvite}
+                        onClick={() => { alert("Invite functionality is being migrated. Please use admin tools for invites."); setDropdownOpen(false); }}
                         className="w-full text-left px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 hover:text-blue-300 flex items-center gap-2"
                     >
                         <UserPlus className="w-4 h-4" />
@@ -253,55 +208,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       </div>
     </div>
 
-    {/* Invite Modal */}
-    {showInvite && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm p-6 relative shadow-2xl">
-                <button 
-                    onClick={() => setShowInvite(false)}
-                    className="absolute top-4 right-4 text-gray-500 hover:text-white"
-                >
-                    <X className="w-5 h-5" />
-                </button>
-                
-                <div className="text-center mb-6">
-                    <div className="w-12 h-12 bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <UserPlus className="w-6 h-6 text-blue-500" />
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">Invite a Friend</h3>
-                    <p className="text-gray-400 text-sm">
-                        Share this link with a friend to let them join the community.
-                    </p>
-                </div>
-
-                <div className="bg-black/50 border border-gray-700 rounded-lg p-4 flex items-center justify-between mb-4">
-                    <span className="font-mono text-sm text-white break-all pr-2">
-                        {inviteCode}
-                    </span>
-                    <button 
-                        onClick={copyToClipboard}
-                        className="p-2 hover:bg-gray-700 rounded transition text-gray-400 hover:text-white shrink-0"
-                        title="Copy Link"
-                    >
-                        <Copy className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {copied && (
-                    <p className="text-green-400 text-xs text-center mb-4 animate-pulse">
-                        Link copied to clipboard!
-                    </p>
-                )}
-
-                <button 
-                    onClick={generateInvite}
-                    className="w-full py-2 text-sm text-gray-500 hover:text-white underline"
-                >
-                    Generate New Link
-                </button>
-            </div>
-        </div>
-    )}
+    {/* Invite Modal (Removed as functionality is being migrated/disabled) */}
     </>
   );
 }

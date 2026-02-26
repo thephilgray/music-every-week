@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut, Globe } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-// import { useGun } from '../../contexts/GunContext'; // Removed
 import { BugReportModal } from '../BugReportModal';
 import { db } from '../../lib/firebase'; // Added Firebase import
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; // Added Firestore imports
@@ -15,7 +14,6 @@ export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user, participantEmail } = useAuth(); // Destructure user and participantEmail from useAuth
-  // const { user, pubKey, gun } = useGun(); // Removed
   const [unreadCount, setUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
 

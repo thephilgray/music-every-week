@@ -5,11 +5,11 @@ import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2';
 import { fixUrl } from '../lib/url';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, onSnapshot, serverTimestamp, query, where, collection, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, serverTimestamp, query, where, collection, getDocs, orderBy } from 'firebase/firestore';
 import type { UserProfile } from '../types';
 
 export function Settings() {
-  const { user, participantEmail, logout } = useAuth();
+  const { user, isAdmin, participantEmail, logout } = useAuth();
   const { success, error } = useToast();
   
   const [resolvedUid, setResolvedUid] = useState<string | null>(null);
@@ -211,6 +211,47 @@ export function Settings() {
       window.location.reload();
   };
 
+  const handleDownloadBugReports = async () => {
+      try {
+          const q = query(
+              collection(db, 'notifications'),
+              where('type', '==', 'bug'),
+              orderBy('createdAt', 'desc')
+          );
+          const snapshot = await getDocs(q);
+          
+          if (snapshot.empty) {
+              error("No bug reports found.");
+              return;
+          }
+
+          const headers = ['ID', 'Date', 'User UID', 'Message', 'Link/Screenshot'];
+          const rows = snapshot.docs.map(doc => {
+              const data = doc.data();
+              return [
+                  doc.id,
+                  new Date(data.createdAt?.seconds * 1000 || Date.now()).toLocaleString(),
+                  data.fromUid || 'Anonymous',
+                  `"${(data.message || '').replace(/"/g, '""')}"`, // Escape quotes
+                  data.link || ''
+              ].join(',');
+          });
+
+          const csvContent = [headers.join(','), ...rows].join('\n');
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.setAttribute('href', url);
+          link.setAttribute('download', `bug_reports_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+      } catch (e) {
+          console.error("Failed to download bug reports:", e);
+          error("Failed to download bug reports.");
+      }
+  };
+
   return (
     <div className="max-w-3xl mx-auto pb-4 p-2 sm:pb-20 sm:p-6">
       <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
@@ -342,6 +383,7 @@ export function Settings() {
       </section>
 
       {/* Community Section */}
+      {isAdmin && (
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <Users className="w-5 h-5 text-purple-500" />
@@ -383,6 +425,7 @@ export function Settings() {
             </div>
         </div>
       </section>
+      )}
 
       {/* Content Preferences */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
@@ -447,6 +490,7 @@ export function Settings() {
       </section>
 
       {/* Data Management Section */}
+      {isAdmin && (
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-yellow-500" />
@@ -455,23 +499,36 @@ export function Settings() {
         
         <div className="space-y-6">
             <div className="border-t border-gray-800 pt-6">
-                <p className="text-gray-400 text-xs mb-4">
-                    MEW is a "Local-First" application. This means a lot of data is stored directly in your browser. 
-                    If you are experiencing issues, clearing your local data might help. 
-                    <span className="text-red-400 block mt-1">Warning: This will log you out.</span>
-                </p>
+                <div className="flex justify-between items-center mb-4">
+                    <p className="text-gray-400 text-xs">
+                        MEW is a "Local-First" application. This means a lot of data is stored directly in your browser. 
+                        If you are experiencing issues, clearing your local data might help. 
+                        <span className="text-red-400 block mt-1">Warning: This will log you out.</span>
+                    </p>
+                </div>
                 
-                <button 
-                    onClick={handleClearData}
-                    disabled={isClearing}
-                    className="bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition"
-                >
-                    {isClearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    Clear Local Data & Reset
-                </button>
+                <div className="flex gap-4">
+                    <button 
+                        onClick={handleClearData}
+                        disabled={isClearing}
+                        className="bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition"
+                    >
+                        {isClearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        Clear Local Data & Reset
+                    </button>
+
+                    <button 
+                        onClick={handleDownloadBugReports}
+                        className="bg-blue-900/20 hover:bg-blue-900/40 text-blue-500 border border-blue-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition"
+                    >
+                        <Upload className="w-4 h-4" /> {/* Reusing Upload icon for download, or import Download */}
+                        Download Bug Reports (CSV)
+                    </button>
+                </div>
             </div>
         </div>
       </section>
+      )}
     </div>
   );
 }

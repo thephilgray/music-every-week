@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign } from 'lucide-react';
+import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext'; // Changed to useAuth
 import { Skeleton } from '../components/ui/Skeleton';
 import type { Notification, UserProfile } from '../types'; // Added UserProfile for fetching sender alias
@@ -13,7 +13,7 @@ export function Inbox() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention' | 'bug'>('all');
   
   // Privacy & Contacts
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
@@ -30,7 +30,7 @@ const updateNotificationState = useCallback(async (
     const uidsToFetch = new Set<string>();
     currentNotifsMap.forEach(n => {
         // Only fetch if we don't have a name and have a valid UID (not 'participant')
-        if (!n.fromName && !n.fromAlias && n.fromUid && n.fromUid !== 'participant') {
+        if (!n.fromName && !n.fromAlias && n.fromUid && n.fromUid !== 'participant' && n.fromUid !== 'guest') {
             uidsToFetch.add(n.fromUid);
         }
     });
@@ -60,7 +60,7 @@ const updateNotificationState = useCallback(async (
     }
     
     const sorted = Array.from(currentNotifsMap.values()).sort((a, b) => {
-        const priority = { invite: 3, mention: 2, comment: 2, submission: 1 };
+        const priority = { invite: 3, mention: 2, comment: 2, submission: 1, bug: 0 };
         const pA = priority[a.type as keyof typeof priority] || 0;
         const pB = priority[b.type as keyof typeof priority] || 0;
         
@@ -218,6 +218,10 @@ const updateNotificationState = useCallback(async (
     e.stopPropagation();
     if (!user?.uid && !participantEmail) return;
     if (!n.id) return;
+    
+    // Optimistic Update
+    setNotifications(prev => prev.filter(item => item.id !== n.id));
+
     try {
         console.log(`Attempting to delete notification: ${n.id}`);
         await deleteDoc(doc(db, 'notifications', n.id));
@@ -225,7 +229,7 @@ const updateNotificationState = useCallback(async (
     } catch (error: any) {
         console.error("Error deleting notification:", error);
         if (error.code === 'not-found') {
-             alert('This notification has already been deleted. Please refresh the page to update your inbox.');
+             // Already deleted
         } else {
              alert('Failed to delete notification.');
         }
@@ -245,7 +249,11 @@ const updateNotificationState = useCallback(async (
 
       // Navigate based on type
       if (n.link) {
-          navigate(n.link);
+          if (n.link.startsWith('http')) {
+             window.open(n.link, '_blank');
+          } else {
+             navigate(n.link);
+          }
       } else if (n.type === 'submission' || n.type === 'comment' || n.type === 'mention') {
           // Fallback if no link, try to construct one
            if (n.requestId) {
@@ -278,6 +286,7 @@ const updateNotificationState = useCallback(async (
           case 'submission': return <Music className="w-5 h-5 text-blue-400" />;
           case 'comment': return <MessageSquare className="w-5 h-5 text-green-400" />;
           case 'mention': return <AtSign className="w-5 h-5 text-yellow-400" />;
+          case 'bug': return <AlertCircle className="w-5 h-5 text-red-400" />;
           default: return <Bell className="w-5 h-5 text-gray-400" />;
       }
   };
@@ -302,7 +311,7 @@ const updateNotificationState = useCallback(async (
 
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          {(['all', 'invite', 'submission', 'comment', 'mention'] as const).map(type => (
+          {(['all', 'invite', 'submission', 'comment', 'mention', 'bug'] as const).map(type => (
               <button
                   key={type}
                   onClick={() => setFilterType(type)}

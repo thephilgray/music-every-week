@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, Pause, Edit, Lock, Copy, Check, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, Pause, Edit, Lock, Copy, Check, AlertTriangle, Loader2, Shuffle, Filter } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,12 +9,14 @@ import { SubmitTrack } from '../components/SubmitTrack';
 import { EditRequest } from '../components/EditRequest'; // Added import
 import { SubmissionCard } from '../components/SubmissionCard';
 import { fixUrl } from '../lib/url';
+import { seededRandom, getTimestampAsNumber } from '../lib/utils'; // Added imports
+import { FilterPopover } from '../components/ui/FilterPopover'; // Added import
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation(); // Added useLocation
-  const { participantEmail, isAdmin } = useAuth();
+  const { participantEmail, isAdmin, settings } = useAuth();
   const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
   
   const [request, setRequest] = useState<FileRequest | null>(null);
@@ -29,6 +31,57 @@ export function RequestDetail() {
   
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isEditRequestOpen, setIsEditRequestOpen] = useState(false); // Added state
+
+  // Filter/Sort States
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(localStorage.getItem('requestSearchTerm') || '');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha'>(
+    (localStorage.getItem('requestSortBy') as any) || 'newest'
+  );
+  const [filterByAI, setFilterByAI] = useState(localStorage.getItem('requestFilterByAI') === 'true');
+  const [filterByFragile, setFilterByFragile] = useState(localStorage.getItem('requestFilterByFragile') === 'true');
+  const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>(
+    JSON.parse(localStorage.getItem('requestFilterByFeedbackFocus') || '[]')
+  );
+
+  const areFiltersActive = useMemo(() => {
+    return (
+      searchTerm !== '' ||
+      sortBy !== 'newest' ||
+      filterByAI === true ||
+      filterByFragile === true ||
+      filterByFeedbackFocus.length > 0
+    );
+  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus]);
+
+  // Debounce search term
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300); // 300ms debounce delay
+    return () => clearTimeout(timerId);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    localStorage.setItem('requestSearchTerm', searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    localStorage.setItem('requestSortBy', sortBy);
+  }, [sortBy]);
+
+  useEffect(() => {
+    localStorage.setItem('requestFilterByAI', String(filterByAI));
+  }, [filterByAI]);
+
+  useEffect(() => {
+    localStorage.setItem('requestFilterByFragile', String(filterByFragile));
+  }, [filterByFragile]);
+
+  useEffect(() => {
+    localStorage.setItem('requestFilterByFeedbackFocus', JSON.stringify(filterByFeedbackFocus));
+  }, [filterByFeedbackFocus]);
 
   // Load Request Data
   const loadRequest = useCallback(async () => {
@@ -215,36 +268,80 @@ export function RequestDetail() {
       return rotatedSubs.slice(0, previewCount).map(s => s.id);
   }, [submissions, participantEmail, hasSubmitted, request?.previewTrackCount, isOwner, isAdmin]);
 
-  // Filtering (Stubbed for now, or simple local filter)
-  const filteredSubmissions = useMemo(() => {
-      // Logic for AI filtering could go here
-      return submissions;
-  }, [submissions]);
+  // Filtering, sorting and locking logic for visible submissions
+  const computedVisibleSubmissions = useMemo(() => {
+      let filtered = submissions;
 
-  // Locking Logic
-  const isLocked = (sub: Submission) => {
-      if (isOwner || isAdmin) return false;
-      if (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) return false;
-      
-      // If playlist is live, we might show tracks
-      if (isPlaylistLive) {
-          // If "Invitees who didn't submit" are restricted, check hasSubmitted
-          if (hasSubmitted) return false;
-          return true; // Locked for non-submitters
+      // Apply global AI filter from settings
+      if (settings?.content?.filterAI) {
+          filtered = filtered.filter(s => !s.usesAI);
       }
-      
-      // If not live yet, locked UNLESS it's a preview track for a submitter
-      const previewCount = request?.previewTrackCount !== undefined ? request.previewTrackCount : 5;
-      if (hasSubmitted && previewCount > 0 && previewTrackIds.includes(sub.id)) {
-          return false;
+
+      // Apply search term filter
+      if (debouncedSearchTerm) {
+          const term = debouncedSearchTerm.toLowerCase();
+          filtered = filtered.filter(s => 
+              s.title.toLowerCase().includes(term) || 
+              s.byline?.toLowerCase().includes(term) ||
+              s.uploaderEmail?.toLowerCase().includes(term)
+          );
       }
-      
-      return true;
-  };
+
+      // Apply specific filter toggles
+      if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
+      if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+      if (filterByFeedbackFocus.length > 0) {
+          filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
+      }
+
+      // Apply sorting
+      const sorted = [...filtered].sort((a, b) => {
+          switch (sortBy) {
+              case 'newest':
+                  return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+              case 'oldest':
+                  return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
+              case 'alpha':
+                  return a.title.localeCompare(b.title);
+              case 'mostComments':
+                  return (submissionCommentCounts[b.id!] || 0) - (submissionCommentCounts[a.id!] || 0);
+              case 'fewestComments':
+                  return (submissionCommentCounts[a.id!] || 0) - (submissionCommentCounts[b.id!] || 0);
+              default:
+                  return 0;
+          }
+      });
+      filtered = sorted;
+
+      // Apply locking logic to the filtered and sorted list
+      const visibleAfterLocking = filtered.filter(sub => {
+          if (isOwner || isAdmin) return true; // Owner/Admin sees all
+          if (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) return true; // User sees their own submission
+          
+          if (isPlaylistLive) {
+              return hasSubmitted; // Only submitters see other tracks if playlist is live
+          }
+
+          // If not live yet, only preview tracks for submitters
+          const previewCount = request?.previewTrackCount !== undefined ? request.previewTrackCount : 5;
+          return hasSubmitted && previewCount > 0 && previewTrackIds.includes(sub.id);
+      });
+
+      return visibleAfterLocking;
+  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByFeedbackFocus, sortBy, submissionCommentCounts, isOwner, isAdmin, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds]);
+
+  const visibleSubmissions = computedVisibleSubmissions;
+
+  const handleClearAllFilters = useCallback(() => {
+    setSearchTerm('');
+    setSortBy('newest');
+    setFilterByAI(false);
+    setFilterByFragile(false);
+    setFilterByFeedbackFocus([]);
+  }, []);
 
   const handlePlayAll = () => {
       if (!request) return;
-      const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
       
       if (context?.id === request.id && visibleSubmissions.length > 0) {
           if (isPlaying) {
@@ -257,10 +354,26 @@ export function RequestDetail() {
               type: 'request',
               id: request.id!,
               name: request.title,
-              link: `/request/${request.id}`
+              link: `/request/${request.id}`,
+              artworkUrl: request.artworkUrl
           });
       }
   };
+
+  const handleShufflePlay = useCallback(() => {
+    if (visibleSubmissions.length > 0) {
+      const seed = `${request?.id}-${participantEmail}-${Date.now()}`; // Use Date.now() for unique shuffle each time
+      const random = seededRandom(seed);
+      const shuffledSubmissions = [...visibleSubmissions].sort(() => random() - 0.5);
+      play(shuffledSubmissions[0], shuffledSubmissions, { 
+        type: 'request', 
+        id: request?.id!,
+        name: request?.title || 'Request', 
+        link: `/request/${request?.id}`,
+        artworkUrl: request?.artworkUrl
+      });
+    }
+  }, [visibleSubmissions, request, participantEmail, play]);
 
   const copyLink = () => {
       const url = window.location.href;
@@ -410,34 +523,76 @@ export function RequestDetail() {
 
             {/* Submissions List */}
             <div className="border-t border-gray-800 pt-8">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-gray-200">Submissions ({filteredSubmissions.length})</h3>
-                    {filteredSubmissions.some(s => !isLocked(s)) && (
+                <div className="flex items-center justify-between mb-4 relative"> {/* Made this parent div relative */}
+                    <h3 className="text-xl font-bold text-gray-200">Submissions ({visibleSubmissions.length})</h3>
+                    <div className="flex gap-2 items-center"> {/* Flex container for play/shuffle/filter buttons */}
+                        {visibleSubmissions.length > 0 && (
+                            <button 
+                                onClick={handlePlayAll}
+                                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600"
+                            >
+                                {context?.id === request.id && isPlaying ? (
+                                    <>
+                                        <Pause className="w-3 h-3 fill-current" /> Pause
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play className="w-3 h-3 fill-current" /> {context?.id === request.id ? 'Resume' : 'Play All'}
+                                    </>
+                                )}
+                            </button>
+                        )}
+                        {visibleSubmissions.length > 0 && (
+                            <button
+                                onClick={handleShufflePlay}
+                                className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition" title="Shuffle"
+                            >
+                                <Shuffle className="w-5 h-5" />
+                            </button>
+                        )}
+                        {/* Filter Button and Popover, now directly within the wider flex container */}
                         <button 
-                            onClick={handlePlayAll}
-                            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600"
+                            onClick={() => setShowFilterPopover(!showFilterPopover)} 
+                            className={`p-2 rounded-full transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                            title="Filter & Sort"
                         >
-                            {context?.id === request.id && isPlaying ? (
-                                <>
-                                    <Pause className="w-3 h-3 fill-current" /> Pause
-                                </>
-                            ) : (
-                                <>
-                                    <Play className="w-3 h-3 fill-current" /> {context?.id === request.id ? 'Resume' : 'Play All'}
-                                </>
-                            )}
+                            <Filter className="w-5 h-5" />
                         </button>
-                    )}
-                </div>
-                
-                {filteredSubmissions.length === 0 ? (
+                        {showFilterPopover && (
+                            <FilterPopover
+                                searchTerm={searchTerm}
+                                setSearchTerm={setSearchTerm}
+                                sortBy={sortBy}
+                                setSortBy={setSortBy}
+                                filterByAI={filterByAI}
+                                setFilterByAI={setFilterByAI}
+                                filterByFragile={filterByFragile}
+                                setFilterByFragile={setFilterByFragile}
+                                filterByFeedbackFocus={filterByFeedbackFocus}
+                                setFilterByFeedbackFocus={setFilterByFeedbackFocus}
+                                onClose={() => setShowFilterPopover(false)}
+                            />
+                        )}
+                    </div>
+                </div>                
+                {visibleSubmissions.length === 0 && (searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByFeedbackFocus.length > 0) ? (
+                    <div className="bg-gray-900/50 rounded-lg p-10 text-center border border-gray-800 border-dashed flex flex-col items-center gap-4">
+                        <p className="text-gray-500">No submissions found matching your filters.</p>
+                        <button 
+                            onClick={handleClearAllFilters} 
+                            className="text-blue-400 hover:text-blue-300 text-sm font-medium focus:outline-none"
+                        >
+                            Clear Filters
+                        </button>
+                    </div>
+                ) : visibleSubmissions.length === 0 ? (
                     <div className="bg-gray-900/50 rounded-lg p-10 text-center border border-gray-800 border-dashed">
                         <p className="text-gray-500">No submissions yet.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-4">
-                        {filteredSubmissions.map((sub) => {
-                            const locked = isLocked(sub);
+                        {visibleSubmissions.map((sub) => {
+                            const locked = !(isOwner || isAdmin || (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) || (isPlaylistLive && hasSubmitted) || (hasSubmitted && previewTrackIds.includes(sub.id)));
                             const isMySubmission = sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase();
                             const commentCount = submissionCommentCounts[sub.id!] || 0;
                             const isCurrent = currentTrack?.id === sub.id;
@@ -450,12 +605,12 @@ export function RequestDetail() {
                                     isPlaying={isPlaying}
                                     isCurrent={isCurrent}
                                     onPlay={() => {
-                                        const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
                                         play(sub, visibleSubmissions, {
                                             type: 'request',
                                             id: request.id!,
                                             name: request.title,
-                                            link: `/request/${request.id}`
+                                            link: `/request/${request.id}`,
+                                            artworkUrl: request.artworkUrl
                                         });
                                     }}
                                     onPause={pause}

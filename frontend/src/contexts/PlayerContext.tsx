@@ -6,8 +6,8 @@ interface PlayerContextType {
   currentTrack: Submission | null;
   isPlaying: boolean;
   queue: Submission[];
-  context?: { type: 'request' | 'playlist' | 'profile', id: string, name: string, link: string };
-  play: (track: Submission, newQueue?: Submission[], context?: { type: 'request' | 'playlist' | 'profile', id: string, name: string, link: string }) => void;
+  context?: { type: 'request' | 'playlist' | 'profile', id: string, name: string, link: string, artworkUrl?: string };
+  play: (track: Submission, newQueue?: Submission[], context?: { type: 'request' | 'playlist' | 'profile', id: string, name: string, link: string, artworkUrl?: string }) => void;
   pause: () => void;
   resume: () => void;
   next: () => void;
@@ -36,10 +36,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<Submission[]>(queue);
   const currentTrackRef = useRef<Submission | null>(currentTrack);
+  const contextRef = useRef<PlayerContextType['context']>(context);
 
   // Keep refs in sync
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+  useEffect(() => { contextRef.current = context; }, [context]);
 
   // Initialize Audio Element
   useEffect(() => {
@@ -123,11 +125,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // Update Media Session Metadata & Handlers
   const updateMediaSession = () => {
       if (!currentTrack || !('mediaSession' in navigator)) return;
+      
+      const artworkUrl = currentTrack.artworkUrl || contextRef.current?.artworkUrl || '/mewlogo.png';
 
       navigator.mediaSession.metadata = new MediaMetadata({
           title: currentTrack.title,
           artist: currentTrack.byline || 'Unknown Artist',
-          artwork: currentTrack.artworkUrl ? [{ src: currentTrack.artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : []
+          artwork: [{ src: fixUrl(artworkUrl), sizes: '512x512', type: 'image/jpeg' }]
       });
 
       navigator.mediaSession.setActionHandler('play', () => resume());

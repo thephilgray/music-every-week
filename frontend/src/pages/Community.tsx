@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
@@ -8,9 +9,9 @@ import type { Submission, FileRequest, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function Community() {
+  const { settings } = useAuth();
   const [feed, setFeed] = useState<FeedItemData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterAI] = useState(false);
 
   useEffect(() => {
     async function loadFeed() {
@@ -102,7 +103,7 @@ export function Community() {
                     submissionTitle: submission.title,
                     requestTitle: reqTitle,
                     createdAt: getTimestampAsNumber(data.createdAt),
-                    usesAI: false // Comments don't use AI in this context
+                    usesAI: submission.usesAI
                 } as FeedItemData;
             }));
 
@@ -123,7 +124,7 @@ export function Community() {
   }, []);
 
   const filteredFeed = feed.filter(item => {
-      if (filterAI && item.usesAI) return false;
+      if (settings?.content?.filterAI && item.usesAI) return false;
       return true;
   });
 

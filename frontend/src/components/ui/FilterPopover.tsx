@@ -48,7 +48,7 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
     };
 
     return (
-        <div className="absolute right-0 top-0 mt-2 mr-2 w-full max-w-sm bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4 z-[60] animate-in fade-in slide-in-from-right-2">
+        <div className="absolute right-0 top-0 mt-2 mr-2 max-w-lg bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4 z-[60] animate-in fade-in slide-in-from-right-2">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                     <Filter className="w-5 h-5" /> Filters & Sort

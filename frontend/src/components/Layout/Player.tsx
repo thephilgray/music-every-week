@@ -8,7 +8,7 @@ import { ArtworkDisplay } from '../ui/ArtworkDisplay';
 
 
 export function Player() { // Removed props
-  const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, volume, muted, setVolume, toggleMute, queue, play } = usePlayer();
+  const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, volume, muted, setVolume, toggleMute, queue, play, context } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
@@ -45,7 +45,7 @@ export function Player() { // Removed props
     <>
       {showLyrics && currentTrack && ( 
         <SongDetailsModal 
-            currentTrack={currentTrack} 
+            currentTrack={{ ...currentTrack, context }} 
             onClose={() => setShowLyrics(false)} 
             currentUserEmail={currentUserEmail} 
         />
@@ -101,7 +101,7 @@ export function Player() { // Removed props
                 ${isMinimized ? 'w-10 h-10' : 'w-64 h-64 md:w-14 md:h-14 shadow-2xl md:shadow-none mb-6 md:mb-0'}
             `}>
                 <ArtworkDisplay 
-                    src={currentTrack?.artworkUrl} 
+                    src={currentTrack?.artworkUrl || context?.artworkUrl || '/mewlogo.png'} 
                     alt={currentTrack?.title || 'Track'} 
                     className="w-full h-full object-cover"
                     FallbackIcon={Music}

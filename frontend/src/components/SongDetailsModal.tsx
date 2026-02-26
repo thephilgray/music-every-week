@@ -1,8 +1,7 @@
-import { useState } from 'react';
-import { X, Music, ExternalLink } from 'lucide-react';
+import { X, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CommentSection } from './CommentSection';
-import { fixUrl } from '../lib/url';
+import { ArtworkDisplay } from './ui/ArtworkDisplay';
 
 interface Track {
     id?: string; // Submission ID
@@ -20,6 +19,7 @@ interface Track {
     context?: {
         name: string;
         link: string;
+        artworkUrl?: string;
     }
 }
 
@@ -30,7 +30,6 @@ interface SongDetailsModalProps {
 }
 
 export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: SongDetailsModalProps) {
-    const [imgError, setImgError] = useState(false);
     const draftKey = `comment_draft_${currentTrack.requestId}_${currentTrack.id || 'request'}`;
     const hasDraft = localStorage.getItem(draftKey) !== null;
 
@@ -40,19 +39,13 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                <div className="flex-1 overflow-y-auto custom-scrollbar">
                    {/* Header / Artwork Section */}
-                   <div className="relative w-full aspect-video bg-gray-800 flex-shrink-0">
-                       {currentTrack.artworkUrl && !imgError ? (
-                           <img 
-                                src={fixUrl(currentTrack.artworkUrl)} 
-                                alt={currentTrack.title} 
-                                className="w-full h-full object-cover" 
-                                onError={() => setImgError(true)}
-                           />
-                       ) : (
-                           <div className="w-full h-full flex items-center justify-center text-gray-600">
-                               <Music className="w-16 h-16" />
-                           </div>
-                       )}
+                   <div className="relative w-full aspect-video bg-gray-800 flex-shrink-0 flex items-center justify-center">
+                       <ArtworkDisplay 
+                            src={currentTrack.artworkUrl || currentTrack.context?.artworkUrl || '/mewlogo.png'} 
+                            alt={currentTrack.title}
+                            className="w-full h-full object-cover"
+                            iconClassName="w-16 h-16 text-gray-600"
+                       />
                        <button 
                            onClick={onClose} 
                            className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition backdrop-blur-sm"

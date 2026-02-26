@@ -106,8 +106,13 @@ export function SubmissionCard({
                         </div>
 
                          {/* Tags Section - Restored from Gun App */}
-                        {!locked && (submission.fragile || (submission.feedbackFocus && submission.feedbackFocus.length > 0)) && (
+                        {!locked && (submission.fragile || submission.usesAI || (submission.feedbackFocus && submission.feedbackFocus.length > 0)) && (
                             <div className="flex flex-wrap gap-2 mt-1.5">
+                                {submission.usesAI && (
+                                    <span className="bg-purple-900/20 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-purple-800/30 flex items-center gap-1">
+                                        AI
+                                    </span>
+                                )}
                                 {submission.fragile && (
                                     <span className="bg-pink-900/20 text-pink-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-pink-800/30 flex items-center gap-1">
                                         <Heart className="w-3 h-3 fill-current animate-pulse" /> Fragile

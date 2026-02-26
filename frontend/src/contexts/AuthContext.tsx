@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { type User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth, googleProvider, db } from '../lib/firebase'; // Added db
-import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, addDoc } from 'firebase/firestore'; // Added Firestore functions
+import { auth, googleProvider, db } from '../lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, addDoc, onSnapshot } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
   participantEmail: string | null;
   isAdmin: boolean;
+  settings: any;
   isLoading: boolean;
   loginAdmin: () => Promise<void>;
   loginParticipant: (email: string) => Promise<void>;
@@ -18,70 +19,106 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [participantEmail, setParticipantEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 1. Auth State Listener
   useEffect(() => {
-    // 1. Firebase Auth Listener (Admins)
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      
-      if (currentUser) {
-          // Ensure Profile Exists
-          try {
-              const profileRef = doc(db, 'profiles', currentUser.uid);
-              const profileSnap = await getDoc(profileRef);
-              
-              if (!profileSnap.exists()) {
-                  // Check if a "migrated" profile exists with this email but a random ID
-                  let existingData = {};
-                  if (currentUser.email) {
-                      const q = query(collection(db, 'profiles'), where('email', '==', currentUser.email));
-                      const querySnapshot = await getDocs(q);
-                      if (!querySnapshot.empty) {
-                          const oldDoc = querySnapshot.docs[0];
-                          existingData = oldDoc.data();
-                          // Delete the old doc to "move" it to the new UID
-                          await deleteDoc(oldDoc.ref);
-                          console.log("Migrated existing profile data to new UID for:", currentUser.email);
-                      }
-                  }
-
-                  // Create profile at UID with merged data
-                  await setDoc(profileRef, {
-                      uid: currentUser.uid,
-                      email: currentUser.email,
-                      displayName: currentUser.displayName,
-                      alias: currentUser.displayName?.replace(/\s+/g, '') || 'User' + currentUser.uid.substring(0, 5),
-                      avatarUrl: currentUser.photoURL,
-                      createdAt: serverTimestamp(),
-                      isAdmin: false, 
-                      isHost: true,
-                      ...existingData // Merge migrated data (overwrites defaults if present)
-                      // Ensure critical Auth fields aren't overwritten by potentially stale migration data if necessary,
-                      // but usually migration data (like bio, links) is preferred.
-                      // We ensure UID matches the auth UID.
-                  });
-                  console.log("Created/Merged profile for user:", currentUser.uid);
-              }
-          } catch (e) {
-              console.error("Error creating/checking profile:", e);
-          }
+      if (!currentUser) {
+          setIsAdmin(false);
+          setSettings(null);
+          setIsLoading(false);
       }
-
-      setIsLoading(false);
     });
 
-    // 2. Participant Email (LocalStorage/SessionStorage)
-    // Check localStorage first, then sessionStorage (migration support)
+    // Load Participant Email
     const storedEmail = localStorage.getItem('mew_participant_email') || sessionStorage.getItem('mew_auth_email');
     if (storedEmail) {
       setParticipantEmail(storedEmail);
-      // Ensure it's in localStorage for future
       localStorage.setItem('mew_participant_email', storedEmail);
     }
 
     return () => unsubscribe();
   }, []);
+
+  // 2. Profile Subscription
+  useEffect(() => {
+    if (!user) return;
+
+    let unsub = () => {};
+    let isCancelled = false;
+
+    const initProfile = async () => {
+        setIsLoading(true);
+        const profileRef = doc(db, 'profiles', user.uid);
+
+        try {
+            const profileSnap = await getDoc(profileRef);
+            
+            if (isCancelled) return;
+
+            if (!profileSnap.exists()) {
+                 // Creation / Migration Logic
+                 let existingData = {};
+                 if (user.email) {
+                      const q = query(collection(db, 'profiles'), where('email', '==', user.email));
+                      const querySnapshot = await getDocs(q);
+                      if (!querySnapshot.empty) {
+                          const oldDoc = querySnapshot.docs[0];
+                          existingData = oldDoc.data();
+                          await deleteDoc(oldDoc.ref);
+                      }
+                  }
+                  
+                  if (isCancelled) return;
+
+                  await setDoc(profileRef, {
+                      uid: user.uid,
+                      email: user.email,
+                      displayName: user.displayName,
+                      alias: user.displayName?.replace(/\s+/g, '') || 'User' + user.uid.substring(0, 5),
+                      avatarUrl: user.photoURL,
+                      createdAt: serverTimestamp(),
+                      isAdmin: false, 
+                      isHost: true,
+                      ...existingData
+                  });
+            }
+
+            if (isCancelled) return;
+
+            // Subscribe
+            unsub = onSnapshot(profileRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setIsAdmin(!!data.isAdmin);
+                    setSettings(data.settings || {});
+                } else {
+                    setIsAdmin(false);
+                    setSettings({});
+                }
+                setIsLoading(false);
+            }, (err) => {
+                console.error("Profile subscription error:", err);
+                setIsLoading(false);
+            });
+
+        } catch (e) {
+            console.error("Error ensuring profile:", e);
+            if (!isCancelled) setIsLoading(false);
+        }
+    };
+
+    initProfile();
+
+    return () => {
+        isCancelled = true;
+        unsub();
+    };
+  }, [user]);
 
   const loginAdmin = async () => {
     try {
@@ -108,7 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAdmin: false,
           isHost: false
         });
-        console.log("Created basic profile for participant:", email);
       }
     } catch (e) {
       console.error("Error creating participant profile:", e);
@@ -123,14 +159,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await firebaseSignOut(auth);
     }
     localStorage.removeItem('mew_participant_email');
-    sessionStorage.removeItem('mew_auth_email'); // Clean up legacy
+    sessionStorage.removeItem('mew_auth_email');
     setParticipantEmail(null);
+    setIsAdmin(false);
+    setSettings(null);
   };
 
   const value = {
     user,
     participantEmail,
-    isAdmin: !!user,
+    isAdmin,
+    settings,
     isLoading,
     loginAdmin,
     loginParticipant,

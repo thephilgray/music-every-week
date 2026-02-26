@@ -100,7 +100,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
 
       const notification: Notification = {
           id: reportId,
-          type: 'comment', // Can be bugReport type if added
+          type: 'bug', // Can be bugReport type if added
           message: `BUG REPORT: ${description.substring(0, 50)}...`,
           link: screenshotUrl || `/inbox`,
           fromUid: user?.uid || 'guest', // Changed fromPub to fromUid

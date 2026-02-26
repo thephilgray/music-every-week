@@ -207,7 +207,8 @@ function PlaylistList() {
               type: 'playlist',
               id: playlist.id,
               name: playlist.title,
-              link: '/playlists'
+              link: '/playlists',
+              artworkUrl: playlist.artworkUrl
           });
       } else {
           alert('Could not load tracks (they might have been deleted).');
@@ -570,7 +571,8 @@ function PlaylistDetail({ id }: { id: string }) {
                     type: 'playlist',
                     id: id,
                     name: playlist?.title || 'Playlist',
-                    link: `/playlists/${id}`
+                    link: `/playlists/${id}`,
+                    artworkUrl: playlist?.artworkUrl
                 });
             }
         }
@@ -585,7 +587,8 @@ function PlaylistDetail({ id }: { id: string }) {
                 type: 'playlist',
                 id: id,
                 name: playlist?.title || 'Playlist',
-                link: `/playlists/${id}`
+                link: `/playlists/${id}`,
+                artworkUrl: playlist?.artworkUrl
             });
         }
     };
@@ -761,7 +764,7 @@ function PlaylistDetail({ id }: { id: string }) {
                                      <button 
                                          onClick={() => {
                                              if (isPlaying && currentTrack?.id === sub.id) pause();
-                                             else play(sub, visibleSubmissions, { type: 'playlist', id: id, name: playlist.title, link: `/playlists/${id}` });
+                                             else play(sub, visibleSubmissions, { type: 'playlist', id: id, name: playlist.title, link: `/playlists/${id}`, artworkUrl: playlist.artworkUrl });
                                          }}
                                          className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition"
                                      >
@@ -788,3 +791,4 @@ function PlaylistDetail({ id }: { id: string }) {
         </div>
     );
 }
+

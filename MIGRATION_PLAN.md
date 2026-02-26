@@ -33,7 +33,7 @@ Detailed Plan: [MIGRATION_STEP_6.md](./MIGRATION_STEP_6.md)
 **Objective:** Move the discussion features to Firestore.
 Detailed Plan: [MIGRATION_STEP_7.md](./MIGRATION_STEP_7.md)
 
-### [ ] Step 8: Refactor Admin/Creator Tools
+### [x] Step 8: Refactor Admin/Creator Tools
 **Objective:** Allow Admins to create and manage requests via the new backend.
 Detailed Plan: [MIGRATION_STEP_8.md](./MIGRATION_STEP_8.md)
 

@@ -251,7 +251,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
             uploaderEmail: uploaderIdentifier, // New field for Firestore
-            // uploaderPub: ... // We might keep uploaderPub if we had it, but we don't necessarily have it.
+            // uploaderUid is handled conditionally below
             collaborators: collaboratorsMap, 
             waveform: waveformData,
             stage,
@@ -260,6 +260,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             fragile: isFragile,
             proxyFor: proxyAlias ? { alias: proxyAlias } : null
         };
+
+        if (user?.uid) {
+            submissionData.uploaderUid = user.uid;
+        }
 
         if (existingSubmission && existingSubmission.id) {
             // Update

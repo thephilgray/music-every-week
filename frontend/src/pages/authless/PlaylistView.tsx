@@ -171,7 +171,8 @@ export function PlaylistView() {
         });
 
         const shuffledOthers = [...sortedOthers].sort(() => random() - 0.5);
-        const previewOthers = shuffledOthers.slice(0, 2);
+        const previewTrackCount = requestData?.previewTrackCount !== undefined ? requestData.previewTrackCount : 5;
+        const previewOthers = shuffledOthers.slice(0, previewTrackCount);
 
         filtered = myTrack ? [myTrack, ...previewOthers] : previewOthers;
         filtered = Array.from(new Set(filtered));

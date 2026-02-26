@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut, Globe } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useGun } from '../../contexts/GunContext'; // Keep for now if other parts rely on it, but we are migrating logout.
+// import { useGun } from '../../contexts/GunContext'; // Removed
 import { BugReportModal } from '../BugReportModal';
+import { db } from '../../lib/firebase'; // Added Firebase import
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; // Added Firestore imports
 
 interface SidebarProps {
   onClose?: () => void;
@@ -12,34 +14,47 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth(); // Use new AuthContext
-  const { user, pubKey, gun } = useGun(); // Still used for unread count logic for now
+  const { logout, user, participantEmail } = useAuth(); // Destructure user and participantEmail from useAuth
+  // const { user, pubKey, gun } = useGun(); // Removed
   const [unreadCount, setUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
 
   useEffect(() => {
-    if (!user || !pubKey) return;
-    
-    // Subscribe to inbox to count unread
-    // We can't easily "count" without iterating in Gun, 
-    // but for UI badge we can maintain a Set of unread IDs
-    const unreadIds = new Set<string>();
+    // If auth is loading, or no user/participantEmail, return
+    if (!user && !participantEmail) {
+        setUnreadCount(0); // No user, no unread notifications
+        return;
+    }
 
-    // Use public 'inboxes' graph
-    gun.get('inboxes').get(pubKey).map().on((data: any, key: string) => {
-        if (data && !data.read) {
-            unreadIds.add(key);
-        } else {
-            unreadIds.delete(key);
-        }
-        setUnreadCount(unreadIds.size);
+    let q;
+    if (user?.uid) {
+        // For Firebase authenticated users
+        q = query(
+            collection(db, 'notifications'),
+            where('recipientUid', '==', user.uid),
+            where('read', '==', false)
+        );
+    } else if (participantEmail) {
+        // For email-only participants
+        q = query(
+            collection(db, 'notifications'),
+            where('recipientEmail', '==', participantEmail),
+            where('read', '==', false)
+        );
+    } else {
+        setUnreadCount(0);
+        return;
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        setUnreadCount(snapshot.size);
+    }, (error) => {
+        console.error("Error fetching unread notifications:", error);
+        setUnreadCount(0);
     });
     
-    return () => {
-        setUnreadCount(0);
-    };
-  }, [user, pubKey]);
-  
+    return () => unsubscribe();
+  }, [user, participantEmail]); // Depend on user and participantEmail  
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: Globe, label: 'Community', path: '/feed' },

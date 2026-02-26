@@ -2,21 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Save, Loader2, Trash2, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
-import { uploadFile } from '../lib/upload';
-import type { FileRequest, UserProfile, Notification } from '../types';
+import { uploadToR2 } from '../lib/r2'; 
+import { db } from '../lib/firebase';
+import { doc, updateDoc, collection, query, where, getDocs, getDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'; // Removed Timestamp
+import type { FileRequest, UserProfile, Notification, Playlist } from '../types';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { Tooltip } from './ui/Tooltip';
-
+import { getTimestampAsNumber } from '../lib/utils'; // Import the utility
 interface EditRequestProps {
   request: FileRequest;
   onClose: () => void;
-  onUpdate: () => void;
+  onUpdate: () => void; // Added onUpdate prop
 }
 
 export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
-  const { gun, user, pubKey, userPair } = useGun();
+  const { user, participantEmail } = useAuth(); 
   const { success, error } = useToast();
   const navigate = useNavigate();
   
@@ -48,7 +50,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       return request.playlistLiveDate;
   });
 
-  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer' >(
       (request.accessMode === 'public' ? 'direct' : request.accessMode) as 'direct' | 'invite' | 'volunteer' || 'direct'
   );
   const [file, setFile] = useState<File | null>(null);
@@ -60,6 +62,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   // Volunteer Settings
   const [poolSeats, setPoolSeats] = useState(request.poolSeats || 3);
   const [allowSubmissions, setAllowSubmissions] = useState(request.allowParticipantSubmissions !== undefined ? request.allowParticipantSubmissions : true);
+  const [previewTrackCount, setPreviewTrackCount] = useState<number>(request.previewTrackCount !== undefined ? request.previewTrackCount : 5);
 
   // Import Logic
   const [existingRequests, setExistingRequests] = useState<FileRequest[]>([]);
@@ -73,6 +76,14 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
 
+  // Separate Playlist Access
+  const [separatePlaylistAccess, setSeparatePlaylistAccess] = useState(false);
+  const [playlistEmailInput, setPlaylistEmailInput] = useState('');
+  const [playlistEmails, setPlaylistEmails] = useState<string[]>([]);
+  const [playlistDocId, setPlaylistDocId] = useState<string | null>(null);
+
+  // Scroll Lock
+
   // Scroll Lock
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -81,63 +92,91 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
   // Fetch Existing Requests for Import
   useEffect(() => {
-    if (!user || !pubKey) return;
-    const list: FileRequest[] = [];
-    user.get('requests').map().once((data: any, id: string) => {
-        if (data && data.title && id !== request.id) {
-            list.push({ ...data, id });
-            setExistingRequests([...list].sort((a, b) => b.createdAt - a.createdAt));
-        }
-    });
-  }, [user, pubKey, request.id]);
+    if (!user || !user.uid) return; 
+    const fetchRequests = async () => {
+      try {
+        const q = query(collection(db, 'requests'), where('ownerPub', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        const list: FileRequest[] = [];
+        querySnapshot.forEach((docSnap) => {
+          if (docSnap.exists() && docSnap.id !== request.id) { 
+            list.push({ id: docSnap.id, ...docSnap.data() } as FileRequest);
+          }
+        });
+        // Corrected sorting logic for createdAt
+        list.sort((a, b) => 
+            getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt)
+        );
+        setExistingRequests(list);
+      } catch (e) {
+        console.error("Error fetching existing requests for import:", e);
+      }
+    };
+    fetchRequests();
+  }, [user, request.id]);
 
   const handleImportSelect = async (importId: string) => {
     setSelectedImportId(importId);
     if (!importId) return;
-    
-    // We append to existing participants instead of replacing
-    const submitters = new Set<string>();
-    if (importFilter === 'submitted') {
-         await new Promise<void>(resolve => {
-             let done = false;
-             setTimeout(() => { done = true; resolve(); }, 1000);
-             gun.get('file_requests').get(importId).get('submissions').map().once((sub: any) => {
-                 if (done) return;
-                 if (sub && sub.uploaderPub) submitters.add(sub.uploaderPub);
-             });
-         });
-    }
 
-    gun.get('request_participants').get(importId).map().once(async (data: any, pub: string) => {
-        if (!data || !pub) return;
-        if (pub === pubKey) return;
-        if (selectedParticipants[pub]) return; // Skip if already in list
+    try {
+      const importRequestDocRef = doc(db, 'requests', importId);
+      const importRequestSnap = await getDoc(importRequestDocRef);
 
-        if (importFilter === 'accepted' && data.status !== 'accepted') return;
+      if (!importRequestSnap.exists()) {
+        console.warn("Import request not found:", importId);
+        return;
+      }
+
+      const importRequestData = importRequestSnap.data() as FileRequest;
+      const newParticipants: Record<string, any> = {};
+      const submitters = new Set<string>();
+
+      if (importFilter === 'submitted') {
+        const submissionsQuery = query(collection(importRequestDocRef, 'submissions'));
+        const submissionsSnapshot = await getDocs(submissionsQuery);
+        submissionsSnapshot.forEach(subDoc => {
+          const subData = subDoc.data();
+          if (subData.uploaderUid) {
+            submitters.add(subData.uploaderUid);
+          }
+        });
+      }
+      
+      const participantsData = importRequestData.participants || {}; 
+      const accessListEmails = importRequestData.accessList || []; 
+
+      for (const uid of Object.keys(participantsData)) {
+        const participant = participantsData[uid];
+        if (!participant || uid === user?.uid) continue;
+        if (selectedParticipants[uid]) continue; 
+
+        if (importFilter === 'accepted' && participant.status !== 'accepted') continue;
         if (importFilter === 'submitted') {
-            const hasPass = data.hasPass === true;
-            const hasSubmitted = submitters.has(pub);
-            if (!hasPass && !hasSubmitted) return;
+            const hasSubmitted = submitters.has(uid);
+            if (!hasSubmitted) continue; 
         }
+        
+        newParticipants[uid] = { 
+            status: 'pending', 
+            alias: participant.alias || 'Unknown' 
+        };
+      }
 
-        let alias = data.alias;
-        if (!alias || alias === 'Unknown') {
-            await new Promise<void>(resolve => {
-                gun.get('all_users').get(pub).once((u: any) => {
-                    if (u && u.alias) alias = u.alias;
-                    resolve();
-                });
-            });
+      const newPendingEmails = new Set(pendingEmails);
+      accessListEmails.forEach(email => {
+        if (!newPendingEmails.has(email)) {
+          newPendingEmails.add(email);
         }
+      });
+      setPendingEmails(Array.from(newPendingEmails));
 
-        setSelectedParticipants(prev => ({
-            ...prev,
-            [pub]: {
-                status: 'pending', 
-                alias: alias || 'Unknown' 
-            }
-        }));
-    });
+      setSelectedParticipants(prev => ({ ...prev, ...newParticipants }));
+
+    } catch (e) {
+      console.error("Error importing participants:", e);
+      error("Failed to import participants.");
+    }
   };
 
   // Re-run import if filter changes and an ID is selected
@@ -149,82 +188,129 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
   // Sync participants if data arrives after mount
   useEffect(() => {
-      const currentIsRefOrEmpty = !selectedParticipants || Object.keys(selectedParticipants).length === 0 || ('#' in selectedParticipants);
-      const newHasData = request.participants && Object.keys(request.participants).length > 0 && !('#' in request.participants);
+      const newHasData = request.participants && Object.keys(request.participants).length > 0; // Simplified check
       
-      if (currentIsRefOrEmpty && newHasData) {
+      if (!selectedParticipants || Object.keys(selectedParticipants).length === 0 || newHasData) { // Adjusted condition
           setSelectedParticipants(request.participants || {});
       }
   }, [request.participants]);
 
-  // Load pending emails
+  // Load pending emails and participant aliases from Firestore
   useEffect(() => {
-      if (request.pending_emails) {
-          try {
-              const emails = typeof request.pending_emails === 'string' 
-                  ? JSON.parse(request.pending_emails) 
-                  : request.pending_emails;
-              if (Array.isArray(emails)) {
-                  setPendingEmails(emails);
-              }
-          } catch (e) {
-              // ignore
-          }
+      // Set pending emails from request.accessList if available
+      if (request.accessList && Array.isArray(request.accessList)) {
+          setPendingEmails(request.accessList);
+      } else {
+        setPendingEmails([]);
       }
       
-      // Fetch aliases
-      Object.keys(selectedParticipants).forEach(pub => {
-          if (!selectedParticipants[pub].alias) {
-              gun.get('all_users').get(pub).once((u: any) => {
-                  if (u && u.alias) {
-                      setSelectedParticipants(prev => {
-                          if (prev[pub]) return { ...prev, [pub]: { ...prev[pub], alias: u.alias } };
-                          return prev;
-                      });
-                  }
-              });
-          }
-      });
-  }, []);
+      // Fetch aliases for selected participants from Firestore 'profiles' collection
+      const fetchAliases = async () => {
+        const participantUids = Object.keys(selectedParticipants);
+        if (participantUids.length === 0) return;
 
-  const searchUsers = (term: string) => {
+        for (const uid of participantUids) { // Changed pub to uid
+            if (!selectedParticipants[uid].alias) { // Changed pub to uid
+                try {
+                    const profileDoc = await getDoc(doc(db, 'profiles', uid)); // Changed pub to uid
+                    if (profileDoc.exists()) {
+                        const profileData = profileDoc.data() as UserProfile;
+                        if (profileData.alias) {
+                            setSelectedParticipants(prev => {
+                                if (prev[uid]) return { ...prev[uid], alias: profileData.alias }; // Changed pub to uid
+                                return prev;
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error fetching alias for", uid, e); // Changed pub to uid
+                }
+            }
+        }
+      };
+      fetchAliases();
+
+  }, [request.accessList, request.participants, selectedParticipants]);
+
+  // Fetch playlist data if linked
+  useEffect(() => {
+    if (request.playlistId) {
+        const fetchPlaylist = async () => {
+            try {
+                const playlistDocRef = doc(db, 'playlists', request.playlistId as string);
+                const playlistSnap = await getDoc(playlistDocRef);
+                if (playlistSnap.exists()) {
+                    const playlistData = playlistSnap.data() as Playlist;
+                    setPlaylistEmails(playlistData.accessList || []);
+                    setSeparatePlaylistAccess(true); // If a playlist exists, assume separate access is intended
+                    setPlaylistDocId(playlistSnap.id);
+                } else {
+                    console.warn("Linked playlist not found:", request.playlistId);
+                    setPlaylistEmails([]);
+                    setSeparatePlaylistAccess(false);
+                    setPlaylistDocId(null);
+                }
+            } catch (e) {
+                console.error("Error fetching linked playlist:", e);
+                setPlaylistEmails([]);
+                setSeparatePlaylistAccess(false);
+                setPlaylistDocId(null);
+            }
+        };
+        fetchPlaylist();
+    } else {
+        setPlaylistEmails([]);
+        setSeparatePlaylistAccess(false);
+        setPlaylistDocId(null);
+    }
+  }, [request.playlistId]);
+
+  const searchUsers = async (term: string) => { 
     setSearchTerm(term);
     if (term.length < 2) {
       setSearchResults([]);
       return;
     }
-    const results: UserProfile[] = [];
-    gun.get('all_users').map().once((user: any, pub: string) => {
-      if (user && user.alias && user.alias.toLowerCase().includes(term.toLowerCase())) {
-        if (!selectedParticipants[pub]) {
-             results.push({ ...user, pub });
-             setSearchResults(prev => {
-                const existing = new Set(prev.map(p => p.pub));
-                if (!existing.has(pub)) return [...prev, { ...user, pub }];
-                return prev;
-             });
+    try {
+      const q = query(collection(db, 'profiles'), 
+                      where('alias', '>=', term), 
+                      where('alias', '<=', term + '\uf8ff'));
+      const querySnapshot = await getDocs(q);
+      const results: UserProfile[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const profile = docSnap.data() as UserProfile;
+        if (profile.alias && profile.alias.toLowerCase().includes(term.toLowerCase()) && !selectedParticipants[docSnap.id]) {
+          results.push({ ...profile, uid: docSnap.id }); 
         }
-      }
-    });
+      });
+      setSearchResults(results);
+    } catch (e) {
+      console.error("Error searching users:", e);
+      setSearchResults([]);
+    }
   };
 
-  const addParticipant = (user: UserProfile) => {
+  const addParticipant = (userProfile: UserProfile) => { // Renamed user to userProfile to avoid conflict
     setSelectedParticipants(prev => ({
       ...prev,
-      [user.pub]: { alias: user.alias, status: accessMode === 'direct' ? 'accepted' : 'pending' }
+      [userProfile.uid]: { alias: userProfile.alias, status: accessMode === 'direct' ? 'accepted' : 'pending' } // Used userProfile.uid
     }));
     setSearchTerm('');
     setSearchResults([]);
   };
 
-  const removeParticipant = (pub: string) => {
+  const removeParticipant = (uid: string) => { // Changed pub to uid
      const newParts = { ...selectedParticipants };
-     delete newParts[pub];
+     delete newParts[uid]; // Changed pub to uid
      setSelectedParticipants(newParts);
   };
 
   const removeEmail = (email: string) => {
     setPendingEmails(pendingEmails.filter(e => e !== email));
+  };
+
+  const removePlaylistEmail = (email: string) => {
+    setPlaylistEmails(playlistEmails.filter(e => e !== email));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -238,23 +324,49 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         return;
     }
 
-    // Ensure userPair is available for signing operations
-    if (!userPair || !userPair.pub || !userPair.priv) {
+    if (!user?.uid && !participantEmail) {
         error("Authentication error: Please log in again to save changes.");
-        console.error("EditRequest: Save failed: User pair (with private key) is not available.");
+        console.error("EditRequest: Save failed: User not authenticated.");
         return;
     }
 
     setLoading(true);
-    console.log("EditRequest: Save process started, setLoading(true).");
-
-    try {
-      let artworkUrl = currentArtworkUrl;
-      if (file) {
+          console.log("EditRequest: Save process started, setLoading(true).");
+    
+        let finalPendingEmails = [...pendingEmails];
+        // Process any lingering email input for request
+        if (emailInput.trim()) {
+            const lingering = emailInput
+                .split(/[\s,]+/)
+                .map(s => s.trim())
+                .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !finalPendingEmails.includes(s));
+            if (lingering.length > 0) {
+                finalPendingEmails = Array.from(new Set([...finalPendingEmails, ...lingering]));
+                setPendingEmails(finalPendingEmails);
+                setEmailInput('');
+            }
+        }
+    
+        let finalPlaylistEmails = [...playlistEmails];
+        // Process any lingering email input for playlist
+        if (separatePlaylistAccess && playlistEmailInput.trim()) {
+            const lingeringPlaylist = playlistEmailInput
+                .split(/[\s,]+/)
+                .map(s => s.trim())
+                .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !finalPlaylistEmails.includes(s));
+            if (lingeringPlaylist.length > 0) {
+                finalPlaylistEmails = Array.from(new Set([...finalPlaylistEmails, ...lingeringPlaylist]));
+                setPlaylistEmails(finalPlaylistEmails);
+                setPlaylistEmailInput('');
+            }
+        }
+    
+        try {
+          let artworkUrl = currentArtworkUrl;      if (file) {
         console.log("EditRequest: Artwork file detected. Starting upload.");
         console.time("EditRequest_uploadArtwork");
-        const res = await uploadFile(file, userPair);
-        artworkUrl = res.url;
+        const result = await uploadToR2(file); // Use uploadToR2
+        artworkUrl = result.url;
         console.timeEnd("EditRequest_uploadArtwork");
         console.log(`EditRequest: Artwork uploaded. URL: ${artworkUrl}`);
       } else {
@@ -265,17 +377,12 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       // Generate invite code if one doesn't exist
       if (!inviteCode) {
           inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
-          
-          await new Promise<void>((resolve, reject) => {
-              gun.get('invites').get(inviteCode!).put({
-                  from: pubKey,
-                  createdAt: Date.now(),
-                  status: 'active',
-                  forRequest: request.id
-              }, (ack: any) => {
-                  if (ack.err) return reject(new Error(ack.err));
-                  resolve();
-              });
+          // Store invite code in Firestore
+          await updateDoc(doc(db, 'invites', inviteCode), {
+              fromUid: user?.uid || 'participant',
+              createdAt: serverTimestamp(),
+              status: 'active',
+              forRequest: request.id
           });
       }
 
@@ -298,75 +405,55 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         accessMode,
         artworkUrl,
         inviteCode,
-        pending_emails: JSON.stringify(pendingEmails),
+        accessList: pendingEmails, // Store as array directly in Firestore
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
-        allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true
-      };
-      
-      console.log("EditRequest: Starting GunDB metadata updates.");
-      
-      // Helper to wrap Gun put with timeout
-      const gunPut = (node: any, data: any, label: string) => {
-          return new Promise<void>((resolve, reject) => {
-              let resolved = false;
-              const timer = setTimeout(() => {
-                  if (resolved) return;
-                  resolved = true;
-                  console.warn(`EditRequest: Timeout waiting for ack on ${label}. Assuming success/offline.`);
-                  resolve();
-              }, 3000);
-
-              node.put(data, (ack: any) => {
-                  if (resolved) return;
-                  resolved = true;
-                  clearTimeout(timer);
-                  if (ack.err) {
-                      console.error(`EditRequest: Error on ${label}`, ack.err);
-                      reject(new Error(ack.err));
-                  } else {
-                      console.log(`EditRequest: Success on ${label}`);
-                      resolve();
-                  }
-              });
-          });
+        allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
+        previewTrackCount: previewTrackCount,
+        updatedAt: serverTimestamp() // Add an update timestamp
       };
 
-      await Promise.all([
-          gunPut(user.get('requests').get(request.id!), updates, "User Graph"),
-          gunPut(gun.get('file_requests').get(request.id!), updates, "Global Graph")
-      ]);
+      // Only update ownerPub if we have a valid UID to set
+      if (user?.uid) {
+          updates.ownerPub = user.uid;
+      }
+      
+      console.log("EditRequest: Starting Firestore metadata updates.");
+      const requestDocRef = doc(db, 'requests', request.id);
+      await updateDoc(requestDocRef, updates);
       
       console.log("EditRequest: Metadata updates complete.");
 
+      // Update linked Playlist document if it exists
+      if (playlistDocId) {
+          console.log("EditRequest: Updating linked playlist document.");
+          const playlistDocRef = doc(db, 'playlists', playlistDocId);
+          const playlistUpdates: any = {
+              liveDate: separatePlaylistAccess && finalPlaylistLiveDate ? new Date(finalPlaylistLiveDate).toISOString() : (finalDeadline ? new Date(finalDeadline).toISOString() : null),
+              accessList: separatePlaylistAccess ? finalPlaylistEmails : finalPendingEmails,
+              updatedAt: serverTimestamp()
+          };
+          await updateDoc(playlistDocRef, playlistUpdates);
+          console.log("EditRequest: Linked playlist document updated.");
+      }
+
       console.log("EditRequest: Starting participants handling.");
-      // Handle Participants (Graph Mode)
+      // Handle Participants (Firestore: stored as a map in the request document)
       const oldParticipants = request.participants || {};
-      const newParticipants = { ...selectedParticipants };
-      
-      // Mark removed users as null (deletion)
-      Object.keys(oldParticipants).forEach(key => {
-          if (!newParticipants[key]) {
-              newParticipants[key] = null;
-          }
+      const newParticipants = { ...selectedParticipants }; // selectedParticipants is already a map of uid to participant data
+
+      // Update participants field in the request document
+      await updateDoc(requestDocRef, {
+        participants: newParticipants
       });
-      
-      const participantsNode = gun.get('request_participants').get(request.id!);
-      const participantUpdatePromises: Promise<any>[] = [];
-      
-      Object.entries(newParticipants).forEach(([pub, data]) => {
-          participantUpdatePromises.push(gunPut(participantsNode.get(pub), data, `Participant ${pub}`));
-      });
-      
-      await Promise.all(participantUpdatePromises);
       console.log("EditRequest: Participant data updates resolved.");
       
       // Notify New Participants
       const existingKeys = Object.keys(oldParticipants);
-      const addedParticipants = Object.keys(selectedParticipants).filter(pub => !existingKeys.includes(pub));
+      const addedParticipants = Object.keys(selectedParticipants).filter(uid => !existingKeys.includes(uid)); // Changed pub to uid
       
       const notificationPromises: Promise<any>[] = [];
-      addedParticipants.forEach((partPub: string) => {
-          if (partPub === pubKey) return; 
+      addedParticipants.forEach(async (partUid: string) => { // Renamed partPub to partUid for clarity
+          if (user?.uid && partUid === user.uid) return; 
           
           const notifId = crypto.randomUUID();
           const message = accessMode === 'direct' 
@@ -378,13 +465,18 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
               type: 'invite',
               message,
               link: `/request/${request.id}`,
-              fromPub: pubKey as string,
-              createdAt: Date.now(),
+              fromUid: user?.uid || 'participant', // Use fromUid or fallback
+              createdAt: Date.now(), // Use client timestamp for notifications for immediate display if needed
               read: false,
               requestId: request.id!
           };
           
-          notificationPromises.push(gunPut(gun.get('inboxes').get(partPub).get(notifId), notification, `Notify ${partPub}`));
+          // Add notification to recipient's notifications subcollection or top-level collection
+          notificationPromises.push(
+              updateDoc(doc(db, 'profiles', partUid), {
+                  notifications: arrayUnion(notification)
+              })
+          );
       });
       
       await Promise.all(notificationPromises);
@@ -414,17 +506,20 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       setShowConfirmDelete(false);
       
       try {
-          // Soft delete / nullify
-          await user.get('requests').get(request.id!).put(null);
-          await gun.get('file_requests').get(request.id!).put(null);
+          // Soft delete by setting a 'deleted' flag
+          const requestDocRef = doc(db, 'requests', request.id);
+          await updateDoc(requestDocRef, {
+              deleted: true,
+              deletedAt: serverTimestamp()
+          });
           
           success("Request deleted.");
           onUpdate();
           onClose();
           navigate('/');
-      } catch (err) {
-          console.error(err);
-          error("Failed to delete request.");
+      } catch (err: any) {
+          console.error("Failed to delete request:", err);
+          error("Failed to delete request: " + err.message);
           setIsDeleting(false);
       }
   };
@@ -497,13 +592,35 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     </label>
                     <select 
                         value={accessMode}
-                        onChange={(e: any) => setAccessMode(e.target.value)}
+                        onChange={(e: any) => {
+                            const newMode = e.target.value;
+                            setAccessMode(newMode);
+                            if (newMode === 'volunteer') {
+                                setPendingEmails([]);
+                                setEmailInput('');
+                                setPlaylistEmails([]);
+                                setPlaylistEmailInput('');
+                            }
+                        }}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                     >
                         <option value="direct">Public (Participants auto-accepted)</option>
                         <option value="invite">Private (Invite Only)</option>
                         <option value="volunteer">Volunteer Pool</option>
                     </select>
+                </div>
+                <div>
+                    <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                        Preview Tracks Limit
+                        <Tooltip content="Number of tracks visible to participants after they submit but before the deadline. Set to 0 to hide all." icon />
+                    </label>
+                    <input 
+                        type="number" 
+                        min="0"
+                        value={previewTrackCount}
+                        onChange={e => setPreviewTrackCount(parseInt(e.target.value) || 0)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
+                    />
                 </div>
             </div>
 
@@ -550,6 +667,21 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                  Manage Participants
                  <Tooltip content="Build your invite list here. Users must be invited to see this request (unless Volunteer Mode is on)." icon />
                </label>
+
+               {/* Option for separate playlist access */}
+               <div className="flex items-center mb-4">
+                   <input 
+                       type="checkbox" 
+                       id="separatePlaylistAccess"
+                       checked={separatePlaylistAccess}
+                       onChange={e => setSeparatePlaylistAccess(e.target.checked)}
+                       className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                   />
+                   <label htmlFor="separatePlaylistAccess" className="text-gray-400 text-sm ml-2 cursor-pointer select-none">
+                       Use separate access list for playlist
+                   </label>
+                   <Tooltip content="If checked, the playlist will have its own separate invite list. Otherwise, it uses the request's participant list." icon />
+               </div>
                
                {/* Import from previous */}
                <div className="flex gap-2 items-end mb-4">
@@ -599,7 +731,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                    <div className="absolute z-10 w-full bg-gray-800 border border-gray-600 rounded mt-1 max-h-40 overflow-y-auto shadow-xl">
                      {searchResults.map(user => (
                        <div 
-                         key={user.pub}
+                         key={user.uid} // Changed user.pub to user.uid
                          onClick={() => addParticipant(user)}
                          className="p-2 hover:bg-gray-700 cursor-pointer text-white text-sm flex justify-between items-center"
                        >
@@ -626,13 +758,13 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                         
                         // Auto-process on paste or delimiter
                         if (val.includes(',') || val.includes('\n')) {
-                            const raw = val.split(/[\n, ]+/);
+                            const raw = val.split(/[\s,]+/); // Fixed regex
                             const valid: string[] = [];
                             let remaining = '';
 
                             raw.forEach((s, i) => {
                                 const trimmed = s.trim();
-                                const endsWithDelimiter = val.trimEnd().match(/[\n,]$/);
+                                const endsWithDelimiter = val.trimEnd().match(/[" ",\s,]$/); // Fixed regex
                                 const hasInternalSpace = trimmed.includes(' ');
 
                                 if (i === raw.length - 1 && !endsWithDelimiter) { 
@@ -651,7 +783,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                      onBlur={() => {
                         if (!emailInput.trim()) return;
                         const valid = emailInput
-                            .split(/[\n, ]+/)
+                            .split(/[\s,]+/) // Fixed regex
                             .map(s => s.trim())
                             .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !pendingEmails.includes(s));
                         
@@ -669,11 +801,11 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
 
                {/* Selected List */}
                {(Object.keys(selectedParticipants).length > 0 || pendingEmails.length > 0) && (
-                  <div className="flex flex-wrap gap-2">
-                     {Object.entries(selectedParticipants).map(([pub, p]: [string, any]) => (
-                        <span key={pub} className="bg-indigo-900/50 text-indigo-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-indigo-500/30">
-                          <span title={pub}>{p.alias || 'User'}</span>
-                          <button type="button" onClick={() => removeParticipant(pub)} className="hover:text-white font-bold px-1">×</button>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                     {Object.entries(selectedParticipants).map(([uid, p]: [string, any]) => ( // Changed pub to uid
+                        <span key={uid} className="bg-indigo-900/50 text-indigo-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-indigo-500/30">
+                          <span title={uid}>{p.alias || 'User'}</span>
+                          <button type="button" onClick={() => removeParticipant(uid)} className="hover:text-white font-bold px-1">×</button>
                         </span>
                      ))}
                      {pendingEmails.map(email => (
@@ -683,6 +815,84 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                        </span>
                      ))}
                   </div>
+               )}
+
+               {/* Separate Playlist Participants */}
+               {separatePlaylistAccess && (
+                <div className="border-t border-gray-800 pt-4 mt-4">
+                  <label className="block text-gray-400 text-sm mb-2 font-semibold flex items-center gap-2">
+                      Manage Playlist Participants
+                      <Tooltip content="Build the invite list specifically for the playlist. These users will only see the playlist content." icon />
+                  </label>
+                  <div className="mb-3">
+                    <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                        Invite by Email (Comma or newline separated)
+                        <Tooltip content="Add external users to the playlist. They will need the invite link to join." icon />
+                    </label>
+                    <div className="flex flex-col gap-2 mb-2">
+                      <textarea 
+                        value={playlistEmailInput}
+                        onChange={e => {
+                            const val = e.target.value;
+                            setPlaylistEmailInput(val);
+                            
+                            if (val.includes(',') || val.includes('\n')) {
+                                const raw = val.split(/[\n,\s]+/);
+                                const valid: string[] = [];
+                                let remaining = '';
+
+                                raw.forEach((s, i) => {
+                                    const trimmed = s.trim();
+                                    const endsWithDelimiter = val.trimEnd().match(/[`,]$/);
+                                    
+                                    const hasInternalSpace = trimmed.includes(' ');
+
+                                    if (i === raw.length - 1 && !endsWithDelimiter) { 
+                                        remaining = s; 
+                                    } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !playlistEmails.includes(trimmed)) {
+                                        valid.push(trimmed);
+                                    }
+                                });
+                                
+                                if (valid.length > 0) {
+                                    setPlaylistEmails(prev => Array.from(new Set([...prev, ...valid])));
+                                    setPlaylistEmailInput(remaining); 
+                                }
+                            }
+                        }}
+                        onBlur={() => {
+                            if (!playlistEmailInput.trim()) return;
+                            const valid = playlistEmailInput
+                                .split(/[\n,\s]+/)
+                                .map(s => s.trim())
+                                .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !playlistEmails.includes(s));
+                            
+                            if (valid.length > 0) {
+                                setPlaylistEmails(prev => Array.from(new Set([...prev, ...valid])));
+                                setPlaylistEmailInput(''); 
+                            }
+                        }}
+                        className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none h-20 text-sm"
+                        placeholder="playlistfriend@example.com (Press Enter or Comma to add)"
+                      />
+                      <p className="text-xs text-gray-500">Paste a list of emails here. Separate with commas or newlines.</p>
+                    </div>
+                  </div>
+                  
+                  {(playlistEmails.length > 0) && (
+                    <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                       <label className="block text-gray-400 text-xs mb-2 uppercase tracking-wide">Selected Playlist Participants</label>
+                       <div className="flex flex-wrap gap-2">
+                         {playlistEmails.map(email => (
+                           <span key={email} className="bg-yellow-900/50 text-yellow-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-yellow-700/50">
+                             {email}
+                             <button type="button" onClick={() => removePlaylistEmail(email)} className="hover:text-white font-bold px-1">×</button>
+                           </span>
+                         ))}
+                       </div>
+                    </div>
+                  )}
+                </div>
                )}
             </div>
             )}

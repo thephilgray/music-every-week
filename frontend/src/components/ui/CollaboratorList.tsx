@@ -1,29 +1,40 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useGun } from '../../contexts/GunContext';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { db } from '../../lib/firebase';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'; // Added query imports
+import type { UserProfile } from '../../types';
 
 interface CollaboratorListProps {
-  uploaderPub: string;
-  submissionId?: string;
+  uploaderPub: string; // This can be UID or old Pub Key
+  uploaderEmail?: string; // Added email fallback
   byline?: string;
   collaborators?: Record<string, boolean> | string;
   className?: string;
+  linkProfile?: boolean; // Pass directly from submission
+  proxyFor?: { alias: string, pub?: string }; // Pass directly
 }
 
-export function CollaboratorList({ uploaderPub, submissionId, byline, collaborators, className = "text-gray-500 text-sm truncate" }: CollaboratorListProps) {
-  const { gun } = useGun();
+export function CollaboratorList({ 
+    uploaderPub, 
+    uploaderEmail,
+    byline, 
+    collaborators, 
+    className = "text-gray-500 text-sm truncate",
+    linkProfile = true, // Default to true if not provided (though submission usually has it)
+    proxyFor
+}: CollaboratorListProps) {
+  
   const [names, setNames] = useState<Record<string, string>>({});
   const [isExpanded, setIsExpanded] = useState(false);
-  const [loadedCollaborators, setLoadedCollaborators] = useState<Record<string, boolean>>({});
-  const [isLinked, setIsLinked] = useState(true); // Default to linked
-  const [proxyFor, setProxyFor] = useState<{ alias: string, pub?: string } | null>(null);
+  const [loadedCollaborators, setLoadedCollaborators] = useState<string[]>([]);
+  const [resolvedUid, setResolvedUid] = useState<string | undefined>(uploaderPub);
 
+  // Parse Collaborators
   useEffect(() => {
-      let found = false;
       let rawCollabs = collaborators;
+      const keys: string[] = [];
 
-      // 1. Try Direct Prop Parsing
       if (rawCollabs) {
           if (typeof rawCollabs === 'string') {
               try {
@@ -34,98 +45,67 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
           }
 
           if (rawCollabs && typeof rawCollabs === 'object') {
-              const keys = Object.keys(rawCollabs).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
-              if (keys.length > 0) {
-                  // @ts-ignore
-                  setLoadedCollaborators(rawCollabs);
-                  found = true;
-              }
-          }
-      }
-
-      // 2. If not found in prop, OR if we need to check linkProfile/proxy status, try Source
-      if (submissionId && uploaderPub && gun) {
-          // Fetch entire submission node to get linkProfile, proxyFor AND collaborators if needed
-          gun.user(uploaderPub).get('submissions').get(submissionId).once((data: any) => {
-              if (data) {
-                  // Check linkProfile
-                  if (data.linkProfile !== undefined) {
-                      setIsLinked(data.linkProfile);
-                  }
-                  
-                  // Check Proxy
-                  if (data.proxyFor) {
-                      setProxyFor(data.proxyFor);
-                  }
-
-                  // If we didn't have collaborators from props, use fetched ones
-                  if (!found) {
-                      let collabData = data.collaborators;
-                      if (typeof collabData === 'string') {
-                          try { collabData = JSON.parse(collabData); } catch (e) {}
-                      }
-
-                      if (collabData && typeof collabData === 'object') {
-                          const clean: Record<string, boolean> = {};
-                          Object.keys(collabData).forEach(k => {
-                              if (k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#')) {
-                                  clean[k] = collabData[k];
-                              }
-                          });
-                          setLoadedCollaborators(clean);
-                      }
-                  }
-              }
-          });
-      }
-      else if (!found && collaborators && typeof collaborators === 'object' && !Array.isArray(collaborators)) {
-          // Legacy Fallback for direct graph ref (rare now)
-          // @ts-ignore
-          const soul = collaborators['#'];
-          if (typeof soul === 'string' && soul) { 
-              gun.get(soul).once((data: any) => {
-                  if (data) {
-                      const clean: Record<string, boolean> = {};
-                      Object.keys(data).forEach(k => {
-                          if (k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#')) {
-                              clean[k] = data[k];
-                          }
-                      });
-                      setLoadedCollaborators(clean);
+              Object.keys(rawCollabs).forEach(k => {
+                  if (k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#')) {
+                      keys.push(k);
                   }
               });
           }
       }
-  }, [collaborators, gun, submissionId, uploaderPub]);
+      setLoadedCollaborators(keys);
+  }, [collaborators]);
 
+  // Fetch Names from Firestore
   useEffect(() => {
-    // 1. Fetch Uploader Name
-    if (uploaderPub && !names[uploaderPub]) {
-        gun.get('all_users').get(uploaderPub).once((u: any) => {
-            if (u && (u.alias || u.displayName)) {
-                setNames(prev => ({ ...prev, [uploaderPub]: u.displayName || u.alias }));
+    let isMounted = true;
+
+    const fetchName = async (uid: string) => {
+        if (!uid || names[uid]) return;
+        try {
+            const profileDoc = await getDoc(doc(db, 'profiles', uid));
+            if (profileDoc.exists() && isMounted) {
+                const data = profileDoc.data() as UserProfile;
+                setNames(prev => ({ ...prev, [uid]: data.displayName || data.alias || 'Unknown' }));
             }
-        });
+        } catch (e) {
+            console.error("Error fetching profile name:", uid, e);
+        }
+    };
+
+    // If we have a UID (uploaderPub), fetch it.
+    if (uploaderPub) {
+        setResolvedUid(uploaderPub);
+        fetchName(uploaderPub);
+    } else if (uploaderEmail) {
+        // If no UID but Email, try to find profile
+        const resolveEmail = async () => {
+            try {
+                const q = query(collection(db, 'profiles'), where('email', '==', uploaderEmail));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty && isMounted) {
+                    const docSnap = querySnapshot.docs[0];
+                    const data = docSnap.data() as UserProfile;
+                    const uid = docSnap.id;
+                    setResolvedUid(uid);
+                    setNames(prev => ({ ...prev, [uid]: data.displayName || data.alias || 'Unknown' }));
+                } else if (isMounted) {
+                    // No profile found, fallback to email username
+                    setNames(prev => ({ ...prev, 'email_fallback': uploaderEmail.split('@')[0] }));
+                }
+            } catch (e) {
+                // Ignore
+            }
+        };
+        resolveEmail();
     }
 
-    // 2. Fetch Collaborators (from loaded map)
-    const keys = Object.keys(loadedCollaborators).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
-    
-    keys.forEach(pub => {
-        if (pub && !names[pub]) {
-            gun.get('all_users').get(pub).once((u: any) => {
-                if (u && (u.alias || u.displayName)) {
-                    setNames(prev => ({ ...prev, [pub]: u.displayName || u.alias }));
-                }
-            });
-        }
-    });
-  }, [uploaderPub, loadedCollaborators, gun]);
+    loadedCollaborators.forEach(uid => fetchName(uid));
 
-  const collabPubs = Object.keys(loadedCollaborators).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
-  const hasCollaborators = collabPubs.length > 0;
+    return () => { isMounted = false; };
+  }, [uploaderPub, uploaderEmail, loadedCollaborators]);
+
   
-  // Render Uploader Name (Link or Text based on isLinked)
+  // Render Uploader Name (Link or Text based on linkProfile)
   const renderUploader = () => {
       if (proxyFor) {
           return (
@@ -138,14 +118,19 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
           );
       }
 
-      const displayPub = uploaderPub || 'unknown';
-      const name = names[displayPub] || displayPub.substring(0, 8);
+      // Determine display name
+      // 1. If resolvedUid exists, check names[resolvedUid]
+      // 2. If not, check names['email_fallback']
+      // 3. Fallback to uploaderPub substring or 'Unknown'
       
-      if (!uploaderPub) return <span className="text-gray-400">Unknown</span>;
+      const uidToUse = resolvedUid || uploaderPub;
+      const name = names[uidToUse] || names['email_fallback'] || (uidToUse ? uidToUse.substring(0, 8) : (uploaderEmail ? uploaderEmail.split('@')[0] : 'Unknown'));
+      
+      if (!uidToUse && !uploaderEmail) return <span className="text-gray-400">Unknown</span>;
 
-      if (isLinked) {
+      if (linkProfile && uidToUse) {
           return (
-              <Link to={`/profile/${uploaderPub}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
+              <Link to={`/profile/${uidToUse}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
                   {byline || name}
               </Link>
           );
@@ -154,22 +139,23 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
       }
   };
 
+  const hasCollaborators = loadedCollaborators.length > 0;
+
   // Case 1: No collaborators.
   if (!hasCollaborators) {
       return (
           <div className={className}>
-              by {renderUploader()}
+              {renderUploader()} 
           </div>
       );
   }
 
   // Case 2: Collaborators exist.
-  // If Byline exists and NOT expanded -> Show Byline (clickable/text).
   if (byline && !isExpanded) {
-      if (isLinked) {
+      if (linkProfile) {
         return (
             <div className={className}>
-                by <button 
+                <button 
                     onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
                     className="hover:text-white hover:underline relative z-10 font-medium flex items-center gap-1 inline-flex"
                     title="Click to see connected profiles"
@@ -180,45 +166,32 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
             </div>
         );
       } else {
-          // If not linked but has collaborators, we probably still want to allow expanding to see them?
-          // Or if anonymous, do we hide collaborators too?
-          // User said "byline should not be linked to their profile (or that of any collaborators)".
-          // This implies if they uncheck it, NO links.
-          // So the byline should be text.
-          // But can we expand? If we expand, we see collaborators.
-          // If "anonymous" means "don't link ME", maybe collaborators are okay?
-          // But user said "(or that of any collaborators)".
-          // So effectively, it's just text. No expansion?
-          // "byline should not be linked ... (or that of any collaborators)"
-          // This suggests if not linked, it's just a text string.
           return (
               <div className={className}>
-                  by <span className="text-gray-400">{byline}</span>
+                  <span className="text-gray-400">{byline}</span>
               </div>
           );
       }
   }
 
   // Case 3: Expanded OR No Byline -> Show Full List
-  // If !isLinked, we just show names as text.
-  const displayPub = uploaderPub || 'unknown';
-  const uploaderName = names[displayPub] || displayPub.substring(0, 8);
+  const uidToUse = resolvedUid || uploaderPub;
+  const uploaderName = names[uidToUse] || names['email_fallback'] || (uidToUse ? uidToUse.substring(0, 8) : (uploaderEmail ? uploaderEmail.split('@')[0] : 'Unknown'));
 
   return (
       <div className={className}>
           <span className="flex items-center gap-1 flex-wrap">
-              by 
-              {isLinked && uploaderPub ? (
-                  <Link to={`/profile/${uploaderPub}`} className="hover:text-white hover:underline ml-1 relative z-10" onClick={e => e.stopPropagation()}>
+              {linkProfile && uidToUse ? (
+                  <Link to={`/profile/${uidToUse}`} className="hover:text-white hover:underline ml-1 relative z-10" onClick={e => e.stopPropagation()}>
                       {uploaderName}
                   </Link>
               ) : (
                   <span className="text-gray-400 ml-1">{uploaderName}</span>
               )}
               
-              {collabPubs.map((pub) => (
+              {loadedCollaborators.map((pub) => (
                   <span key={pub}>{'| '}
-                      {isLinked ? (
+                      {linkProfile ? (
                           <Link to={`/profile/${pub}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
                               {names[pub] || pub.substring(0, 8)}
                           </Link>
@@ -229,7 +202,7 @@ export function CollaboratorList({ uploaderPub, submissionId, byline, collaborat
               ))}
               
               {/* Collapse Button if Byline exists */}
-              {byline && isLinked && (
+              {byline && linkProfile && (
                   <button 
                       onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
                       className="ml-2 text-blue-400 hover:text-white relative z-10"

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Loader2, FileText } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
@@ -7,13 +7,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Waveform } from '../components/ui/Waveform';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
+import { CollaboratorList } from '../components/ui/CollaboratorList'; // Added import
 import { SubmitTrack } from '../components/SubmitTrack';
+import { EditRequest } from '../components/EditRequest'; // Added import
 import { CommentSection } from '../components/CommentSection';
 import { fixUrl } from '../lib/url';
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation(); // Added useLocation
   const { participantEmail, isAdmin } = useAuth();
   const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
   
@@ -29,32 +32,10 @@ export function RequestDetail() {
   const [submissionCommentCounts, setSubmissionCommentCounts] = useState<Record<string, number>>({});
   
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
-
-  useEffect(() => {
-    if (!id) return;
-
-    const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
-    
-    const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
-      const counts: Record<string, number> = {};
-      commentsSnap.docs.forEach(commentDoc => {
-        const commentData = commentDoc.data();
-        if (commentData.submissionId) {
-          counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
-        }
-      });
-      setSubmissionCommentCounts(counts);
-    }, (err) => {
-      console.error("Error fetching submission comment counts:", err);
-      setSubmissionCommentCounts({}); // Clear counts on error
-    });
-
-    return () => unsubscribe(); // Unsubscribe on cleanup
-  }, [id]); // Depend only on id
+  const [isEditRequestOpen, setIsEditRequestOpen] = useState(false); // Added state
 
   // Load Request Data
-  useEffect(() => {
-    async function loadRequest() {
+  const loadRequest = useCallback(async () => {
       if (!id) return;
       setIsLoading(true);
       try {
@@ -86,11 +67,9 @@ export function RequestDetail() {
       } finally {
         setIsLoading(false);
       }
-    }
-    loadRequest();
   }, [id]);
 
-  // Load Submissions
+    // Load Submissions
   const loadSubmissions = useCallback(async () => {
       if (!id) return;
       try {
@@ -105,6 +84,77 @@ export function RequestDetail() {
           console.error("Error fetching submissions:", err);
       }
   }, [id]);
+
+  useEffect(() => {
+    loadRequest();
+  }, [loadRequest]);
+
+  // Scroll to submission logic
+  useEffect(() => {
+    if (submissions.length === 0) return;
+
+    const params = new URLSearchParams(location.search);
+    const submissionId = params.get('submission');
+    // Extract parameters from URL
+
+    if (submissionId) {
+        // Wait a tick for rendering
+        setTimeout(() => {
+            const element = document.getElementById(`submission-${submissionId}`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Also expand it
+                setExpandedSubmissionId(submissionId);
+            }
+        }, 100);
+    }
+  }, [submissions, location.search]);
+
+      
+
+        useEffect(() => {
+
+          if (!id) return;
+
+      
+
+          const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
+
+          
+
+          const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
+
+            const counts: Record<string, number> = {};
+
+            commentsSnap.docs.forEach(commentDoc => {
+
+              const commentData = commentDoc.data();
+
+              if (commentData.submissionId) {
+
+                counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
+
+              }
+
+            });
+
+            setSubmissionCommentCounts(counts);
+
+          }, (err) => {
+
+            console.error("Error fetching submission comment counts:", err);
+
+            setSubmissionCommentCounts({}); // Clear counts on error
+
+          });
+
+      
+
+          return () => unsubscribe(); // Unsubscribe on cleanup
+
+        }, [id]); // Depend only on id
+
+
 
   useEffect(() => {
       loadSubmissions();
@@ -148,6 +198,27 @@ export function RequestDetail() {
   }
   const isPlaylistLive = now > playlistUnlockTime;
 
+  // Determine which tracks this user is allowed to preview if they have submitted
+  const previewTrackIds = useMemo(() => {
+      const previewCount = request?.previewTrackCount !== undefined ? request.previewTrackCount : 5;
+      if (!hasSubmitted || previewCount === 0 || isOwner || isAdmin) return [];
+      
+      const otherSubs = submissions.filter(s => s.uploaderEmail?.toLowerCase() !== participantEmail?.toLowerCase());
+      
+      // Hash email to predictably rotate assigned tracks
+      let hash = 0;
+      if (participantEmail) {
+          for (let i = 0; i < participantEmail.length; i++) {
+              hash = participantEmail.charCodeAt(i) + ((hash << 5) - hash);
+          }
+      }
+      
+      const startIndex = Math.abs(hash) % Math.max(1, otherSubs.length);
+      const rotatedSubs = [...otherSubs.slice(startIndex), ...otherSubs.slice(0, startIndex)];
+      
+      return rotatedSubs.slice(0, previewCount).map(s => s.id);
+  }, [submissions, participantEmail, hasSubmitted, request?.previewTrackCount, isOwner, isAdmin]);
+
   // Filtering (Stubbed for now, or simple local filter)
   const filteredSubmissions = useMemo(() => {
       // Logic for AI filtering could go here
@@ -166,7 +237,12 @@ export function RequestDetail() {
           return true; // Locked for non-submitters
       }
       
-      // If not live yet, locked
+      // If not live yet, locked UNLESS it's a preview track for a submitter
+      const previewCount = request?.previewTrackCount !== undefined ? request.previewTrackCount : 5;
+      if (hasSubmitted && previewCount > 0 && previewTrackIds.includes(sub.id)) {
+          return false;
+      }
+      
       return true;
   };
 
@@ -277,12 +353,12 @@ export function RequestDetail() {
                                 >
                                     {copied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
                                 </button>
-                                {/* Edit Request Button (Disabled for now) */}
+                                {/* Edit Request Button */}
                                 {isOwner && (
                                     <button 
-                                        disabled
-                                        className="p-2 text-gray-600 cursor-not-allowed rounded-full transition"
-                                        title="Edit Request (Coming Soon)"
+                                        onClick={() => setIsEditRequestOpen(true)}
+                                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
+                                        title="Edit Request"
                                     >
                                         <Edit className="w-5 h-5" />
                                     </button>
@@ -412,10 +488,15 @@ export function RequestDetail() {
                                                 {locked ? 'Hidden Track' : sub.title}
                                             </h4>
                                             <div className="flex items-center gap-2">
-                                                {/* CollaboratorList replacement for now */}
-                                                <span className="text-sm text-gray-400 truncate">
-                                                    {sub.byline || 'Anonymous'}
-                                                </span>
+                                                <CollaboratorList 
+                                                    uploaderPub={sub.uploaderUid || sub.originalUploaderPub} 
+                                                    uploaderEmail={sub.uploaderEmail} // Added email fallback
+                                                    byline={sub.byline} 
+                                                    collaborators={sub.collaborators} 
+                                                    linkProfile={sub.linkProfile}
+                                                    proxyFor={sub.proxyFor}
+                                                    className="text-sm text-gray-400 truncate"
+                                                />
                                                 {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
                                             </div>
                                             {sub.waveform && sub.waveform.length > 0 && !locked && (
@@ -515,10 +596,13 @@ export function RequestDetail() {
                                 )}
                                 
                                 {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-                                    <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+                                    <div className="mt-4 cursor-default" onClick={(e) => e.stopPropagation()}>
                                         <CommentSection 
                                             requestId={id} 
                                             submissionId={sub.id} 
+                                            submissionOwnerUid={sub.uploaderUid || sub.originalUploaderPub}
+                                            submissionOwnerEmail={sub.uploaderEmail}
+                                            highlightCommentId={new URLSearchParams(location.search).get('comment') || undefined}
                                         />
                                     </div>
                                 )}
@@ -539,9 +623,20 @@ export function RequestDetail() {
                     accessMode={request.accessMode}
                 />
             )}
+
+            {/* Edit Request Modal */}
+            {isEditRequestOpen && request && (
+                <EditRequest 
+                    request={request}
+                    onClose={() => setIsEditRequestOpen(false)}
+                    onUpdate={() => {
+                        loadRequest();
+                    }}
+                />
+            )}
             
             {/* Bottom Spacer for Player */}
             <div className="h-32" />
         </div>
     );
-}
+};

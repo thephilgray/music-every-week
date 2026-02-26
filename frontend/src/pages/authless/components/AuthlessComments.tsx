@@ -173,7 +173,7 @@ export function AuthlessComments({ requestId, submissionId, currentUserEmail, us
                         isOwnComment={comment.authorEmail === currentUserEmail}
                         onDelete={comment.authorEmail === currentUserEmail ? handleDelete : undefined}
                         onEdit={comment.authorEmail === currentUserEmail ? handleEditComment : undefined}
-                        onAuthorClick={(email) => console.log("Navigate to profile for:", email)}
+                        onAuthorClick={(email: string) => console.log("Navigate to profile for:", email)}
                     />
                 ))}
                 {comments.length === 0 && (

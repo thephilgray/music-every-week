@@ -157,7 +157,7 @@ export function Player() { // Removed props
                     )}
                 </div>
                 <div className={`text-gray-500 text-xs truncate ${!isMinimized ? 'text-lg md:text-xs mt-1 md:mt-0' : ''}`}>
-                    {currentTrack?.byline || (currentTrack?.uploaderPub ? `${currentTrack.uploaderPub.substring(0, 8)}...` : 'Select a track to play')}
+                    {currentTrack?.byline || (currentTrack?.uploaderUid ? `${currentTrack.uploaderUid.substring(0, 8)}...` : 'Select a track to play')}
                 </div>
             </div>
             

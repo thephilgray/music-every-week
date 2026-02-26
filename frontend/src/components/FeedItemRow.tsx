@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Music } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
 import { fixUrl } from '../lib/url';
+import { db } from '../lib/firebase';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import type { UserProfile } from '../types';
 
 export interface FeedItemData {
     id: string;
     type: 'comment' | 'submission';
     text: string;
-    authorPub?: string; // Optional now
+    authorUid?: string; // Changed from authorPub
     authorEmail?: string; // Add email support
     authorName?: string; // Add direct name support (byline)
     submissionId: string;
@@ -24,44 +26,74 @@ interface FeedItemRowProps {
 }
 
 export function FeedItemRow({ item }: FeedItemRowProps) {
-    const { gun } = useGun();
     const [authorAlias, setAuthorAlias] = useState<string>(item.authorName || 'Unknown User');
     const [authorAvatar, setAuthorAvatar] = useState<string | null>(null);
+    const [resolvedAuthorUid, setResolvedAuthorUid] = useState<string | undefined>(item.authorUid);
 
     useEffect(() => {
         let isMounted = true;
         
-        // If we have a direct name (byline), use it as primary, but still try to fetch avatar if pub exists
+        // Initial setup
         if (item.authorName) {
             setAuthorAlias(item.authorName);
+        } else if (item.authorEmail) {
+            setAuthorAlias(item.authorEmail.split('@')[0]);
+        }
+        
+        // If we have a UID, update state (can be overridden by fetchProfile if we find a better one via email)
+        if (item.authorUid) {
+            setResolvedAuthorUid(item.authorUid);
         }
 
-        if (item.authorPub && gun) {
-            gun.get('all_users').get(item.authorPub).once((u: any) => {
-                if (isMounted && u) {
-                    // Only override alias if we don't have a direct name (or maybe we prefer the profile alias?)
-                    // Let's prefer the profile alias if available, as byline might be ad-hoc?
-                    // Or prefer byline if it's a submission?
-                    // Current logic: Profile alias > "Unknown".
-                    if (u.alias) setAuthorAlias(u.alias);
-                    setAuthorAvatar(u.avatarUrl);
+        const fetchProfile = async () => {
+            try {
+                let profileData: UserProfile | null = null;
+                let uid = item.authorUid;
+
+                // 1. Try by UID
+                if (uid) {
+                    const profileDoc = await getDoc(doc(db, 'profiles', uid));
+                    if (profileDoc.exists()) {
+                        profileData = profileDoc.data() as UserProfile;
+                    }
+                } 
+                
+                // 2. Try by Email if no UID or profile not found by UID
+                if (!profileData && item.authorEmail) {
+                     const q = query(collection(db, 'profiles'), where('email', '==', item.authorEmail));
+                     const querySnapshot = await getDocs(q);
+                     if (!querySnapshot.empty) {
+                         const profileDoc = querySnapshot.docs[0];
+                         profileData = profileDoc.data() as UserProfile;
+                         uid = profileDoc.id; // Found a UID!
+                         if (isMounted) setResolvedAuthorUid(uid);
+                     }
                 }
-            });
-        } else if (item.authorEmail) {
-            // Fallback to email if no pub and no name
-            if (!item.authorName) {
-                setAuthorAlias(item.authorEmail.split('@')[0]);
+
+                if (isMounted && profileData) {
+                    if (profileData.avatarUrl) setAuthorAvatar(profileData.avatarUrl);
+                    if (!item.authorName && (profileData.displayName || profileData.alias)) {
+                        setAuthorAlias(profileData.displayName || profileData.alias);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching profile for feed item:", error);
             }
-        }
+        };
+
+        fetchProfile();
 
         return () => { isMounted = false; };
-    }, [gun, item.authorPub, item.authorName, item.authorEmail]);
+    }, [item.authorUid, item.authorName, item.authorEmail]);
+
+    // Use resolvedAuthorUid for the link
+    const profileLink = resolvedAuthorUid ? `/profile/${resolvedAuthorUid}` : '#';
 
     return (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-4 flex gap-2 md:gap-4 hover:border-gray-700 transition">
             {/* Avatar */}
             <div className="flex-shrink-0">
-                <Link to={item.authorPub ? `/profile/${item.authorPub}` : '#'}>
+                <Link to={profileLink}>
                     <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-800 overflow-hidden">
                         {authorAvatar ? (
                             <img src={fixUrl(authorAvatar)} alt={authorAlias} className="w-full h-full object-cover" />
@@ -76,14 +108,16 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
             <div className="flex-1 min-w-0">
                 <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-1 gap-1 md:gap-0">
                     <div className="text-sm">
-                        <Link to={item.authorPub ? `/profile/${item.authorPub}` : '#'} className="font-bold text-white hover:underline">
+                        <Link to={profileLink} className={`font-bold text-white hover:underline ${!resolvedAuthorUid ? 'pointer-events-none' : ''}`}>
                             {authorAlias}
                         </Link>
                         <span className="text-gray-500 ml-1">
                             {item.type === 'submission' ? 'uploaded a track' : 'commented on'}
                         </span>
                     </div>
-                    <span className="text-xs text-gray-600 whitespace-nowrap self-end md:self-auto">{new Date(item.createdAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-gray-600 whitespace-nowrap self-end md:self-auto">
+                        {item.createdAt > 0 ? new Date(item.createdAt).toLocaleDateString() : 'Date unknown'}
+                    </span>
                 </div>
 
                 <div className="bg-gray-950 rounded-lg p-3 mb-2 border border-gray-800/50 flex items-center gap-3">

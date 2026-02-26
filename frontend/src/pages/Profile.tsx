@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff, Shield } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext'; // Replaced useGun
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
-import { uploadFile } from '../lib/upload';
+import { uploadToR2 } from '../lib/r2'; // Replaced uploadFile
+import { db } from '../lib/firebase'; // Added firebase db import
+import { doc, updateDoc, collection, query, where, getDocs, onSnapshot, serverTimestamp } from 'firebase/firestore'; // Added specific firestore functions
 import { fixUrl } from '../lib/url';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -15,18 +17,20 @@ export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { gun, user, pubKey, isAdmin, userPair } = useGun(); // Destructure userPair
+  const { user, isAdmin, participantEmail: authParticipantEmail } = useAuth(); // Replaced useGun context
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
   
-  const targetPub = routePub || pubKey;
-  const isOwnProfile = pubKey === targetPub;
+  const targetUid = routePub || user?.uid; // Changed pubKey to user?.uid and targetPub to targetUid
+  const isOwnProfile = user?.uid === targetUid; // Changed pubKey to user?.uid and targetPub to targetUid
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'submissions' | 'requests'>('submissions');
+  
+  const [resolvedProfileUid, setResolvedProfileUid] = useState<string | null>(null);
   
   // Edit Mode
   const [isEditing, setIsEditing] = useState(false);
@@ -40,8 +44,8 @@ export function Profile() {
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  // Track linked public keys for migration
-  const linkedPubsRef = useRef(new Set<string>());
+  // Track linked public keys for migration (not used for Firebase)
+  // const linkedPubsRef = useRef(new Set<string>()); // Removed - not needed for Firebase directly
 
   useEffect(() => {
     if (searchParams.get('edit') === 'true' && isOwnProfile) {
@@ -50,245 +54,210 @@ export function Profile() {
   }, [searchParams, isOwnProfile]);
 
   useEffect(() => {
-    if (!targetPub) return;
+    setResolvedProfileUid(null); // Reset resolved UID on dependency change
+    if (!targetUid && !authParticipantEmail) {
+      setLoading(false); // No UID or email, so nothing to load
+      return;
+    }
+
+    // If targetUid is already present (admin or /profile/:pub), use it directly
+    if (targetUid) {
+      setResolvedProfileUid(targetUid);
+    } else if (authParticipantEmail) {
+      // If no targetUid, but participant email is available, query by email
+      const q = query(collection(db, 'profiles'), where('email', '==', authParticipantEmail));
+      getDocs(q).then(snapshot => {
+        if (!snapshot.empty) {
+          setResolvedProfileUid(snapshot.docs[0].id);
+        } else {
+          // No profile found for this email
+          setLoading(false);
+        }
+      }).catch(e => {
+        console.error("Error resolving profile by email:", e);
+        setLoading(false);
+      });
+    }
+  }, [targetUid, authParticipantEmail]);
+
+  useEffect(() => {
+    if (!resolvedProfileUid) {
+      setProfile(null);
+      setSubmissions([]);
+      setRequests([]);
+      setLoading(false); // Ensure loading is false if UID is not resolved
+      return;
+    }
+
     setLoading(true);
     setProfile(null);
     setSubmissions([]);
     setRequests([]);
-    
-    // Check for Reverse Migration (Old Profile -> New Profile Redirect)
-    // If this profile has been migrated, redirect to the new one.
-    if (targetPub) {
-        gun.get('migrations_reverse').get(targetPub).once((newPub: any) => {
-            if (newPub && typeof newPub === 'string' && newPub !== targetPub) {
-                console.log(`Redirecting migrated profile ${targetPub} -> ${newPub}`);
-                navigate(`/profile/${newPub}`, { replace: true });
-                return;
-            }
-        });
-    }
-    
-    // Reset linked pubs
-    linkedPubsRef.current = new Set([targetPub]);
 
-    const profileNode = gun.get('all_users').get(targetPub); 
-    // We will setup submission listeners dynamically
-    const requestsNode = gun.get('file_requests');
-    const migrationsNode = gun.get('migrations').get(targetPub);
+    let isMounted = true;
+    const unsubscribeFunctions: (() => void)[] = [];
 
-    let isMounted = true; 
-    const submissionListeners = new Map<string, { uploader: string; listener: (data: any, key: string) => void }>();
-    const migrationListeners = new Set<string>();
-
-    const profileListener = (data: any) => {
-        if (!isMounted || !data) return;
-        let parsedLinks = [];
-        if (typeof data.links === 'string') {
-            try { parsedLinks = JSON.parse(data.links); } catch (e) { parsedLinks = []; }
-        } else if (Array.isArray(data.links)) { parsedLinks = data.links; }
-        setProfile(currentProfile => {
-            if (currentProfile && currentProfile.pub === targetPub) { 
-                return { ...currentProfile, ...data, links: parsedLinks };
-            }
-            return { ...data, pub: targetPub, links: parsedLinks }; 
-        });
-        if (isEditing === false) { 
-            setEditAlias(data.alias || '');
-            setEditDisplayName(data.displayName || data.alias || '');
-            setEditBio(data.bio || '');
-            setEditLocation(data.location || '');
-            setEditLinks(parsedLinks);
-        }
-    };
-    profileNode.on(profileListener);
-
-    // Helper to setup submission listener for ANY pub (target or migrated)
-    const setupSubmissionListener = (sourcePub: string) => {
-        if (migrationListeners.has(sourcePub)) return; // Prevent duplicate listeners
-        migrationListeners.add(sourcePub);
-
-        gun.user(sourcePub).get('submissions').map().on((refData: any, subId: string) => {
-            if (!isMounted) return;
-
-            // Determine uploader pub (default to sourcePub if refData is not a specific pointer)
-            const uploader = (typeof refData === 'string' && refData.length > 1) ? refData : sourcePub;
-
-            if (refData === null) { 
-                setSubmissions(prev => prev.filter(s => s.id !== subId));
-                const listenerInfo = submissionListeners.get(subId);
-                if (listenerInfo) {
-                    gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); 
-                    submissionListeners.delete(subId);
-                }
-            } else if (refData) { 
-                const existingListenerInfo = submissionListeners.get(subId);
-                if (!existingListenerInfo || existingListenerInfo.uploader !== uploader) {
-                    if (existingListenerInfo) {
-                        gun.user(existingListenerInfo.uploader).get('submissions').get(subId).off(); 
-                    }
-
-                    const subListener = (subData: any) => { 
-                        if (!isMounted) return;
-
-                        if (subData === null) { 
-                            setSubmissions(prev => prev.filter(s => s.id !== subId));
-                            const currentListenerInfo = submissionListeners.get(subId);
-                            if (currentListenerInfo) {
-                                gun.user(currentListenerInfo.uploader).get('submissions').get(subId).off(); 
-                                submissionListeners.delete(subId);
-                            }
-                        } else if (subData && subData.title && subData.requestId) {
-                            let parsedWaveform = subData.waveform;
-                            if (typeof subData.waveform === 'string') {
-                                try { parsedWaveform = JSON.parse(subData.waveform); } catch (e) { parsedWaveform = []; }
-                            }
-                            
-                            const fetchAndSetSubmission = async () => {
-                                if (!isMounted) return; 
-
-                                const reqData = await new Promise<any>(resolve => gun.get('file_requests').get(subData.requestId).once(resolve));
-                                let isHidden = subData.hiddenFromProfile;
-                                if (isHidden === undefined && reqData && reqData.accessMode) {
-                                    if (reqData.accessMode !== 'direct') { isHidden = true; }
-                                }
-                                const updatedSubmission = { ...subData, id: subId, waveform: parsedWaveform, hiddenFromProfile: isHidden };
-                                
-                                setSubmissions(prev => {
-                                    const exists = prev.find(s => s.id === subId);
-                                    if (exists) {
-                                        return prev.map(s => s.id === subId ? updatedSubmission : s)
-                                                    .sort((a, b) => b.createdAt - a.createdAt);
-                                    } else {
-                                        return [...prev, updatedSubmission]
-                                                    .sort((a, b) => b.createdAt - a.createdAt);
-                                    }
-                                });
-                            };
-                            fetchAndSetSubmission();
-                        }
-                    };
-                    gun.user(uploader).get('submissions').get(subId).on(subListener);
-                    submissionListeners.set(subId, { uploader, listener: subListener });
-                }
-            }
-        });
-    };
-
-    // 1. Setup listeners for Target Pub
-    setupSubmissionListener(targetPub);
-
-    // 2. Setup Migration Listener
-    migrationsNode.map().on((isLinked: any, oldPub: string) => {
+    // Profile Listener
+    const profileDocRef = doc(db, 'profiles', resolvedProfileUid);
+    unsubscribeFunctions.push(onSnapshot(profileDocRef, (docSnap) => {
         if (!isMounted) return;
-        if (isLinked && !linkedPubsRef.current.has(oldPub)) {
-            console.log(`Found migrated account: ${oldPub}`);
-            linkedPubsRef.current.add(oldPub);
-            
-            // Fetch submissions from old account
-            setupSubmissionListener(oldPub);
-
-            // Fetch requests from old account (via user graph fallback)
-            gun.user(oldPub).get('requests').map().once((_: any, reqId: string) => {
-                if (!reqId) return;
-                gun.get('file_requests').get(reqId).once((data: any) => {
-                   if (data && isMounted) {
-                        setRequests(prev => {
-                            const existingIndex = prev.findIndex(r => r.id === reqId);
-                            const updatedRequest = { ...data, id: reqId };
-                            if (existingIndex > -1) {
-                                return prev.map((r, i) => (i === existingIndex ? updatedRequest : r));
-                            } else {
-                                return [...prev, updatedRequest].sort((a, b) => b.createdAt - a.createdAt);
-                            }
-                        });
-                   }
-                });
-            });
-        }
-    });
-
-    // 3. Global Requests Listener (filtered by owned/linked pubs)
-    const requestsListener = (data: any, key: string) => {
-        if (!isMounted) return;
-        if (data === null) { 
-            setRequests(prev => prev.filter(r => r.id !== key));
-        } else if (data && (data.ownerPub === targetPub || linkedPubsRef.current.has(data.ownerPub))) {
-            setRequests(prev => {
-                const existingIndex = prev.findIndex(r => r.id === key);
-                const updatedRequest = { ...data, id: key };
-
-                if (existingIndex > -1) {
-                    return prev.map((r, i) => (i === existingIndex ? updatedRequest : r));
-                } else {
-                    return [...prev, updatedRequest].sort((a, b) => b.createdAt - a.createdAt);
+        if (docSnap.exists()) {
+            const data = docSnap.data() as UserProfile;
+            setProfile(currentProfile => {
+                if (currentProfile && currentProfile.uid === resolvedProfileUid) {
+                    return { ...currentProfile, ...data, uid: docSnap.id };
                 }
+                return { ...data, uid: docSnap.id };
             });
+            if (isEditing === false) { // Only update edit states if not actively editing
+                setEditAlias(data.alias || '');
+                setEditDisplayName(data.displayName || data.alias || '');
+                setEditBio(data.bio || '');
+                setEditLocation(data.location || '');
+                setEditLinks(data.links || []);
+            }
+        } else {
+            setProfile(null);
         }
-    };
-    requestsNode.map().on(requestsListener);
+        // Only set loading to false after all subscriptions have potentially fired, or if profile is explicitly null
+        // This will be handled by the cleanup or a combined completion logic if needed, for now keep simple
+        // For initial load, set loading to false here for profile specifically.
+        if (isMounted) setLoading(false); 
+    }));
 
-    profileNode.once(() => {
-        if (isMounted) {
-            setLoading(false); 
-        }
-    });
+    // Submissions Listener
+    // Prefer querying by Email if available to catch all historical/authless submissions
+    const identifierField = profile?.email ? 'uploaderEmail' : 'uploaderUid'; // Fallback to UID if no email
+    const identifierValue = profile?.email || resolvedProfileUid;
+
+    const submissionsQuery = query(
+        collection(db, 'submissions'),
+        where(identifierField, '==', identifierValue),
+        where('deleted', '!=', true)
+    );
+    unsubscribeFunctions.push(onSnapshot(submissionsQuery, (snapshot) => {
+        if (!isMounted) return;
+        const fetchedSubmissions: Submission[] = [];
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            fetchedSubmissions.push({
+                id: docSnap.id,
+                ...data,
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+            } as Submission);
+        });
+        setSubmissions(fetchedSubmissions.sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
+    }));
 
     return () => {
-        isMounted = false; 
-        profileNode.off(); 
-        requestsNode.off(); 
-        migrationsNode.off();
-
-        submissionListeners.forEach((listenerInfo, subId) => {
-            gun.user(listenerInfo.uploader).get('submissions').get(subId).off(); 
-        });
-        
-        // Turn off listeners for all migrated pubs
-        migrationListeners.forEach(pub => {
-             gun.user(pub).get('submissions').off();
-        });
+      isMounted = false;
+      unsubscribeFunctions.forEach(unsub => unsub());
     };
+  }, [resolvedProfileUid, isEditing, profile?.email]); // Added profile?.email dependency
 
-  }, [targetPub, gun, isEditing]);
+  // Third useEffect: Fetch Requests (by ownerEmail OR hostEmail)
+  useEffect(() => {
+    if (!resolvedProfileUid && !profile?.email) {
+      setRequests([]);
+      return;
+    }
+
+    let isMounted = true;
+    const unsubscribeFunctions: (() => void)[] = [];
+    const allRequests: Record<string, FileRequest> = {}; 
+
+    // Query 1: by owner (Email preferred)
+    const ownerIdentifierField = profile?.email ? 'ownerEmail' : 'ownerPub';
+    const ownerIdentifierValue = profile?.email || resolvedProfileUid;
+
+    if (ownerIdentifierValue) {
+      const ownerRequestsQuery = query(
+          collection(db, 'requests'),
+          where(ownerIdentifierField, '==', ownerIdentifierValue),
+          where('deleted', '!=', true)
+      );
+      unsubscribeFunctions.push(onSnapshot(ownerRequestsQuery, (snapshot) => {
+          if (!isMounted) return;
+          snapshot.docChanges().forEach(change => {
+            const data = change.doc.data();
+            const request: FileRequest = {
+                id: change.doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+            } as FileRequest;
+            if (change.type === 'added' || change.type === 'modified') {
+                allRequests[request.id!] = request;
+            } else if (change.type === 'removed') {
+                delete allRequests[request.id!];
+            }
+          });
+          setRequests(Object.values(allRequests).sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
+      }));
+    }
+
+    // Query 2: by hostEmail (if profile email is available and different from ownerEmail query)
+    // If ownerEmail query handles it, we might duplicate, but Map handles dedupe.
+    // hostEmail is explicit "Host", ownerEmail is "Creator". Usually same.
+    if (profile?.email) {
+        const hostEmailRequestsQuery = query(
+            collection(db, 'requests'),
+            where('hostEmail', '==', profile.email),
+            where('deleted', '!=', true)
+        );
+        unsubscribeFunctions.push(onSnapshot(hostEmailRequestsQuery, (snapshot) => {
+            if (!isMounted) return;
+            snapshot.docChanges().forEach(change => {
+                const data = change.doc.data();
+                const request: FileRequest = {
+                    id: change.doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+                } as FileRequest;
+                if (change.type === 'added' || change.type === 'modified') {
+                    allRequests[request.id!] = request;
+                } else if (change.type === 'removed') {
+                    delete allRequests[request.id!];
+                }
+            });
+            setRequests(Object.values(allRequests).sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
+        }));
+    }
+
+    return () => {
+      isMounted = false;
+      unsubscribeFunctions.forEach(unsub => unsub());
+    };
+  }, [resolvedProfileUid, profile?.email]);
 
   const handleSaveProfile = async () => {
-      if (!isOwnProfile || !user) return;
+      if (!isOwnProfile || !user || !user.uid) return;
       setIsSaving(true);
       
       try {
           let avatarUrl = profile?.avatarUrl;
           if (editAvatar) {
-              // Ensure userPair is available for signing operations
-              if (!userPair || !userPair.pub || !userPair.priv) {
-                  error("Authentication error: Please log in again to save profile changes.");
-                  console.error("Profile save failed: User pair (with private key) is not available.");
-                  setIsSaving(false);
-                  return;
-              }
-              const res = await uploadFile(editAvatar, userPair);
+              const res = await uploadToR2(editAvatar); // Use uploadToR2
               avatarUrl = res.url;
           }
           
-          const updates: any = {
+          const updates: Partial<UserProfile> = {
               displayName: editDisplayName,
               bio: editBio,
               location: editLocation,
-              links: JSON.stringify(editLinks),
-              avatarUrl: avatarUrl || ''
+              links: editLinks, // Firebase handles arrays directly
+              avatarUrl: avatarUrl || '',
+              updatedAt: serverTimestamp()
           };
           
-          // Update Public Profile
-          gun.get('all_users').get(pubKey as string).put(updates);
-          
-          // Update Private Profile (Auth) if needed, but 'all_users' is the source of truth for directory.
-          user.get('profile').put(updates); // Use proper 'profile' node structure
+          // Update Profile in Firestore
+          await updateDoc(doc(db, 'profiles', user.uid), updates);
           
           setIsEditing(false);
           setEditAvatar(null);
           success("Profile updated successfully");
       } catch (e) {
           console.error("Failed to save profile", e);
-          error("Failed to save profile");
+          error("Failed to save profile: " + (e as Error).message);
       } finally {
           setIsSaving(false);
       }
@@ -309,74 +278,75 @@ export function Profile() {
   };
 
   const executePromoteAdmin = async () => {
-      if (!targetPub) return;
+      if (!targetUid) return; // Changed targetPub to targetUid
       setShowPromoteConfirm(false);
 
       try {
-          await gun.get('all_users').get(targetPub).get('isAdmin').put(true);
+          await updateDoc(doc(db, 'profiles', targetUid), { isAdmin: true }); // Firebase update
           success("User promoted to Admin.");
-          // Optimistic update
           setProfile(prev => prev ? { ...prev, isAdmin: true } : null);
       } catch (e) {
           console.error(e);
-          error("Failed to promote user.");
+          error("Failed to promote user: " + (e as Error).message);
       }
   };
 
   const executeAdminDelete = async () => {
-      if (!targetPub) return;
+      if (!targetUid) return; // Changed targetPub to targetUid
       setShowDeleteConfirm(false);
 
       try {
-          await gun.get('all_users').get(targetPub).put(null);
+          await updateDoc(doc(db, 'profiles', targetUid), { deleted: true, deletedAt: serverTimestamp() }); // Soft delete in Firebase
           success("User removed from directory.");
           navigate('/directory');
       } catch (e) {
           console.error(e);
-          error("Failed to remove user.");
+          error("Failed to remove user: " + (e as Error).message);
       }
   };
 
-  const handleToggleVisibility = (e: React.MouseEvent, sub: Submission) => {
+  const handleToggleVisibility = async (e: React.MouseEvent, sub: Submission) => { // Made async
       e.stopPropagation();
       if (!isOwnProfile || !user || !sub.id) return;
       
       const newValue = !sub.hiddenFromProfile;
       
-      // Update local state immediately for UI response
       setSubmissions(prev => prev.map(s => 
           s.id === sub.id ? { ...s, hiddenFromProfile: newValue } : s
       ));
 
-      // Update GunDB
-      user.get('submissions').get(sub.id).get('hiddenFromProfile').put(newValue);
+      try {
+          // Update global submissions collection
+          await updateDoc(doc(db, 'submissions', sub.id), { hiddenFromProfile: newValue, updatedAt: serverTimestamp() });
+          success("Submission visibility updated.");
+      } catch (err) {
+          console.error("Failed to toggle submission visibility:", err);
+          error("Failed to update submission visibility.");
+      }
   };
 
-  const handleToggleRequestVisibility = (e: React.MouseEvent, req: FileRequest) => {
+  const handleToggleRequestVisibility = async (e: React.MouseEvent, req: FileRequest) => { // Made async
       e.stopPropagation();
       if (!isOwnProfile || !user || !req.id) return;
       
-      // If hiddenFromProfile is undefined, calculate default state first to toggle correctly
       const currentHidden = req.hiddenFromProfile !== undefined 
           ? req.hiddenFromProfile 
           : (req.accessMode !== 'direct');
 
       const newValue = !currentHidden;
       
-      // Update local state
       setRequests(prev => prev.map(r => 
           r.id === req.id ? { ...r, hiddenFromProfile: newValue } : r
       ));
 
-      // Update GunDB (User's private requests node is source of truth for visibility preferences usually, 
-      // but 'file_requests' is public. We should update the public node for this property so others see/don't see it.)
-      // Note: 'file_requests' is global. Updating it there affects everyone. 
-      // Profile visibility is usually a property of the *Reference* in the user's profile, but here we list by querying all requests.
-      // So we must update the request object itself or the user's graph reference.
-      // Since the query is `gun.get('file_requests').map()`, we update the request object.
-      // Ideally, this should be a user-specific setting, but sticking to the current architecture:
-      user.get('requests').get(req.id).get('hiddenFromProfile').put(newValue);
-      gun.get('file_requests').get(req.id).get('hiddenFromProfile').put(newValue);
+      try {
+          // Update requests collection
+          await updateDoc(doc(db, 'requests', req.id), { hiddenFromProfile: newValue, updatedAt: serverTimestamp() });
+          success("Request visibility updated.");
+      } catch (err) {
+          console.error("Failed to toggle request visibility:", err);
+          error("Failed to update request visibility.");
+      }
   };
 
   if (loading && !profile) {
@@ -388,15 +358,9 @@ export function Profile() {
   }
 
   // Filter Submissions for View
-  // Rule: Hidden if hiddenFromProfile is true.
-  // Default: Hidden if request.accessMode !== 'direct' AND hiddenFromProfile is undefined.
-  // We need request info for submissions.
   const visibleSubmissions = submissions.filter(s => {
       if (isOwnProfile) return true;
       if (s.hiddenFromProfile !== undefined) return !s.hiddenFromProfile;
-      // If undefined, check accessMode logic (handled in fetch or here if we have request data)
-      // Since we don't have request data easily linked here without fetching, 
-      // we updated fetch logic to populate hiddenFromProfile based on request.
       return true; 
   });
 
@@ -566,8 +530,8 @@ export function Profile() {
                              <div className="min-w-0">
                                  <h3 className="text-white font-medium truncate">{sub.title}</h3>
                                  <CollaboratorList 
-                                    uploaderPub={sub.uploaderPub!} 
-                                    submissionId={sub.id}
+                                    uploaderPub={sub.uploaderUid || sub.originalUploaderPub} 
+                                    uploaderEmail={sub.uploaderEmail}
                                     byline={sub.byline} 
                                     collaborators={sub.collaborators} 
                                     className="text-gray-500 text-xs truncate"

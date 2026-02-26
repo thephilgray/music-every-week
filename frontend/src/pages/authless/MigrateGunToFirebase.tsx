@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGun } from '../../contexts/GunContext';
 import { db, auth } from '../../lib/firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { fixUrl } from '../../lib/url';
 import { useNavigate } from 'react-router-dom';
@@ -342,6 +342,85 @@ export function MigrateGunToFirebase() {
     }
   };
 
+  const handleMigrateProfiles = async () => {
+      setLoading(true);
+      setLogs([]);
+      addLog("Starting Bulk Profile Migration from GunDB 'all_users'...");
+
+      try {
+          const gunUsers: any[] = [];
+          
+          await new Promise<void>((resolve) => {
+              let count = 0;
+              setTimeout(() => {
+                  addLog("Scanning finished (timeout).");
+                  resolve();
+              }, 10000); // 10s scan
+
+              gun.get('all_users').map().once((data: any, key: string) => {
+                  if (data && data.email) {
+                      gunUsers.push({ ...data, pub: key });
+                      count++;
+                      if (count % 10 === 0) addLog(`Scanned ${count} users...`);
+                  }
+              });
+          });
+
+          addLog(`Found ${gunUsers.length} users in GunDB with emails.`);
+
+          for (const gUser of gunUsers) {
+              const email = gUser.email;
+              addLog(`Processing user: ${email} (${gUser.alias || 'No Alias'})`);
+
+              // Parse Links
+              let links = gUser.links;
+              if (typeof links === 'string') {
+                  try { links = JSON.parse(links); } catch (e) { links = []; }
+              }
+
+              // Prepare Data
+              const profileData = {
+                  alias: gUser.alias || '',
+                  displayName: gUser.displayName || gUser.alias || '',
+                  bio: gUser.bio || '',
+                  location: gUser.location || '',
+                  avatarUrl: fixUrl(gUser.avatarUrl || ''),
+                  links: Array.isArray(links) ? links : [],
+                  migratedFromGunPub: gUser.pub,
+                  updatedAt: serverTimestamp()
+              };
+
+              // Check Firestore
+              const q = query(collection(db, 'profiles'), where('email', '==', email));
+              const querySnapshot = await getDocs(q);
+
+              if (!querySnapshot.empty) {
+                  // Update existing
+                  const docRef = querySnapshot.docs[0].ref;
+                  await updateDoc(docRef, profileData); // Merge update
+                  addLog(`  -> Updated existing profile for ${email}`);
+              } else {
+                  // Create new (Optional: might skip creating if we only want to update existing auth users)
+                  // But user asked to "migrate the rest", so creation is safer to ensure data isn't lost.
+                  await addDoc(collection(db, 'profiles'), {
+                      email: email,
+                      ...profileData,
+                      createdAt: serverTimestamp(),
+                      isAdmin: !!gUser.isAdmin
+                  });
+                  addLog(`  -> Created NEW profile for ${email}`);
+              }
+          }
+          addLog("Profile Migration Complete.");
+
+      } catch (err: any) {
+          console.error(err);
+          addLog(`Error: ${err.message}`);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   useEffect(() => {
       if (logContainerRef.current) {
           logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
@@ -359,27 +438,43 @@ export function MigrateGunToFirebase() {
             <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </button>
 
-        <h1 className="text-2xl font-bold mb-6">Migrate Gun Request</h1>
+        <h1 className="text-2xl font-bold mb-6">Migrate Gun Data</h1>
         
-        <div className="mb-6">
-            <label className="block text-sm font-medium mb-1">Gun Request ID (Node ID)</label>
-            <input 
-                type="text" 
-                value={requestId}
-                onChange={(e) => setRequestId(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                placeholder="e.g. request_uuid_..."
-            />
+        <div className="mb-8 border-b border-gray-800 pb-8">
+            <h2 className="text-lg font-bold mb-4 text-blue-400">1. Migrate Single Request</h2>
+            <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Gun Request ID (Node ID)</label>
+                <input 
+                    type="text" 
+                    value={requestId}
+                    onChange={(e) => setRequestId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+                    placeholder="e.g. request_uuid_..."
+                />
+            </div>
+            <button
+                onClick={handleMigrate}
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full flex justify-center items-center gap-2"
+            >
+                {loading ? <Loader2 className="animate-spin" /> : 'Migrate Request'}
+            </button>
         </div>
 
-        <button
-            onClick={handleMigrate}
-            disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full flex justify-center items-center gap-2"
-        >
-            {loading && <Loader2 className="animate-spin" />}
-            {loading ? 'Migrating...' : 'Start Migration'}
-        </button>
+        <div>
+            <h2 className="text-lg font-bold mb-4 text-green-400">2. Migrate All User Profiles</h2>
+            <p className="text-sm text-gray-400 mb-4">
+                Scans all GunDB users and updates/creates Firestore profiles based on email matches. 
+                Fixes missing aliases/bios for migrated users.
+            </p>
+            <button
+                onClick={handleMigrateProfiles}
+                disabled={loading}
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full flex justify-center items-center gap-2"
+            >
+                {loading ? <Loader2 className="animate-spin" /> : 'Migrate All Profiles'}
+            </button>
+        </div>
 
         <div ref={logContainerRef} className="mt-8 bg-black p-4 rounded font-mono text-xs text-green-400 h-64 overflow-y-auto border border-gray-800">
             {logs.map((log, i) => (

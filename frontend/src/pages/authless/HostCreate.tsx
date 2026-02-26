@@ -25,6 +25,7 @@ export function HostCreate() {
     requestEmails: '',
     playlistEmails: '',
     separatePlaylistAccess: false,
+    previewTrackCount: 5,
   });
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function HostCreate() {
             requestEmails: reqEmails,
             playlistEmails: isSeparate ? plEmails : '',
             separatePlaylistAccess: isSeparate,
+            previewTrackCount: reqData.previewTrackCount !== undefined ? reqData.previewTrackCount : 5,
           });
 
         } catch (err) {
@@ -122,7 +124,8 @@ export function HostCreate() {
             deadline: formData.deadline,
             playlistLiveDate: finalPlaylistLiveDate,
             accessList: requestEmailList,
-            artworkUrl
+            artworkUrl,
+            previewTrackCount: formData.previewTrackCount
           });
 
           // Show Success View with Links
@@ -152,7 +155,8 @@ export function HostCreate() {
             playlistId: playlistRef.id,
             createdAt: serverTimestamp(),
             hostEmail: user.email,
-            artworkUrl
+            artworkUrl,
+            previewTrackCount: formData.previewTrackCount
           });
 
           const baseUrl = window.location.origin;
@@ -229,7 +233,7 @@ export function HostCreate() {
                         setFormData({ 
                             title: '', description: '', deadline: '', 
                             playlistLiveDate: '', separatePlaylistDate: false,
-                            requestEmails: '', playlistEmails: '', separatePlaylistAccess: false 
+                            requestEmails: '', playlistEmails: '', separatePlaylistAccess: false, previewTrackCount: 5 
                         });
                         setArtworkFile(null);
                     }}
@@ -336,6 +340,20 @@ export function HostCreate() {
                 />
               </div>
             )}
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-1">
+                Preview Tracks Limit
+              </label>
+              <p className="text-xs text-gray-500 mb-2">Number of tracks visible to participants after they submit but before the deadline. Set to 0 to hide all.</p>
+              <input
+                type="number"
+                min="0"
+                value={formData.previewTrackCount}
+                onChange={(e) => setFormData({ ...formData, previewTrackCount: parseInt(e.target.value) || 0 })}
+                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+              />
+            </div>
 
             <label className="flex items-center gap-2 mb-4 cursor-pointer">
               <input

@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Music, Check, Loader2 } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext'; // Replaced useGun
 import { useToast } from '../contexts/ToastContext';
 import type { Playlist, Submission } from '../types';
+import { db } from '../lib/firebase'; // Added firebase db import
+import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, where } from 'firebase/firestore'; // Added specific firestore functions
+import { getTimestampAsNumber } from '../lib/utils';
 
 interface AddToPlaylistProps {
   submission: Submission;
@@ -11,7 +14,7 @@ interface AddToPlaylistProps {
 }
 
 export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
-  const { user, pubKey } = useGun();
+  const { user } = useAuth(); // Replaced useGun context
   const { success, error } = useToast();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,56 +22,77 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    const plMap = new Map<string, Playlist>();
+    if (!user || !user.uid) return;
     
-    user.get('playlists').map().on((data: any, key: string) => {
+    const playlistsQuery = query(
+      collection(db, 'playlists'),
+      where('ownerPub', '==', user.uid) // Use ownerPub
+    );
+
+    const unsubscribe = onSnapshot(playlistsQuery, (snapshot) => {
+      const fetchedPlaylists: Playlist[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
         if (data && data.title) {
-            let tracks = [];
-            if (typeof data.tracks === 'string') {
-                try { tracks = JSON.parse(data.tracks); } catch (e) {}
-            } else if (Array.isArray(data.tracks)) {
-                tracks = data.tracks;
-            }
-            
-            plMap.set(key, { ...data, id: key, tracks });
-            setPlaylists(Array.from(plMap.values()).sort((a, b) => b.createdAt - a.createdAt));
-            setLoading(false);
+            fetchedPlaylists.push({ 
+                id: docSnap.id, 
+                ...data,
+                createdAt: getTimestampAsNumber(data.createdAt)
+            } as Playlist);
         }
+      });
+      // Sort by createdAt desc, explicitly converting to number
+      fetchedPlaylists.sort((a, b) => 
+        getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt)
+      );
+      setPlaylists(fetchedPlaylists);
+      setLoading(false);
+    }, (err) => {
+        console.error("Error fetching playlists:", err);
+        error("Failed to load playlists.");
+        setLoading(false);
     });
-    
-    // Timeout fallback
+
+    // Timeout fallback (might not be needed with onSnapshot)
     const timer = setTimeout(() => setLoading(false), 1500);
-    return () => clearTimeout(timer);
+    return () => {
+        unsubscribe(); // Cleanup the listener
+        clearTimeout(timer);
+    };
   }, [user]);
 
   const handleCreate = async () => {
-      if (!newPlaylistTitle.trim()) return;
+      if (!newPlaylistTitle.trim() || !user?.uid) return;
       setIsCreating(true);
       
-      const id = crypto.randomUUID();
-      const playlist: Playlist = {
-          id,
-          title: newPlaylistTitle,
-          ownerPub: pubKey as string,
-          createdAt: Date.now(),
-          tracks: []
-      };
-      
-      // 1. Save New Playlist
-      await new Promise<void>(resolve => {
-          user.get('playlists').get(id).put({
-              ...playlist,
-              tracks: JSON.stringify([])
-          }, () => resolve());
-      });
-      
-      setNewPlaylistTitle('');
-      setIsCreating(false);
-      success("Playlist created");
+      try {
+          // Firebase will auto-generate ID
+          const newPlaylistRef = await addDoc(collection(db, 'playlists'), {
+              title: newPlaylistTitle,
+              ownerPub: user.uid, // Use ownerPub
+              createdAt: serverTimestamp(),
+              tracks: []
+          });
+          
+          const newPlaylist: Playlist = {
+              id: newPlaylistRef.id,
+              title: newPlaylistTitle,
+              ownerPub: user.uid, // Use ownerPub
+              createdAt: serverTimestamp(), // Will be resolved by Firebase
+              tracks: []
+          };
 
-      // 2. Auto-add current track
-      handleAdd(playlist);
+          setNewPlaylistTitle('');
+          setIsCreating(false);
+          success("Playlist created");
+
+          // Auto-add current track
+          handleAdd(newPlaylist);
+      } catch (err: any) {
+          console.error("Error creating playlist:", err);
+          error("Failed to create playlist: " + err.message);
+          setIsCreating(false);
+      }
   };
 
   const handleAdd = async (playlist: Playlist) => {
@@ -83,18 +107,25 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
       const trackEntry = {
           submissionId: submission.id,
           requestId: submission.requestId,
-          addedAt: Date.now(),
+          addedAt: serverTimestamp(), // Use server timestamp for addedAt
           title: submission.title,
           artist: submission.byline || 'Unknown'
       };
       
-      const updatedTracks = [...playlist.tracks, trackEntry];
-      
-      // Update
-      user.get('playlists').get(playlist.id).get('tracks').put(JSON.stringify(updatedTracks));
-      
-      success(`Added to "${playlist.title}"`);
-      onClose();
+      try {
+          const playlistDocRef = doc(db, 'playlists', playlist.id);
+          // Use arrayUnion to add without overwriting existing tracks
+          await updateDoc(playlistDocRef, {
+              tracks: [...playlist.tracks, trackEntry], // Replace tracks array completely
+              updatedAt: serverTimestamp()
+          });
+          
+          success(`Added to "${playlist.title}"`);
+          onClose();
+      } catch (err: any) {
+          console.error("Error adding track to playlist:", err);
+          error("Failed to add track to playlist: " + err.message);
+      }
   };
 
   return createPortal(

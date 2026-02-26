@@ -1,178 +1,278 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
+import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext'; // Changed to useAuth
 import { Skeleton } from '../components/ui/Skeleton';
-import type { Notification } from '../types';
+import type { Notification, UserProfile } from '../types'; // Added UserProfile for fetching sender alias
+import { db } from '../lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore'; // Removed writeBatch
+import { getTimestampAsNumber } from '../lib/utils'; // Import the utility
 
 export function Inbox() {
-  const { user, pubKey, gun } = useGun();
+  const { user, participantEmail, isLoading: authLoading } = useAuth(); // Changed from useGun
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention'>('all');
   
   // Privacy & Contacts
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
   const [contacts, setContacts] = useState<Set<string>>(new Set());
   const [filterAI, setFilterAI] = useState(false);
+  const isMounted = useRef(true); // Moved to top level
 
-  useEffect(() => {
-    if (!user || !pubKey) return;
-
-    // 1. Load Privacy Settings
-    user.get('settings').get('privacy').get('acceptUnsolicited').on((data: any) => {
-        setAcceptUnsolicited(data === false ? false : true);
-    });
-    
-    // Load Content Preferences
-    user.get('settings').get('content').get('filterAI').on((data: any) => {
-        setFilterAI(!!data);
-    });
-
-    // 2. Load Contacts
-    user.get('contacts').map().on((data: any, pub: string) => {
-        if (data) {
-            setContacts(prev => new Set(prev).add(pub));
+  // Define updateNotificationState inside Inbox, but outside useEffect
+const updateNotificationState = useCallback(async (
+    isMountedRef: React.MutableRefObject<boolean>, // Renamed for clarity
+    currentNotifsMap: Map<string, Notification & { fromAlias?: string }>
+) => {
+    // Fetch aliases for all notifications in the map
+    const uidsToFetch = new Set<string>();
+    currentNotifsMap.forEach(n => {
+        // Only fetch if we don't have a name and have a valid UID (not 'participant')
+        if (!n.fromName && !n.fromAlias && n.fromUid && n.fromUid !== 'participant') {
+            uidsToFetch.add(n.fromUid);
         }
     });
 
-    const notifsMap = new Map<string, Notification & { fromAlias?: string }>();
-
-    const updateState = () => {
-        // Sort: Priority (Invite > Comment > Submission) then Date (Newest first)
-        const sorted = Array.from(notifsMap.values()).sort((a, b) => {
-            const priority = { invite: 3, comment: 2, submission: 1 };
-            const pA = priority[a.type as keyof typeof priority] || 0;
-            const pB = priority[b.type as keyof typeof priority] || 0;
-            
-            // 1. Sort by Priority (Higher is better)
-            if (pA !== pB) return pB - pA;
-            
-            // 2. Sort by Date (Newest is better)
-            return b.createdAt - a.createdAt; 
+    if (uidsToFetch.size > 0) {
+        const profilePromises = Array.from(uidsToFetch).map(async (uid) => {
+            try {
+                const profileDoc = await getDoc(doc(db, 'profiles', uid));
+                if (profileDoc.exists()) {
+                    const profileData = profileDoc.data() as UserProfile;
+                    return { uid, alias: profileData.displayName || profileData.alias };
+                }
+            } catch (e) {
+                console.error("Error fetching profile for notification sender:", uid, e);
+            }
+            return { uid, alias: 'Unknown' };
         });
+        const profiles = await Promise.all(profilePromises);
+        const aliasMap = new Map<string, string>();
+        profiles.forEach(p => aliasMap.set(p.uid, p.alias));
+
+        currentNotifsMap.forEach((n, key) => {
+            if (!n.fromName && !n.fromAlias && n.fromUid && aliasMap.has(n.fromUid)) {
+                currentNotifsMap.set(key, { ...n, fromAlias: aliasMap.get(n.fromUid) });
+            }
+        });
+    }
+    
+    const sorted = Array.from(currentNotifsMap.values()).sort((a, b) => {
+        const priority = { invite: 3, mention: 2, comment: 2, submission: 1 };
+        const pA = priority[a.type as keyof typeof priority] || 0;
+        const pB = priority[b.type as keyof typeof priority] || 0;
+        
+        if (pA !== pB) return pB - pA;
+        return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt); 
+    });
+    if (isMountedRef.current) { // Use ref for isMounted
         setNotifications(sorted);
         setLoading(false);
+    }
+  }, [setNotifications, setLoading]); // Dependencies for useCallback
+
+
+  useEffect(() => {
+    if (authLoading) return; // Wait for auth to resolve
+    
+    // If no user AND no participant email, we can't fetch anything.
+    if (!user?.uid && !participantEmail) {
+        setLoading(false);
+        return;
+    }
+
+    isMounted.current = true; // Ensure it's true on mount
+
+    // 1. Subscribe to User Profile for settings (privacy, contacts, filterAI)
+    // Only if we have a UID (Profiles are keyed by UID)
+    let unsubscribeProfile = () => {};
+    if (user?.uid) {
+        const profileRef = doc(db, 'profiles', user.uid);
+        unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
+          if (!isMounted.current) return; // Use ref for isMounted
+          if (docSnap.exists()) {
+            const profileData = docSnap.data() as UserProfile;
+            setAcceptUnsolicited(profileData.settings?.privacy?.acceptUnsolicited !== false); // Default to true
+            setFilterAI(!!profileData.settings?.content?.filterAI);
+            // Assuming contacts are stored as an array of UIDs in UserProfile
+            setContacts(new Set(profileData.contacts || []));
+          }
+        });
+    }
+
+    const notifsMap = new Map<string, Notification & { fromAlias?: string }>();
+
+    // 2. Subscribe to Notifications
+    // Query by recipientUid (if user) OR recipientEmail (if participant)
+    let notificationsQuery;
+    if (user?.uid) {
+        notificationsQuery = query(
+            collection(db, 'notifications'),
+            where('recipientUid', '==', user.uid),
+            orderBy('createdAt', 'desc')
+        );
+    } else if (participantEmail) {
+         notificationsQuery = query(
+            collection(db, 'notifications'),
+            where('recipientEmail', '==', participantEmail),
+            orderBy('createdAt', 'desc')
+        );
+    }
+
+    let unsubscribeNotifications = () => {};
+
+    if (notificationsQuery) {
+        unsubscribeNotifications = onSnapshot(notificationsQuery, (snapshot) => {
+            if (!isMounted.current) return; // Use ref for isMounted
+            snapshot.docChanges().forEach(change => {
+                const data = change.doc.data();
+                const notification: Notification & { fromAlias?: string } = {
+                    ...data,
+                    id: change.doc.id,
+                    createdAt: getTimestampAsNumber(data.createdAt) // Ensure createdAt is number
+                } as Notification & { fromAlias?: string };
+
+                if (change.type === 'added' || change.type === 'modified') {
+                    notifsMap.set(change.doc.id, notification);
+                } else if (change.type === 'removed') {
+                    notifsMap.delete(change.doc.id);
+                }
+            });
+            updateNotificationState(isMounted, notifsMap); // Call the memoized function
+        }, (error) => {
+            console.error("Error fetching notifications:", error);
+            if (isMounted.current) setLoading(false); // Use ref for isMounted
+        });
+    } else {
+        setLoading(false);
+    }
+
+    return () => {
+        isMounted.current = false; // Use ref for isMounted
+        unsubscribeProfile();
+        unsubscribeNotifications();
     };
 
-    // Subscribe to inbox
-    gun.get('inboxes').get(pubKey).map().on((data: any, key: string) => {
-      // If data is null, it might have been deleted, but usually we just get the node
-      if (data && data.type) { 
-          // Check if we already have this notification and its alias
-          const existing = notifsMap.get(key);
-          const n: Notification & { fromAlias?: string } = { ...data, id: key, fromAlias: existing?.fromAlias };
-          
-          // If we don't have the alias yet, fetch it
-          if (!n.fromAlias && n.fromPub) {
-              gun.get('all_users').get(n.fromPub).once((u: any) => {
-                  if (u && (u.alias || u.displayName)) {
-                      // Update the specific notification in the map and trigger re-render
-                      const updated = { ...n, fromAlias: u.displayName || u.alias };
-                      notifsMap.set(key, updated);
-                      updateState();
-                  }
-              });
-          }
 
-          notifsMap.set(key, n);
-          updateState();
-      }
-    });
-    
-    // Timeout for loading state if empty (Gun doesn't tell us "done loading")
-    const timer = setTimeout(() => setLoading(false), 1500);
-    return () => clearTimeout(timer);
+  }, [user, participantEmail, authLoading, updateNotificationState]); // Add updateNotificationState to dependencies
 
-  }, [user, pubKey, gun]);
-
-  // Filter Notifications based on Privacy and Type
   const filteredNotifications = notifications.filter(n => {
-      // Content Filter
-      if (filterAI && n.usesAI) return false;
+    if (filterType !== 'all' && n.type !== filterType) return false;
+    
+    // Privacy filters
+    if (!acceptUnsolicited && n.type === 'invite' && n.fromUid && !contacts.has(n.fromUid)) {
+       return false;
+    }
 
-      // Type Filter
-      if (filterType !== 'all' && n.type !== filterType) return false;
-
-      // Privacy Filter
-      if (n.type === 'invite' && !acceptUnsolicited) {
-          // Only show if sender is a contact
-          return contacts.has(n.fromPub);
-      }
-      return true;
+    // AI Content filter
+    if (filterAI && n.usesAI) {
+        return false;
+    }
+    
+    return true;
   });
 
-  const markAsRead = (n: Notification) => {
-      if (!n.read && pubKey) {
-          gun.get('inboxes').get(pubKey).get(n.id).get('read').put(true);
-      }
+  const markAllRead = async () => {
+    if (!user?.uid && !participantEmail) { // Allow participantEmail users to mark all read
+        console.log("Mark all read: No authenticated user or participant email.");
+        return;
+    }
+    
+    const unread = notifications.filter(n => !n.read);
+    if (unread.length === 0) {
+        console.log("No unread notifications to mark.");
+        return;
+    }
+
+    console.log(`Attempting to mark ${unread.length} notifications as read individually to avoid batch failures.`);
+    
+    const updatePromises = unread.map(async (n) => {
+        if (!n.id) return { status: 'rejected', id: n.id, error: 'No ID' };
+        const ref = doc(db, 'notifications', n.id);
+        try {
+            await updateDoc(ref, { read: true });
+            return { status: 'fulfilled', id: n.id };
+        } catch (error) {
+            console.error(`Failed to mark notification ${n.id} as read (it may have been deleted):`, error);
+            return { status: 'rejected', id: n.id, error };
+        }
+    });
+
+    await Promise.allSettled(updatePromises);
+    console.log("Finished mark all read operation.");
   };
 
-  const handleNotificationClick = (n: Notification) => {
-      markAsRead(n);
-      navigate(n.link);
+  const deleteNotification = async (e: React.MouseEvent, n: Notification) => {
+    e.stopPropagation();
+    if (!user?.uid && !participantEmail) return;
+    if (!n.id) return;
+    try {
+        console.log(`Attempting to delete notification: ${n.id}`);
+        await deleteDoc(doc(db, 'notifications', n.id));
+        console.log(`Successfully deleted notification: ${n.id}`);
+    } catch (error: any) {
+        console.error("Error deleting notification:", error);
+        if (error.code === 'not-found') {
+             alert('This notification has already been deleted. Please refresh the page to update your inbox.');
+        } else {
+             alert('Failed to delete notification.');
+        }
+    }
   };
 
-  const markAllRead = () => {
-      if (!pubKey) return;
-      filteredNotifications.forEach(n => {
-          if (!n.read) {
-               gun.get('inboxes').get(pubKey).get(n.id).get('read').put(true);
+  const handleNotificationClick = async (n: Notification) => {
+      // Mark as read if not already
+      if (!n.read && n.id) {
+          try {
+              await updateDoc(doc(db, 'notifications', n.id), { read: true });
+              console.log(`Notification ${n.id} marked as read.`);
+          } catch (error) {
+              console.error(`Error marking notification ${n.id} read on click:`, error);
           }
-      });
+      }
+
+      // Navigate based on type
+      if (n.link) {
+          navigate(n.link);
+      } else if (n.type === 'submission' || n.type === 'comment' || n.type === 'mention') {
+          // Fallback if no link, try to construct one
+           if (n.requestId) {
+              navigate(`/request/${n.requestId}`);
+           }
+      }
   };
 
   const handleAccept = async (e: React.MouseEvent, n: Notification) => {
-    e.stopPropagation();
-    if (!n.requestId || !pubKey) return;
-    
-    // Update status to accepted in User Graph
-    user.get('participation').get(n.requestId).put('accepted');
-    
-    // Add sender to contacts (Implicit connection)
-    if (n.fromPub) {
-        user.get('contacts').get(n.fromPub).put(true);
-    }
-
-    markAsRead(n);
+      e.stopPropagation();
+      // Placeholder for invite acceptance logic
+      console.log("Accepted invite:", n.id);
+      // You would typically call a cloud function or update a document here
+      // For now, let's just mark it read and maybe show a toast
+      if (!n.read && n.id) {
+         await updateDoc(doc(db, 'notifications', n.id), { read: true });
+      }
   };
 
   const handleDecline = async (e: React.MouseEvent, n: Notification) => {
-    e.stopPropagation();
-    if (!n.requestId || !pubKey) return;
-    
-    // Update status to declined in User Graph
-    user.get('participation').get(n.requestId).put('declined');
-    
-    markAsRead(n);
-  };
-
-  const deleteNotification = (e: React.MouseEvent, n: Notification) => {
       e.stopPropagation();
-      if (!pubKey) return;
-      gun.get('inboxes').get(pubKey).get(n.id).put(null);
-      setNotifications(prev => prev.filter(item => item.id !== n.id));
+      console.log("Declined invite:", n.id);
+      // Logic to reject invite
+      await deleteNotification(e, n);
   };
 
   const getIcon = (type: string) => {
       switch (type) {
-          case 'comment': return <MessageSquare className="w-5 h-5 text-blue-400" />;
-          case 'submission': return <Music className="w-5 h-5 text-green-400" />;
           case 'invite': return <UserPlus className="w-5 h-5 text-purple-400" />;
+          case 'submission': return <Music className="w-5 h-5 text-blue-400" />;
+          case 'comment': return <MessageSquare className="w-5 h-5 text-green-400" />;
+          case 'mention': return <AtSign className="w-5 h-5 text-yellow-400" />;
           default: return <Bell className="w-5 h-5 text-gray-400" />;
       }
   };
 
-  if (!pubKey) {
-      return (
-          <div className="flex items-center justify-center h-full text-gray-500">
-              Please login to view notifications.
-          </div>
-      );
-  }
-
-  return (
+    return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -192,7 +292,7 @@ export function Inbox() {
 
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          {(['all', 'invite', 'submission', 'comment'] as const).map(type => (
+          {(['all', 'invite', 'submission', 'comment', 'mention'] as const).map(type => (
               <button
                   key={type}
                   onClick={() => setFilterType(type)}
@@ -241,7 +341,7 @@ export function Inbox() {
                               <div className="flex items-center gap-2">
                                   {/* Sender Alias Display */}
                                   <span className="font-bold text-white text-sm truncate max-w-[150px]">
-                                      {n.fromAlias || 'Someone'}
+                                      {n.fromName || n.fromAlias || (n.fromEmail ? n.fromEmail.split('@')[0] : 'Someone')}
                                   </span>
                                   <span className="text-gray-500 text-xs">•</span>
                                   <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">
@@ -249,7 +349,7 @@ export function Inbox() {
                                   </span>
                               </div>
                               <span className="text-xs text-gray-500 whitespace-nowrap ml-2 mr-6 md:mr-0">
-                                  {new Date(n.createdAt).toLocaleDateString()}
+                                  {new Date(n.createdAt as number).toLocaleDateString()}
                               </span>
                           </div>
                           

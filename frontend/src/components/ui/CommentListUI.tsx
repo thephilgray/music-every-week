@@ -1,8 +1,8 @@
-import { CommentItemUI, type CommentUIProps } from './CommentItemUI';
+import { CommentItemUI, type CommentItemUIProps } from './CommentItemUI';
 import { Loader2 } from 'lucide-react';
 
 interface CommentListUIProps {
-  comments: CommentUIProps[];
+  comments: CommentItemUIProps[];
   loading?: boolean;
 }
 

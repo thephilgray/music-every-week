@@ -266,7 +266,7 @@ export const GunProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAuthorized(true);
         setIsAdmin(!!data.isAdmin);
         setUserProfile({
-          pub,
+          uid: pub, // Changed pub to uid
           alias: data.alias || 'Unknown',
           displayName: data.displayName,
           bio: data.bio,

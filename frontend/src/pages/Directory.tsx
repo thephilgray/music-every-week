@@ -1,26 +1,25 @@
 import { useState, useEffect, useReducer } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, User } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { fixUrl } from '../lib/url';
 import type { UserProfile } from '../types';
+import { db } from '../lib/firebase'; // Import Firebase db
+import { collection, query, getDocs } from 'firebase/firestore'; // Import Firestore functions
 
 type UserState = Record<string, UserProfile>;
 type Action = 
-  | { type: 'ADD_USER'; key: string; user: UserProfile }
-  | { type: 'REMOVE_USER'; key: string };
+  | { type: 'ADD_USER'; uid: string; user: UserProfile } // Changed key to uid
+  | { type: 'REMOVE_USER'; uid: string }; // Changed key to uid
 
 function userReducer(state: UserState, action: Action): UserState {
   switch (action.type) {
     case 'ADD_USER':
-      // Only update if changed to avoid renders? React handles object identity checks on parents, 
-      // but here we return a new object. 
-      return { ...state, [action.key]: action.user };
+      return { ...state, [action.uid]: action.user }; // Changed key to uid
     case 'REMOVE_USER':
-      if (!state[action.key]) return state;
+      if (!state[action.uid]) return state; // Changed key to uid
       const newState = { ...state };
-      delete newState[action.key];
+      delete newState[action.uid]; // Changed key to uid
       return newState;
     default:
       return state;
@@ -28,58 +27,56 @@ function userReducer(state: UserState, action: Action): UserState {
 }
 
 export function Directory() {
-  const { gun } = useGun();
+  // const { gun } = useGun(); // Removed Gun destructuring
   const [userState, dispatch] = useReducer(userReducer, {});
-  const [migratedSet, setMigratedSet] = useState<Set<string>>(new Set());
+  // const [migratedSet, setMigratedSet] = useState<Set<string>>(new Set()); // Removed Gun-specific migratedSet
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Listen for migrated accounts
-    const migrationsMap = gun.get('migrations_reverse').map();
-    migrationsMap.on((newPub: any, oldPub: string) => {
-        if (newPub) {
-            setMigratedSet(prev => {
-                const next = new Set(prev);
-                next.add(oldPub);
-                return next;
-            });
-        }
-    });
+    let isMounted = true;
+    const fetchUsers = async () => {
+      try {
+        const usersCollectionRef = collection(db, 'profiles');
+        const q = query(
+          usersCollectionRef
+        );
+        const querySnapshot = await getDocs(q);
+        const fetchedUsers: Record<string, UserProfile> = {};
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data() as UserProfile;
+          if (data.deleted) return; // Client-side filtering
+          fetchedUsers[docSnap.id] = { ...data, uid: docSnap.id }; // Add uid from doc.id
+        });
 
-    // 2. Fetch all users
-    const usersMap = gun.get('all_users').map();
-    usersMap.on((data: any, key: string) => {
-        if (data) {
-            dispatch({ 
-                type: 'ADD_USER', 
-                key, 
-                user: { ...data, pub: key, alias: data.alias || 'Unknown' } 
+        if (isMounted) {
+          // Re-populate state based on fresh fetch
+          Object.values(fetchedUsers)
+            .sort((a, b) => (a.alias || 'z').localeCompare(b.alias || 'z')) // Client-side sort
+            .forEach(user => {
+              dispatch({ type: 'ADD_USER', uid: user.uid, user });
             });
-            setLoading(false);
-        } else {
-            dispatch({ type: 'REMOVE_USER', key });
+          setLoading(false);
         }
-    });
+      } catch (e) {
+        console.error("Error fetching directory users:", e);
+        if (isMounted) setLoading(false);
+      }
+    };
 
-    // Fallback if empty or slow
-    const timer = setTimeout(() => {
-        // If we haven't received data by now, just stop loading spinner
-        setLoading(false);
-    }, 5000);
+    fetchUsers();
 
     return () => {
-        clearTimeout(timer);
-        migrationsMap.off();
-        usersMap.off();
+      isMounted = false;
     };
-  }, [gun]);
+  }, []); // Run once on mount
 
   const users = Object.values(userState);
   
   const filteredUsers = users.filter(u => 
-      !migratedSet.has(u.pub) && 
-      (u.alias.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      // !migratedSet.has(u.pub) && // Removed Gun-specific filter
+      ((u.alias || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+       (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (u.bio && u.bio.toLowerCase().includes(searchTerm.toLowerCase())))
   );
 
@@ -122,8 +119,8 @@ export function Directory() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   {filteredUsers.map(user => (
                       <Link 
-                        to={`/profile/${user.pub}`} 
-                        key={user.pub} 
+                        to={`/profile/${user.uid}`} // Changed user.pub to user.uid
+                        key={user.uid} // Changed user.pub to user.uid
                         className="bg-gray-900/50 border border-gray-800 rounded-lg p-6 flex flex-col items-center hover:bg-gray-800 hover:border-gray-700 transition group relative overflow-hidden"
                       >
                           <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 mb-4 overflow-hidden group-hover:border-blue-500 transition shadow-lg">
@@ -135,7 +132,9 @@ export function Directory() {
                                   </div>
                               )}
                           </div>
-                          <h3 className="text-lg font-bold text-white mb-1 text-center truncate w-full">{user.alias}</h3>
+                          <h3 className="text-lg font-bold text-white mb-1 text-center truncate w-full">
+                              {user.displayName || user.alias || (user.email ? user.email.split('@')[0] : 'Unknown')}
+                          </h3>
                           <p className="text-gray-500 text-xs text-center line-clamp-2 h-8 mb-4 w-full px-2">
                               {user.bio || "No bio yet."}
                           </p>

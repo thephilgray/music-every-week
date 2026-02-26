@@ -205,6 +205,7 @@ export function AuthlessSubmissionForm({
         feedbackFocus,
         waveform: finalWaveform,
         linkProfile: !isAnonymous,
+        uploaderUid: userProfileId, // Ensure UID is saved if available
         userProfileId, // Ensure userProfileId is included
       };
 

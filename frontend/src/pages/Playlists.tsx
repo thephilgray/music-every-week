@@ -1,13 +1,14 @@
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { useGun } from '../contexts/GunContext';
+// import { useGun } from '../contexts/GunContext'; // Removed useGun
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore'; // Added specific Firebase functions
 import type { Playlist, Submission, FileRequest } from '../types';
-import { Play, Trash2, ListMusic, Loader2, Edit, X, Globe, Pause, Lock, Shuffle, Filter, FileText, FileAudio } from 'lucide-react';
-import { RequestCard } from '../components/RequestCard';
+import { getTimestampAsNumber } from '../lib/utils';
+import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio } from 'lucide-react';
+// removed RequestCard import
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
 import { seededRandom } from '../lib/utils';
@@ -28,86 +29,41 @@ export function Playlists() {
 // EXISTING GunDB LIST VIEW
 // ==========================================
 function PlaylistList() {
-  const { user, gun } = useGun();
+  const { user } = useAuth(); // Changed from useGun
   const { play } = usePlayer();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
 
-  const [publicPlaylists, setPublicPlaylists] = useState<FileRequest[]>([]);
-  const processedRequests = useRef<Set<string>>(new Set());
+  // Removed entire public playlists useEffect
+  
 
   useEffect(() => {
      setPlaylists([]);
-     if (!user) return; // Guard
-     user.get('playlists').map().on((data: any, key: string) => {
-         if (data && data.title) {
-             let tracks = [];
-             if (typeof data.tracks === 'string') {
-                 try { tracks = JSON.parse(data.tracks); } catch (e) {}
-             } else if (Array.isArray(data.tracks)) {
-                 tracks = data.tracks;
-             }
+     if (!user || !user.uid) return; // Guard
+     
+     const playlistsQuery = query(
+        collection(db, 'playlists'),
+        where('ownerPub', '==', user.uid),
+        orderBy('createdAt', 'desc')
+     );
 
-             const pl: Playlist = { ...data, id: key, tracks };
-             
-             setPlaylists(prev => {
-                 const exists = prev.find(p => p.id === key);
-                 if (exists && JSON.stringify(exists.tracks) === JSON.stringify(pl.tracks) && exists.title === pl.title) {
-                     return prev;
-                 }
-                 if (exists) return prev.map(p => p.id === key ? pl : p);
-                 return [...prev, pl];
-             });
-             
-             // Update selected playlist if open
-             if (selectedPlaylist && selectedPlaylist.id === key) {
-                 setSelectedPlaylist({ ...pl, id: key, tracks });
-             }
-         } else if (data === null) {
-             setPlaylists(prev => prev.filter(p => p.id !== key));
-             if (selectedPlaylist && selectedPlaylist.id === key) setSelectedPlaylist(null);
-         }
+     const unsubscribe = onSnapshot(playlistsQuery, (snapshot) => {
+        const fetchedPlaylists: Playlist[] = [];
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            fetchedPlaylists.push({ 
+                id: docSnap.id, 
+                ...data,
+                createdAt: getTimestampAsNumber(data.createdAt)
+            } as Playlist);
+        });
+        setPlaylists(fetchedPlaylists);
      });
-  }, [user, selectedPlaylist?.id]);
+     return () => unsubscribe();
+  }, [user]); // Removed gun and selectedPlaylist?.id dependencies, simplified
 
-  useEffect(() => {
-      if (!user) return;
-      
-      // Fetch user's submissions to find participated requests
-      user.get('submissions').map().on((submission: any) => {
-          if (submission && submission.requestId) {
-              const reqId = submission.requestId;
-              if (processedRequests.current.has(reqId)) return;
-              
-              processedRequests.current.add(reqId);
-              
-              gun.get('file_requests').get(reqId).once((req: any) => {
-                  if (req && req.title) {
-                      const now = Date.now();
-                      const deadline = req.deadline ? new Date(req.deadline).getTime() : Infinity;
-                      const liveDate = req.playlistLiveDate ? new Date(req.playlistLiveDate).getTime() : Infinity;
-                      
-                      const isClosed = now > deadline;
-                      const isPastLiveDate = now > liveDate;
 
-                      // Only show if closed or past live date
-                      if (isClosed || isPastLiveDate) {
-                           setPublicPlaylists(prev => {
-                               if (prev.find(p => p.id === reqId)) return prev;
-                               return [...prev, { ...req, id: reqId }];
-                           });
-                      }
-                  }
-              });
-          }
-      });
-      
-      return () => {
-          processedRequests.current.clear();
-          setPublicPlaylists([]);
-      };
-  }, [user, gun]);
 
   const handlePlay = async (playlist: Playlist, startIndex = 0) => {
       console.log("handlePlay initiated for playlist:", playlist.id);
@@ -117,21 +73,23 @@ function PlaylistList() {
       // Fetch audioUrl for each track with timeout
       const promises = playlist.tracks.map(track => {
           return Promise.race([
-              new Promise<Submission | null>((resolve) => {
-                  gun.get('request_submissions')
-                     .get(track.requestId)
-                     .get(track.submissionId)
-                     .once((data: any) => {
-                         if (data && data.audioUrl) {
-                            let parsedWaveform = data.waveform;
-                            if (typeof data.waveform === 'string') {
-                                try { parsedWaveform = JSON.parse(data.waveform); } catch (e) { parsedWaveform = []; }
-                            }
-                            resolve({ ...data, id: track.submissionId, waveform: parsedWaveform });
-                         } else {
-                            resolve(null);
-                         }
-                     });
+              new Promise<Submission | null>(async (resolve) => { // Added async
+                  try {
+                      const subDoc = await getDoc(doc(db, 'requests', track.requestId, 'submissions', track.submissionId)); // Firebase getDoc
+                      if (subDoc.exists()) {
+                          const data = subDoc.data();
+                          let parsedWaveform = data.waveform;
+                          if (typeof data.waveform === 'string') {
+                              try { parsedWaveform = JSON.parse(data.waveform); } catch (e) { parsedWaveform = []; }
+                          }
+                          resolve({ ...data, id: track.submissionId, waveform: parsedWaveform } as Submission); // Cast to Submission
+                      } else {
+                          resolve(null);
+                      }
+                  } catch (e) {
+                      console.error("Error fetching submission for playlist playback:", e);
+                      resolve(null);
+                  }
               }),
               new Promise<Submission | null>((resolve) => setTimeout(() => resolve(null), 2000))
           ]);
@@ -155,22 +113,35 @@ function PlaylistList() {
       setLoadingId(null);
   };
 
-  const deletePlaylist = (id: string) => {
+  const deletePlaylist = async (id: string) => { // Added async
       if(confirm('Delete this playlist?')) {
-          user.get('playlists').get(id).put(null);
+          try {
+              await deleteDoc(doc(db, 'playlists', id)); // Firebase deleteDoc
+          } catch (e) {
+              console.error("Error deleting playlist:", e);
+              alert("Failed to delete playlist.");
+          }
       }
   };
 
-  const removeTrack = (e: React.MouseEvent, index: number) => {
+  const removeTrack = async (e: React.MouseEvent, index: number) => { // Added async
       e.stopPropagation();
-      if (!selectedPlaylist) return;
+      if (!selectedPlaylist || !selectedPlaylist.id) return;
       
       const newTracks = [...selectedPlaylist.tracks];
       newTracks.splice(index, 1);
       
-      user.get('playlists').get(selectedPlaylist.id).put({
-          tracks: JSON.stringify(newTracks)
-      });
+      try {
+          await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { // Firebase updateDoc
+              tracks: newTracks,
+              updatedAt: serverTimestamp() // Add updatedAt
+          });
+          // Update local state for immediate UI feedback if selectedPlaylist is still open
+          setSelectedPlaylist(prev => prev ? { ...prev, tracks: newTracks } : null);
+      } catch (e) {
+          console.error("Error removing track from playlist:", e);
+          alert("Failed to remove track.");
+      }
   };
 
   return (
@@ -308,23 +279,7 @@ function PlaylistList() {
             </div>
         )}
 
-        {/* Public Playlists (Past Requests) */}
-        {publicPlaylists.length > 0 && (
-            <div className="mt-12 pt-8 border-t border-gray-800">
-                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                    <Globe className="w-6 h-6 text-purple-500" />
-                    Public Playlists
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {publicPlaylists.map(req => {
-                         const isClosed = req.deadline ? Date.now() > new Date(req.deadline).getTime() : false;
-                         return (
-                            <RequestCard key={req.id} request={req} isClosed={isClosed} />
-                         );
-                    })}
-                </div>
-            </div>
-        )}
+
     </div>
   );
 }
@@ -433,8 +388,8 @@ function PlaylistDetail({ id }: { id: string }) {
 
         // Sort
         filtered.sort((a, b) => {
-            if (sortBy === 'newest') return (b.createdAt || 0) - (a.createdAt || 0);
-            if (sortBy === 'oldest') return (a.createdAt || 0) - (b.createdAt || 0);
+            if (sortBy === 'newest') return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+            if (sortBy === 'oldest') return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
             if (sortBy === 'alpha') return a.title.localeCompare(b.title);
             // Comment sort is mocked as 0 diff for now since we don't have comments loaded here easily without extra fetch
             return 0; 

@@ -1,27 +1,52 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Mic, Square, Loader2 } from 'lucide-react';
+import { Send, Mic, Square, Loader2, Trash2, User } from 'lucide-react'; // Added Trash2 import
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { uploadFile } from '../lib/upload';
+import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDocs, limit } from 'firebase/firestore'; // Removed getDoc
+import { uploadToR2 } from '../lib/r2'; // Replaced uploadFile
 import { CommentItemUI } from './ui/CommentItemUI';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
-import { fixUrl } from '../lib/url';
-import type { Comment, Notification, UserProfile } from '../types';
+// import { fixUrl } from '../lib/url'; // Removed unused import
+import type { Comment, UserProfile, Notification } from '../types';
+import { getTimestampAsNumber } from '../lib/utils'; // Removed unused Notification, UserProfile
 
 interface CommentSectionProps {
   requestId: string;
   submissionId: string;
   highlightCommentId?: string;
-  accessMode?: string;
-  requestTitle?: string;
-  onCommentsLoaded?: (submissionId: string, count: number) => void; // Updated prop signature
+  submissionOwnerUid?: string; 
+  submissionOwnerEmail?: string; // Added prop
+  // onCommentsLoaded?: (submissionId: string, count: number) => void; // Removed prop
 }
 
-export function CommentSection({ requestId, submissionId, highlightCommentId, accessMode, requestTitle, onCommentsLoaded }: CommentSectionProps) {
-  const { participantEmail, user, isAdmin } = useAuth();
+export function CommentSection({ requestId, submissionId, highlightCommentId, submissionOwnerUid, submissionOwnerEmail }: CommentSectionProps) { // Removed prop
+  const { participantEmail, user } = useAuth(); // Removed unused isAdmin
   const [comments, setComments] = useState<Comment[]>([]);
+  const [firestoreProfile, setFirestoreProfile] = useState<any>(null); // Store fetched profile
+
+  useEffect(() => {
+      if (user?.uid) {
+          const unsub = onSnapshot(doc(db, 'profiles', user.uid), (snap) => {
+              if (snap.exists()) {
+                  setFirestoreProfile(snap.data());
+              }
+          });
+          return () => unsub();
+      } else if (participantEmail) {
+          // Fetch profile by email for participants
+          const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
+          const unsub = onSnapshot(q, (snapshot) => {
+              if (!snapshot.empty) {
+                  setFirestoreProfile(snapshot.docs[0].data());
+              } else {
+                  setFirestoreProfile(null);
+              }
+          });
+          return () => unsub();
+      }
+  }, [user, participantEmail]);
+
   const [newComment, setNewComment] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(`draft_comment_${submissionId}`) || '';
@@ -37,18 +62,25 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
   
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   
+  // Mention State
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionResults, setMentionResults] = useState<UserProfile[]>([]);
+  const [showMentionList, setShowMentionList] = useState(false);
+  const [cursorIndex, setCursorIndex] = useState(0);
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const commentsEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
 
-  // Derive current user's profile for comments
+  // Derive current user's profile for comments (Prefer Firestore > Auth > Email)
   const currentUserProfile = user ? {
-    displayName: user.displayName || user.email || 'Admin',
-    avatarUrl: user.photoURL || undefined
+    displayName: firestoreProfile?.displayName || firestoreProfile?.alias || user.displayName || user.email || 'Admin',
+    avatarUrl: firestoreProfile?.avatarUrl || user.photoURL || null // Use null for Firestore compatibility
   } : (participantEmail ? {
-    displayName: participantEmail.split('@')[0], // Default name from email
-    avatarUrl: undefined
-  } : undefined);
+    displayName: firestoreProfile?.displayName || firestoreProfile?.alias || participantEmail.split('@')[0], // Use profile data if available
+    avatarUrl: firestoreProfile?.avatarUrl || null // Use profile data if available
+  } : null);
 
   const isAuthorized = !!participantEmail || !!user;
 
@@ -95,38 +127,25 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedComments = snapshot.docs.map(doc => {
         const data = doc.data();
-        let createdAtTimestamp: number;
-        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-            // It's a Firestore Timestamp object
-            createdAtTimestamp = data.createdAt.toDate().getTime();
-        } else if (typeof data.createdAt === 'number') {
-            // It's already a number timestamp
-            createdAtTimestamp = data.createdAt;
-        } else {
-            // Fallback to current time if format is unexpected
-            console.warn("Unexpected createdAt format for comment:", doc.id, data.createdAt);
-            createdAtTimestamp = Date.now();
-        }
-
         return {
           id: doc.id,
           ...data, // Spread original data first
-          createdAt: createdAtTimestamp, // Then override with the correctly formatted timestamp
+          createdAt: getTimestampAsNumber(data.createdAt), // Then override with the correctly formatted timestamp
         } as Comment;
       });
 
       setComments(loadedComments);
-      onCommentsLoaded?.(submissionId, loadedComments.length); // Call the new prop with submissionId
+      // onCommentsLoaded?.(submissionId, loadedComments.length); // Removed call
     }, (err) => {
         console.error("Firestore comments subscription error:", err);
-        onCommentsLoaded?.(submissionId, 0); // Pass 0 on error
+        // onCommentsLoaded?.(submissionId, 0); // Removed call
     });
 
     return () => {
       unsubscribe();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
-  }, [requestId, submissionId, onCommentsLoaded]);
+  }, [requestId, submissionId, previewUrl]); // Removed onCommentsLoaded from dependencies
 
   // Scroll to highlighted comment
   useEffect(() => {
@@ -144,6 +163,13 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       }
   }, [comments, highlightCommentId]);
 
+  // Auto-scroll to bottom when new comments appear
+  useEffect(() => {
+    if (commentsEndRef.current) {
+        commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [comments]); // Scroll when comments change
+
   const getSupportedMimeType = () => {
     const types = [
       'audio/webm;codecs=opus',
@@ -152,7 +178,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       'audio/ogg',
     ];
     for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
         return type;
       }
     }
@@ -205,9 +231,79 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
       setIsRecording(false);
   };
 
+  // Fetch mention suggestions
+  useEffect(() => {
+      if (!showMentionList) {
+          setMentionResults([]);
+          return;
+      }
+
+      const fetchMentions = async () => {
+          if (!mentionQuery) {
+              const q = query(collection(db, 'profiles'), limit(5));
+              const snap = await getDocs(q);
+              setMentionResults(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+              return;
+          }
+
+          const q = query(
+              collection(db, 'profiles'), 
+              where('alias', '>=', mentionQuery),
+              where('alias', '<=', mentionQuery + '\uf8ff'),
+              limit(5)
+          );
+          const snap = await getDocs(q);
+          setMentionResults(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+      };
+
+      const timer = setTimeout(() => {
+          fetchMentions();
+      }, 300);
+
+      return () => clearTimeout(timer);
+  }, [mentionQuery, showMentionList]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
       setNewComment(val);
+
+      const cursorPosition = e.target.selectionStart || 0;
+      setCursorIndex(cursorPosition);
+      
+      const textBeforeCursor = val.slice(0, cursorPosition);
+      const match = textBeforeCursor.match(/@([a-zA-Z0-9_.-]*)$/);
+      
+      if (match) {
+          setMentionQuery(match[1]);
+          setShowMentionList(true);
+      } else {
+          setShowMentionList(false);
+      }
+  };
+
+  const selectMention = (alias: string) => {
+      if (!alias) return;
+      
+      const textBeforeCursor = newComment.slice(0, cursorIndex);
+      const textAfterCursor = newComment.slice(cursorIndex);
+      
+      const match = textBeforeCursor.match(/@([a-zA-Z0-9_.-]*)$/);
+      if (match) {
+          const startIdx = textBeforeCursor.lastIndexOf('@');
+          const newTextBefore = newComment.slice(0, startIdx) + `@${alias} `;
+          setNewComment(newTextBefore + textAfterCursor);
+          
+          setTimeout(() => {
+              if (inputRef.current) {
+                  inputRef.current.focus();
+                  const newCursorPos = newTextBefore.length;
+                  inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+              }
+          }, 0);
+      }
+      
+      setShowMentionList(false);
+      setMentionQuery('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -226,7 +322,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
     try {
         let audioUrl = '';
         if (recordedFile) {
-            const result = await uploadFile(recordedFile); // uploadFile no longer needs userPair explicitly
+            // Upload to R2 (Firebase-compatible file storage)
+            const result = await uploadToR2(recordedFile); // Corrected to uploadToR2
             audioUrl = result.url;
         }
 
@@ -234,6 +331,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
             requestId,
             submissionId: submissionId || null, // Ensure submissionId is stored, or null if not present
             authorEmail,
+            authorUid: user?.uid || null, // Save UID if available
             text: newComment.trim(),
             createdAt: serverTimestamp(),
             userProfile: currentUserProfile, // Use the derived current user profile
@@ -243,7 +341,87 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
             commentData.audioUrl = audioUrl;
         }
 
-        await addDoc(collection(db, 'comments'), commentData);
+        const docRef = await addDoc(collection(db, 'comments'), commentData);
+        
+        // Notify Submission Owner (if not self)
+        const isSelf = (user?.uid && user.uid === submissionOwnerUid) || 
+                       (participantEmail && participantEmail === submissionOwnerEmail) ||
+                       (user?.email && user.email === submissionOwnerEmail);
+
+        if (!isSelf && (submissionOwnerUid || submissionOwnerEmail)) {
+             try {
+                console.log("CommentSection: currentUserProfile.displayName for notification:", currentUserProfile?.displayName);
+                const notif: Notification = {
+                    // ID auto-generated by Firestore
+                    type: 'comment',
+                    message: `${currentUserProfile?.displayName || 'Someone'} commented on your track`,
+                    link: `/request/${requestId}?submission=${submissionId}&comment=${docRef.id}`,
+                    fromUid: user?.uid || 'participant',
+                    fromName: currentUserProfile?.displayName || 'Someone', // Save name
+                    fromEmail: authorEmail, // Save email
+                    createdAt: Date.now(),
+                    read: false,
+                    requestId
+                };
+                
+                const notifData: any = { ...notif };
+                if (submissionOwnerUid) notifData.recipientUid = submissionOwnerUid;
+                if (submissionOwnerEmail) notifData.recipientEmail = submissionOwnerEmail; // Add email recipient
+
+                await addDoc(collection(db, 'notifications'), notifData);
+             } catch (e) {
+                 console.error("Failed to notify submission owner", e);
+             }
+        }
+
+        // Handle Mentions Notifications
+        const mentions = newComment.match(/@([a-zA-Z0-9_.-]+)/g);
+        if (mentions) {
+            const uniqueAliases = [...new Set(mentions.map(m => m.slice(1)))];
+            // Resolve aliases to UIDs
+            // We do this server-side usually, but for now client-side.
+            // Be careful of iterating too many.
+            uniqueAliases.forEach(async (alias) => {
+                try {
+                    const q = query(collection(db, 'profiles'), where('alias', '==', alias));
+                    const snapshot = await getDocs(q);
+                    if (!snapshot.empty) {
+                        const recipient = snapshot.docs[0];
+                        const recipientUid = recipient.id;
+                        const recipientData = recipient.data();
+                        
+                        // if (recipientUid === user?.uid) return; // Allow notifying self for testing
+
+                        const notif: Notification = {
+                            id: '', // Will be ignored by addDoc but satisfies type
+                            type: 'mention',
+                            message: `${currentUserProfile?.displayName || 'Someone'} mentioned you in a comment`,
+                            link: `/request/${requestId}?submission=${submissionId}&comment=${docRef.id}`,
+                            fromUid: user?.uid || 'participant',
+                            fromName: currentUserProfile?.displayName || 'Someone',
+                            fromEmail: authorEmail,
+                            createdAt: Date.now(),
+                            read: false,
+                            requestId
+                        };
+                        
+                        const notifData: any = {
+                            ...notif,
+                            recipientUid
+                        };
+                        delete notifData.id; // Remove empty id before saving
+
+                        if (recipientData.email) {
+                            notifData.recipientEmail = recipientData.email;
+                        }
+
+                        await addDoc(collection(db, 'notifications'), notifData);
+                    }
+                } catch (err) {
+                    console.error("Failed to notify mention:", alias, err);
+                }
+            });
+        }
         
         setNewComment('');
         localStorage.removeItem(`draft_comment_${submissionId}`);
@@ -297,15 +475,17 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                     authorEmail={c.authorEmail}
                     authorName={c.userProfile?.displayName || c.authorEmail.split('@')[0]}
                     authorAvatarUrl={c.userProfile?.avatarUrl}
-                    createdAt={c.createdAt}
+                    createdAt={c.createdAt as number} // createdAt is already number here
                     audioUrl={c.audioUrl}
                     isOwnComment={c.authorEmail === (participantEmail || user?.email)}
                     onDelete={c.authorEmail === (participantEmail || user?.email) ? handleDeleteComment : undefined}
                     onEdit={c.authorEmail === (participantEmail || user?.email) ? handleEditComment : undefined}
+                    profileLinkPub={c.authorUid} // Added prop
                 />
              </div>
           ))}
           {comments.length === 0 && <p className="text-xs text-gray-600 italic">No comments yet.</p>}
+          <div ref={commentsEndRef} /> {/* Scroll target */}
        </div>
 
        <form onSubmit={handleSubmit} className="flex flex-col gap-2 relative">
@@ -334,7 +514,27 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, ac
                </div>
            )}
 
-           <div className="flex gap-1 md:gap-2">
+           <div className="flex gap-1 md:gap-2 relative">
+               {showMentionList && mentionResults.length > 0 && (
+                   <div className="absolute bottom-full left-0 mb-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                       <div className="p-2 text-xs text-gray-500 uppercase font-semibold border-b border-gray-700">Suggested Users</div>
+                       {mentionResults.map(u => (
+                           <button
+                               key={u.uid}
+                               type="button"
+                               onClick={() => selectMention(u.alias)}
+                               className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
+                           >
+                               <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex-shrink-0">
+                                   {u.avatarUrl ? <img src={u.avatarUrl} className="w-full h-full object-cover" /> : <User className="w-3 h-3 text-gray-400 m-auto" />}
+                               </div>
+                               <span className="font-bold truncate">{u.alias}</span>
+                               {u.displayName && u.displayName !== u.alias && <span className="text-gray-500 truncate text-xs">({u.displayName})</span>}
+                           </button>
+                       ))}
+                   </div>
+               )}
+
                {isAuthorized ? (
                <>
                <input 

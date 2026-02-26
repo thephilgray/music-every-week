@@ -6,13 +6,13 @@
 - [x] Update `frontend/src/components/CreateRequest.tsx`.
     - [x] Save new Requests to Firestore.
     - [x] Manage "Access Lists" (emails) in the Firestore document.
-- Update `frontend/src/pages/CreatorTools.tsx`.
-    - **Separate Access Control UI:**
-        - Add a checkbox/toggle to "Use different access list for playlist?".
-        - If checked, show a separate text area for "Playlist Access Emails".
-        - If unchecked, use the Request's access list for both.
-    - **Separate Live Date:** Ensure the UI allows setting a `playlistLiveDate` that is distinct from the Request `deadline`.
-- Update `frontend/src/pages/Profile.tsx` to read/write Admin profile data from Firestore `profiles` collection.
+- [x] Update `frontend/src/pages/CreatorTools.tsx`.
+    - [x] **Separate Access Control UI:**
+        - [x] Add a checkbox/toggle to "Use different access list for playlist?".
+        - [x] If checked, show a separate text area for "Playlist Access Emails".
+        - [x] If unchecked, use the Request's access list for both.
+    - [x] **Separate Live Date:** Ensure the UI allows setting a `playlistLiveDate` that is distinct from the Request `deadline`.
+- [x] Update `frontend/src/pages/Profile.tsx` to read/write Admin profile data from Firestore `profiles` collection.
 
 ## Relevant POC Code
 - **Creating Request & Playlist:** `frontend/src/pages/authless/HostCreate.tsx` (lines 97-133) - Shows creating *two* linked documents (`playlists` and `requests`).

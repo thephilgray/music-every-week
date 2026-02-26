@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
 import { EditRequest } from '../components/EditRequest';
-import { SubmitTrack } from '../components/SubmitTrack'; // For editing submissions
-import type { FileRequest, Submission } from '../types';
+import { SubmitTrack } from '../components/SubmitTrack'; 
+import type { FileRequest, Submission, UserProfile } from '../types';
+import { getTimestampAsNumber } from '../lib/utils';
+import { db } from '../lib/firebase'; 
+import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc } from 'firebase/firestore'; 
 
 interface ParticipantRow {
     id: string;
@@ -18,7 +21,7 @@ interface ParticipantRow {
 }
 
 export function CreatorTools() {
-  const { gun, user, pubKey } = useGun();
+  const { user, participantEmail } = useAuth(); 
   const { success, error } = useToast();
   
   // Tabs
@@ -36,326 +39,278 @@ export function CreatorTools() {
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [isEditSubmissionOpen, setIsEditSubmissionOpen] = useState(false);
 
+  const [, setLoading] = useState(false);
+
   // Fetch Requests
   useEffect(() => {
-    if (!user || !pubKey) return;
-    const reqMap = new Map<string, FileRequest>();
-    const requestsNode = user.get('requests');
+    if (!user?.uid && !participantEmail) return;
+    
+    // Prefer Email for broader matching
+    const identifierField = (user?.email || participantEmail) ? 'ownerEmail' : 'ownerPub';
+    const identifierValue = user?.email || participantEmail || user?.uid;
 
-    requestsNode.map().on((data: any, key: string) => {
-        if (data && data.title) { 
-            // ... (keep parsing logic)
-            let parsedParticipants = {};
-            let parsedEmails: string[] = [];
-            
-            if (typeof data.participants === 'string') {
-                try { parsedParticipants = JSON.parse(data.participants); } catch (e) {}
-            } else if (data.participants) {
-                parsedParticipants = data.participants;
-            }
+    const requestsQuery = query(
+      collection(db, 'requests'),
+      where(identifierField, '==', identifierValue),
+      where('deleted', '!=', true) 
+    );
 
-            if (typeof data.pending_emails === 'string') {
-                try { parsedEmails = JSON.parse(data.pending_emails); } catch (e) {}
-            } else if (Array.isArray(data.pending_emails)) {
-                parsedEmails = data.pending_emails;
-            }
-
-            reqMap.set(key, { 
-                ...data, 
-                id: key, 
-                participants: parsedParticipants,
-                pending_emails: parsedEmails
-            });
-            setMyRequests(Array.from(reqMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+    const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
+      const fetchedRequests: FileRequest[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.title) {
+            fetchedRequests.push({ 
+                id: docSnap.id, 
+                ...data,
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt 
+            } as FileRequest);
         }
+      });
+      fetchedRequests.sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
+      setMyRequests(fetchedRequests);
     });
 
-    return () => {
-        requestsNode.off();
-    };
-  }, [user, pubKey]);
+    return () => unsubscribe(); 
+  }, [user, participantEmail]);
 
   // Fetch Submissions
   useEffect(() => {
-      if (!user || !pubKey) return;
-      const subMap = new Map<string, Submission>();
-      const submissionsNode = user.get('my_submissions');
+      if (!user?.uid && !participantEmail) return;
       
-      // Listen to my_submissions (private reference) OR submissions (public reference, usually same data)
-      submissionsNode.map().on((data: any, key: string) => {
+      const identifierField = (user?.email || participantEmail) ? 'uploaderEmail' : 'uploaderUid';
+      const identifierValue = user?.email || participantEmail || user?.uid;
+
+      const submissionsQuery = query(
+        collection(db, 'submissions'), 
+        where(identifierField, '==', identifierValue),
+        where('deleted', '!=', true) 
+      );
+
+      const unsubscribe = onSnapshot(submissionsQuery, (snapshot) => {
+        const fetchedSubmissions: Submission[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
           if (data && data.title) {
-              subMap.set(key, { ...data, id: key });
-              setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));
-          } else if (data === null) {
-              // Handle deletion
-              subMap.delete(key);
-              setMySubmissions(Array.from(subMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+            fetchedSubmissions.push({ 
+                id: docSnap.id, 
+                ...data,
+                createdAt: getTimestampAsNumber(data.createdAt)
+            } as Submission);
           }
+        });
+        fetchedSubmissions.sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
+        setMySubmissions(fetchedSubmissions);
       });
 
-      return () => {
-          submissionsNode.off();
-      };
-  }, [user, pubKey]);
+      return () => unsubscribe(); 
+  }, [user, participantEmail]);
 
-  // ... (Keep existing fetch logic for selectedRequest)
+  // Fetch details for selectedRequest
   useEffect(() => {
-      if (!selectedRequest || !selectedRequest.id) return;
+      if (!selectedRequest?.id) return;
 
       const reqId = selectedRequest.id;
-      const reqNode = gun.get('file_requests').get(reqId);
-      const participantsNode = gun.get('request_participants').get(reqId);
+      const requestDocRef = doc(db, 'requests', reqId);
 
-      // Subscribe to Root Metadata
-      reqNode.on((data: any) => {
-          if (!data) return;
-          
-          setSelectedRequest(prev => {
-              if (!prev || prev.id !== reqId) return prev;
-
-              let parsedEmails: string[] = [];
-              if (typeof data.pending_emails === 'string') {
-                  try { parsedEmails = JSON.parse(data.pending_emails); } catch (e) {}
-              } else if (Array.isArray(data.pending_emails)) {
-                  parsedEmails = data.pending_emails;
-              }
-
-              // Update metadata only, preserve existing participants if already loaded from separate node
-              // We create a clean update object
-              const update: any = { ...data, pending_emails: parsedEmails };
-              
-              // Remove participants from metadata update to avoid overwriting the detailed list
-              delete update.participants;
-
-              return { ...prev, ...update };
-          });
-      });
-
-      // Subscribe to Participants Node (Separate Root)
-      participantsNode.map().on((data: any, pub: string) => {
-          if (data) {
+      // Subscribe to Request Document
+      const unsubscribe = onSnapshot(requestDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+              const data = docSnap.data() as FileRequest;
               setSelectedRequest(prev => {
                   if (!prev || prev.id !== reqId) return prev;
-                  const prevParticipants = prev.participants || {};
-                  
-                  // Merge new participant data
                   return {
                       ...prev,
-                      participants: {
-                          ...prevParticipants,
-                          [pub]: data
-                      }
+                      ...data,
+                      createdAt: getTimestampAsNumber(data.createdAt)
                   };
               });
+          } else {
+              // Request was deleted or doesn't exist
+              setSelectedRequest(null);
           }
       });
 
-      return () => {
-          reqNode.off();
-          participantsNode.off();
-      };
-  }, [selectedRequest?.id, gun]);
+      return () => unsubscribe(); // Cleanup the listener
+  }, [selectedRequest?.id]);
 
-  // 2. Process Data into Rows
+  // Process Data into Rows & Fetch Submissions/Profiles
   useEffect(() => {
-      let isCurrent = true;
-
-      if (!selectedRequest) {
+      if (!selectedRequest || !selectedRequest.id) {
           setParticipants([]);
           return;
       }
 
       const rows = new Map<string, ParticipantRow>();
       
-      const updateParticipants = () => {
-          if (isCurrent) setParticipants(Array.from(rows.values()));
-      };
+      const processData = async () => {
+          // Process Participants from selectedRequest
+          const participantsData = selectedRequest.participants || {};
+          for (const pub of Object.keys(participantsData)) {
+              const data = participantsData[pub];
+              if (typeof data === 'object' && data !== null) {
+                  rows.set(pub, {
+                      id: pub,
+                      name: data.alias || 'Unknown User',
+                      contact: data.email || pub,
+                      status: data.status || 'pending',
+                      type: 'user',
+                      extensionHours: data.extensionHours || 0,
+                      hasPass: data.hasPass || false
+                  });
+              }
+          }
 
-      // Process Participants
-      const participantsData = selectedRequest.participants || {};
-      Object.entries(participantsData).forEach(([pub, data]: [string, any]) => {
-          if (typeof data === 'object' && data !== null) {
-              rows.set(pub, {
-                  id: pub,
-                  name: data.alias || 'Unknown User',
-                  contact: data.email || pub,
-                  status: data.status || 'pending',
+          // Process Pending Emails (accessList)
+          if (selectedRequest.accessList) {
+              selectedRequest.accessList.forEach((email: string) => {
+                  if (!rows.has(email)) { 
+                      rows.set(email, {
+                          id: email,
+                          name: email,
+                          contact: email,
+                          status: 'invited',
+                          type: 'email'
+                      });
+                  }
+              });
+          }
+
+          // Ensure Host is Listed
+          if (selectedRequest.ownerPub && !rows.has(selectedRequest.ownerPub)) {
+              rows.set(selectedRequest.ownerPub, {
+                  id: selectedRequest.ownerPub,
+                  name: 'Host (You)',
+                  contact: selectedRequest.ownerPub,
+                  status: 'joined', 
                   type: 'user',
-                  extensionHours: data.extensionHours || 0,
-                  hasPass: data.hasPass || false
-              });
-          }
-      });
-
-      // Process Pending Emails
-      if (selectedRequest.pending_emails) {
-          selectedRequest.pending_emails.forEach((email: string) => {
-              if (!rows.has(email)) {
-                  rows.set(email, {
-                      id: email,
-                      name: email,
-                      contact: email,
-                      status: 'invited',
-                      type: 'email'
-                  });
-              }
-          });
-      }
-
-      // Ensure Host is Listed
-      if (selectedRequest.ownerPub && !rows.has(selectedRequest.ownerPub)) {
-          rows.set(selectedRequest.ownerPub, {
-              id: selectedRequest.ownerPub,
-              name: 'Host (You)',
-              contact: selectedRequest.ownerPub,
-              status: 'joined', // or 'host'
-              type: 'user',
-              extensionHours: 0,
-              hasPass: true
-          });
-          // Alias fetch will happen in the loop below
-      }
-
-      updateParticipants();
-
-      // Fetch Submissions to update status (from public node)
-      const submissionsMap = gun.get('request_submissions').get(selectedRequest.id!).map();
-      
-      submissionsMap.on((sub: any) => {
-          if (!isCurrent) return;
-          if (!sub) return;
-          
-          let targetId = sub.uploaderPub;
-          let isProxy = false;
-          let proxyAlias = '';
-
-          // Check for Proxy
-          if (sub.proxyFor && sub.proxyFor.alias) {
-              isProxy = true;
-              proxyAlias = sub.proxyFor.alias;
-              
-              // Try to find matching participant by name or contact
-              let found = false;
-              for (const [key, p] of rows.entries()) {
-                  if (p.name === proxyAlias || p.contact === proxyAlias) {
-                      targetId = key;
-                      found = true;
-                      break;
-                  }
-              }
-              
-              // If no existing participant matched, create a unique key
-              if (!found) {
-                   targetId = `proxy:${proxyAlias}`;
-              }
-          }
-
-          if (!targetId) return;
-          
-          if (!rows.has(targetId)) {
-              rows.set(targetId, {
-                  id: targetId,
-                  name: isProxy ? proxyAlias : 'Loading...',
-                  contact: isProxy ? 'Proxy Submission' : targetId,
-                  status: 'submitted',
-                  type: isProxy ? 'email' : 'user', 
                   extensionHours: 0,
-                  hasPass: false
+                  hasPass: true
               });
-              
-              if (!isProxy) {
-                  gun.get('all_users').get(targetId).once((u: any) => {
-                      if (!isCurrent) return;
-                      if (u && u.alias) {
-                          const p = rows.get(targetId);
-                          if (p) {
-                              rows.set(targetId, { ...p, name: u.alias });
-                              updateParticipants();
-                          }
-                      }
-                  });
-              }
-              updateParticipants();
-          } else {
-             const p = rows.get(targetId);
-             if (p && p.status !== 'submitted') {
-                 rows.set(targetId, { ...p, status: 'submitted' });
-                 updateParticipants();
-             }
           }
-      });
 
-      // Fetch Profiles
-      rows.forEach((row, pub) => {
-          if (row.type === 'user') {
-              gun.get('all_users').get(pub).once((u: any) => {
-                  if (!isCurrent) return;
-                  if (u) {
-                       let changed = false;
-                       let newName = row.name;
-                       let newContact = row.contact;
-
-                       if (u.alias && (row.name !== u.alias || row.name === 'Loading...')) {
-                           newName = u.alias;
-                           changed = true;
-                       }
-                       if (u.email && (row.contact === pub || !row.contact)) {
-                           newContact = u.email;
-                           changed = true;
-                       }
-
-                       if (changed) {
-                           rows.set(pub, { ...row, name: newName, contact: newContact });
-                           updateParticipants();
-                       }
+          // Fetch Submissions to update status
+          if (selectedRequest.id) {
+              const submissionsQuery = query(
+                  collection(db, 'requests', selectedRequest.id, 'submissions'),
+                  where('deleted', '!=', true)
+              );
+              const submissionSnapshot = await getDocs(submissionsQuery);
+              submissionSnapshot.forEach(subDoc => {
+                  const subData = subDoc.data();
+                  if (subData.uploaderUid) {
+                      const p = rows.get(subData.uploaderUid);
+                      if (p && p.status !== 'submitted') {
+                          rows.set(subData.uploaderUid, { ...p, status: 'submitted' });
+                      } else if (!p) {
+                          rows.set(subData.uploaderUid, {
+                              id: subData.uploaderUid,
+                              name: 'Loading...', 
+                              contact: subData.uploaderUid,
+                              status: 'submitted',
+                              type: 'user',
+                              extensionHours: 0,
+                              hasPass: false
+                          });
+                      }
                   }
               });
           }
-      });
 
-      return () => {
-          isCurrent = false;
-          submissionsMap.off();
+          // Fetch Profiles (aliases) for user participants
+          const profilePromises: Promise<void>[] = [];
+          rows.forEach((row, id) => {
+              if (row.type === 'user' && row.name === 'Loading...') { 
+                  profilePromises.push((async () => {
+                      try {
+                          const profileDoc = await getDoc(doc(db, 'profiles', id));
+                          if (profileDoc.exists()) {
+                              const profileData = profileDoc.data() as UserProfile;
+                              if (profileData.alias) {
+                                  rows.set(id, { ...row, name: profileData.alias, contact: profileData.email || profileData.uid });
+                              }
+                          }
+                      } catch (e) {
+                          console.error("Error fetching profile for", id, e);
+                      }
+                  })());
+              }
+          });
+          await Promise.all(profilePromises);
+          
+          setParticipants(Array.from(rows.values()));
       };
-  }, [selectedRequest, gun]);
 
-  const grantExtension = (pub: string, hours: number) => {
+      processData();
+
+  }, [selectedRequest, user]);
+
+  const grantExtension = async (pub: string, hours: number) => {
       if (!selectedRequest || !selectedRequest.id) return;
       
-      // Update global request node (using new participants root)
-      gun.get('request_participants').get(selectedRequest.id).get(pub).get('extensionHours').put(hours);
-      
-      // Update local state optimistically
-      setParticipants(prev => prev.map(p => 
-          p.id === pub ? { ...p, extensionHours: hours } : p
-      ));
+      try {
+          const requestDocRef = doc(db, 'requests', selectedRequest.id);
+          await updateDoc(requestDocRef, {
+              [`participants.${pub}.extensionHours`]: hours
+          });
+          
+          setParticipants(prev => prev.map(p => 
+              p.id === pub ? { ...p, extensionHours: hours } : p
+          ));
+      } catch (e) {
+          console.error("Error granting extension:", e);
+          error("Failed to grant extension.");
+      }
   };
 
-  const grantPass = (pub: string) => {
+  const grantPass = async (pub: string) => {
       if (!selectedRequest || !selectedRequest.id) return;
       
-      const newPassStatus = !participants.find(p => p.id === pub)?.hasPass;
+      try {
+          const newPassStatus = !participants.find(p => p.id === pub)?.hasPass;
+          const requestDocRef = doc(db, 'requests', selectedRequest.id);
+          
+          await updateDoc(requestDocRef, {
+              [`participants.${pub}.hasPass`]: newPassStatus
+          });
 
-      // Standard Graph Update (New Architecture)
-      gun.get('request_participants').get(selectedRequest.id).get(pub).get('hasPass').put(newPassStatus);
-
-      setParticipants(prev => prev.map(p => 
-        p.id === pub ? { ...p, hasPass: newPassStatus } : p
-      ));
+          setParticipants(prev => prev.map(p => 
+            p.id === pub ? { ...p, hasPass: newPassStatus } : p
+          ));
+      } catch (e) {
+          console.error("Error granting pass:", e);
+          error("Failed to grant pass.");
+      }
   };
 
-  const handleBulkExtend = (hours: number) => {
+  const handleBulkExtend = async (hours: number) => { 
       if (!selectedRequest || !selectedRequest.id) return;
       if (!confirm(`Are you sure you want to grant a ${hours} hour extension to ALL ${participants.length} participants?`)) return;
+      setLoading(true); 
+      try {
+          const requestDocRef = doc(db, 'requests', selectedRequest.id);
+          const updatePromises: Promise<void>[] = [];
 
-      participants.forEach(p => {
-          // Grant extension to everyone
-          gun.get('request_participants').get(selectedRequest.id!).get(p.id).get('extensionHours').put(hours);
-      });
+          participants.forEach(p => {
+              if (p.type === 'user' && p.id) {
+                  updatePromises.push(
+                      updateDoc(requestDocRef, {
+                          [`participants.${p.id}.extensionHours`]: hours
+                      })
+                  );
+              }
+          });
 
-      // Optimistic update
-      setParticipants(prev => prev.map(p => ({ ...p, extensionHours: hours })));
-      success(`Granted +${hours}h extension to all participants.`);
+          await Promise.all(updatePromises);
+          
+          setParticipants(prev => prev.map(p => ({ ...p, extensionHours: hours })));
+          success(`Granted +${hours}h extension to all participants.`);
+      } catch (e) {
+          console.error("Error bulk granting extension:", e);
+          error("Failed to grant bulk extension.");
+      } finally {
+          setLoading(false);
+      }
   };
   
   const exportCSV = () => {
@@ -364,7 +319,7 @@ export function CreatorTools() {
       const headers = ['Name', 'Contact', 'Status', 'Type', 'Extension (Hours)', 'Has Pass'];
       const csvContent = [
           headers.join(','),
-          ...participants.map(p => `"${p.name}","${p.contact}","${p.status}","${p.type}","${p.extensionHours || 0}","${p.hasPass ? 'Yes' : 'No'}"`)
+          ...participants.map(p => `"${p.name}","${p.contact}","${p.status}","${p.type}","${p.extensionHours || 0}","${p.hasPass ? 'Yes' : 'No'}"`) 
       ].join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -379,7 +334,7 @@ export function CreatorTools() {
   };
 
   const handleGenerateExtensionLink = async () => {
-      if (!selectedRequest || !selectedRequest.id) return;
+      if (!selectedRequest || !selectedRequest.id || !user?.uid) return;
       
       const hoursStr = prompt("Enter extension hours (e.g. 24, 48):", "24");
       if (!hoursStr) return;
@@ -390,89 +345,99 @@ export function CreatorTools() {
           return;
       }
 
-      const code = crypto.randomUUID().substring(0, 8).toUpperCase();
-      
-      // Save code
-      gun.get('extension_codes').get(code).put({
-          hours,
-          requestId: selectedRequest.id,
-          createdAt: Date.now(),
-          createdBy: pubKey
-      });
+      setLoading(true); 
+      try {
+          const code = crypto.randomUUID().substring(0, 8).toUpperCase();
+          
+          await addDoc(collection(db, 'extension_codes'), {
+              code, 
+              hours,
+              requestId: selectedRequest.id,
+              createdAt: serverTimestamp(),
+              createdBy: user.uid
+          });
 
-      const url = `${window.location.origin}/request/${selectedRequest.id}?extension=${code}`;
-      navigator.clipboard.writeText(url);
-      success(`Extension link (+${hours}h) copied to clipboard!`);
+          const url = `${window.location.origin}/request/${selectedRequest.id}?extension=${code}`;
+          navigator.clipboard.writeText(url);
+          success(`Extension link (+${hours}h) copied to clipboard!`);
+      } catch (e) {
+          console.error("Error generating extension link:", e);
+          error("Failed to generate extension link.");
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleRepublish = async () => {
-      if (!selectedRequest || !selectedRequest.id) return;
+      if (!selectedRequest || !selectedRequest.id || !user?.uid) return;
       
+      setLoading(true);
       try {
-          // Construct clean object
-          const reqData: any = { 
-              ...selectedRequest,
-              ownerPub: pubKey, // Enforce current ownership
-              // Ensure arrays are stringified for GunDB
-              pending_emails: Array.isArray(selectedRequest.pending_emails) 
-                  ? JSON.stringify(selectedRequest.pending_emails) 
-                  : selectedRequest.pending_emails
+          const requestDocRef = doc(db, 'requests', selectedRequest.id);
+          
+          const updates: Partial<FileRequest> = {
+              ownerPub: user.uid,
+              deleted: false, 
+              updatedAt: serverTimestamp()
           };
-          delete reqData.participants; 
-          delete reqData._; 
+
+          if (!Array.isArray(selectedRequest.accessList)) {
+              updates.accessList = [];
+          }
+
+          await updateDoc(requestDocRef, updates);
           
-          // Re-write to global node
-          await gun.get('file_requests').get(selectedRequest.id).put(reqData);
-          
-          // Also ensure it is in my_requests (self-healing local scope)
-          user.get('requests').get(selectedRequest.id).put(reqData);
-          
-          success("Request republished to global feed!");
+          success("Request republished!");
       } catch (e) {
           console.error("Republish failed", e);
-          error("Failed to republish request.");
+          error("Failed to republish request: " + (e as Error).message);
+      } finally {
+          setLoading(false);
       }
   };
 
   const handleRepublishSubmission = async (subToPublish: Submission | null = selectedSubmission) => {
-      if (!subToPublish || !subToPublish.id || !subToPublish.requestId || !pubKey) return;
+      if (!subToPublish || !subToPublish.id || !subToPublish.requestId || !user?.uid) return;
       
+      setLoading(true);
       try {
           const subData: any = { ...subToPublish };
           delete subData._;
           
-          // Safety: Stringify arrays if they aren't already
-          if (Array.isArray(subData.waveform)) subData.waveform = JSON.stringify(subData.waveform);
-          if (Array.isArray(subData.feedbackFocus)) subData.feedbackFocus = JSON.stringify(subData.feedbackFocus);
-          if (typeof subData.collaborators === 'object') subData.collaborators = JSON.stringify(subData.collaborators);
+          if (typeof subData.waveform === 'string') subData.waveform = JSON.parse(subData.waveform);
+          if (typeof subData.feedbackFocus === 'string') subData.feedbackFocus = JSON.parse(subData.feedbackFocus);
+          if (typeof subData.collaborators === 'string') subData.collaborators = JSON.parse(subData.collaborators);
           
-          // 1. Write to Request Node (Global)
-          await gun.get('request_submissions').get(subToPublish.requestId).get(subToPublish.id).put(subData);
+          const updates = {
+              ...subData,
+              uploaderUid: user.uid, 
+              deleted: false,
+              updatedAt: serverTimestamp()
+          };
+
+          const requestSubmissionsDocRef = doc(db, 'requests', subToPublish.requestId, 'submissions', subToPublish.id);
+          await updateDoc(requestSubmissionsDocRef, updates);
           
-          // 2. Write to User Root Graph (Public Profile Source)
-          await user.get('submissions').get(subToPublish.id).put(subData);
+          const globalSubmissionsDocRef = doc(db, 'submissions', subToPublish.id);
+          await updateDoc(globalSubmissionsDocRef, updates);
           
-          // 3. Link to All Users (Global Directory)
-          await gun.get('all_users').get(pubKey).get('submissions').get(subToPublish.id).put(pubKey);
-          
-          if (subToPublish === selectedSubmission) {
-              success("Submission republished to all public feeds!");
-          }
+          success("Submission republished!");
       } catch (e) {
           console.error("Republish submission failed", e);
-          if (subToPublish === selectedSubmission) {
-              error("Failed to republish submission.");
-          }
+          error("Failed to republish submission: " + (e as Error).message);
+      } finally {
+          setLoading(false);
       }
   };
 
-  if (!pubKey) return <div className="text-center py-20 text-gray-500">Please login to access Creator Tools.</div>;
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-theme(spacing.16))]">
-        {/* Sidebar */}
+        {
+/* Sidebar */}
         <div className={`w-full lg:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission ? 'hidden lg:flex' : 'flex'}`}>
-            {/* Tabs */}
+            {
+/* Tabs */}
             <div className="flex border-b border-gray-800">
                 <button
                     onClick={() => { setActiveTab('requests'); setSelectedSubmission(null); }}
@@ -529,7 +494,8 @@ export function CreatorTools() {
             </div>
         </div>
 
-        {/* Main Content */}
+        {
+/* Main Content */}
         <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission ? 'block' : 'hidden lg:block'}`}>
             {activeTab === 'requests' && selectedRequest ? (
                 <div>
@@ -545,7 +511,7 @@ export function CreatorTools() {
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold text-white">{selectedRequest.title}</h1>
                                 <Link 
-                                    to={`/request/${selectedRequest.id}`} 
+                                    to={`/request/${selectedRequest.id}`}
                                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
                                     title="Open Request Page"
                                 >
@@ -604,7 +570,7 @@ export function CreatorTools() {
                             <select
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
-                                className="bg-gray-900 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:border-blue-500 outline-none"
+                                className="w-full bg-gray-900 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:border-blue-500 outline-none"
                             >
                                 <option value="all">All Statuses</option>
                                 <option value="submitted">Submitted</option>
@@ -720,7 +686,7 @@ export function CreatorTools() {
                                 </button>
                             </div>
                             <p className="text-gray-400 text-sm">
-                                Submitted on {new Date(selectedSubmission.createdAt).toLocaleDateString()}
+                                Submitted on {new Date(getTimestampAsNumber(selectedSubmission.createdAt)).toLocaleDateString()}
                             </p>
                         </div>
                     </div>
@@ -781,9 +747,10 @@ export function CreatorTools() {
                 existingSubmission={selectedSubmission}
                 onClose={() => setIsEditSubmissionOpen(false)}
                 onSuccess={() => {
-                    // Refresh not needed as Gun is realtime, but maybe update local list if changed
+                    // Refetch submissions after successful edit if not using real-time listener for this specific submission
+                    // Currently, the parent CreatorTools component has an onSnapshot listener for submissions,
+                    // so changes should be reflected automatically.
                     setIsEditSubmissionOpen(false);
-                    // Re-select to show updates? Handled by gun subscriptions generally.
                 }}
             />
         )}

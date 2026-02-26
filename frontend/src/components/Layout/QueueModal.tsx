@@ -61,7 +61,7 @@ export function QueueModal({ queue, currentTrack, onPlay, onClose }: QueueModalP
                                                {track.title}
                                            </div>
                                            <div className="text-xs text-gray-500 truncate">
-                                               {track.byline || (track.uploaderPub ? `${track.uploaderPub.substring(0, 8)}...` : 'Unknown')}
+                                               {track.byline || (track.uploaderUid ? `${track.uploaderUid.substring(0, 8)}...` : 'Unknown')}
                                            </div>
                                        </div>
                                    </div>

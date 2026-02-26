@@ -3,8 +3,9 @@ import { MessageSquare } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import type { Submission, FileRequest } from '../types';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import type { Submission, FileRequest, Comment } from '../types';
+import { getTimestampAsNumber } from '../lib/utils';
 
 export function Community() {
   const [feed, setFeed] = useState<FeedItemData[]>([]);
@@ -30,28 +31,83 @@ export function Community() {
                 limit(50)
             );
             const subSnapshot = await getDocs(subQuery);
+            const submissionsMap: Record<string, Submission> = {}; // Cache for comment lookup
             
-            const feedItems: FeedItemData[] = subSnapshot.docs.map(doc => {
+            const submissionFeedItems: FeedItemData[] = subSnapshot.docs.map(doc => {
                 const data = doc.data() as Submission;
+                submissionsMap[doc.id] = data; // Cache it
                 const reqTitle = reqMap[data.requestId] || 'Unknown Request';
                 
                 return {
                     id: doc.id,
                     type: 'submission',
                     text: `Submitted a new track: ${data.title}`,
-                    authorPub: data.uploaderPub,
+                    authorUid: data.uploaderUid, // Changed from authorPub
                     authorEmail: data.uploaderEmail,
                     authorName: data.byline,
                     submissionId: doc.id,
                     requestId: data.requestId,
                     submissionTitle: data.title,
                     requestTitle: reqTitle,
-                    createdAt: data.createdAt, // Assuming number
+                    createdAt: getTimestampAsNumber(data.createdAt), // Used helper
                     usesAI: data.usesAI
                 };
             });
 
-            setFeed(feedItems);
+            // 3. Fetch Recent Comments
+            const commQuery = query(
+                collection(db, 'comments'),
+                orderBy('createdAt', 'desc'),
+                limit(50)
+            );
+            const commSnapshot = await getDocs(commQuery);
+
+            // Resolve missing submissions for comments
+            const commentsWithData = await Promise.all(commSnapshot.docs.map(async (docSnap) => {
+                const data = docSnap.data() as Comment;
+                if (!data.submissionId || !data.requestId) return null; // Skip invalid comments
+                
+                let submission = submissionsMap[data.submissionId];
+                
+                // If submission not in our recent list, fetch it
+                if (!submission) {
+                    try {
+                        const subDoc = await getDoc(doc(db, 'submissions', data.submissionId));
+                        if (subDoc.exists()) {
+                            submission = subDoc.data() as Submission;
+                            submissionsMap[data.submissionId] = submission; // Cache
+                        }
+                    } catch (e) {
+                        console.warn(`Failed to fetch submission ${data.submissionId} for comment ${docSnap.id}`);
+                    }
+                }
+
+                if (!submission) return null; // Can't display comment without submission context
+
+                const reqTitle = reqMap[data.requestId] || 'Unknown Request';
+                
+                return {
+                    id: docSnap.id,
+                    type: 'comment',
+                    text: data.text,
+                    authorUid: data.authorUid,
+                    authorEmail: data.authorEmail,
+                    authorName: data.userProfile?.displayName || (data.authorEmail ? data.authorEmail.split('@')[0] : 'Unknown'),
+                    submissionId: data.submissionId,
+                    requestId: data.requestId,
+                    submissionTitle: submission.title,
+                    requestTitle: reqTitle,
+                    createdAt: getTimestampAsNumber(data.createdAt),
+                    usesAI: false // Comments don't use AI in this context
+                } as FeedItemData;
+            }));
+
+            const validComments = commentsWithData.filter((c): c is FeedItemData => c !== null);
+
+            // 4. Merge and Sort
+            const combinedFeed = [...submissionFeedItems, ...validComments].sort((a, b) => b.createdAt - a.createdAt);
+
+            setFeed(combinedFeed);
         } catch (err) {
             console.error("Error loading community feed:", err);
         } finally {

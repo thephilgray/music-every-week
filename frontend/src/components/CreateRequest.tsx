@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { Tooltip } from './ui/Tooltip';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { getTimestampAsNumber } from '../lib/utils';
 
 export function CreateRequest() {
   const { user } = useAuth(); // Use Auth Context
@@ -16,12 +17,16 @@ export function CreateRequest() {
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
   const [playlistLiveDate, setPlaylistLiveDate] = useState('');
+  const [previewTrackCount, setPreviewTrackCount] = useState<number>(5);
   const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>('direct');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   
   const [emailInput, setEmailInput] = useState('');
   const [emails, setEmails] = useState<string[]>([]);
+  const [separatePlaylistAccess, setSeparatePlaylistAccess] = useState(false);
+  const [playlistEmailInput, setPlaylistEmailInput] = useState('');
+  const [playlistEmails, setPlaylistEmails] = useState<string[]>([]);
 
   // Volunteer Pool Logic
   const [poolSeats, setPoolSeats] = useState(3);
@@ -41,6 +46,10 @@ export function CreateRequest() {
     setEmails(emails.filter(e => e !== email));
   };
 
+  const removePlaylistEmail = (email: string) => {
+    setPlaylistEmails(playlistEmails.filter(e => e !== email));
+  };
+
   useEffect(() => {
     if (!user?.email) return;
     
@@ -53,8 +62,10 @@ export function CreateRequest() {
             querySnapshot.forEach((doc) => {
                 reqs.push({ id: doc.id, ...doc.data() } as FileRequest);
             });
-            // Sort by createdAt desc
-            reqs.sort((a, b) => b.createdAt - a.createdAt);
+            // Sort by createdAt desc, explicitly converting to number
+            reqs.sort((a, b) => 
+                getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt)
+            );
             setExistingRequests(reqs);
         } catch (e) {
             console.error("Error fetching existing requests:", e);
@@ -86,6 +97,7 @@ export function CreateRequest() {
       setDesc('');
       setDeadline('');
       setFile(null);
+      setPreviewTrackCount(5);
       setEmails([]);
       setSelectedImportId('');
       setShowSuccess(false);
@@ -108,13 +120,26 @@ export function CreateRequest() {
       let finalEmails = [...emails];
       if (emailInput.trim()) {
           const lingering = emailInput
-              .split(/[\n, ]+/)
+              .split(/[\s,]+/)
               .map(s => s.trim())
               .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
           if (lingering.length > 0) {
               finalEmails = Array.from(new Set([...finalEmails, ...lingering]));
               setEmails(finalEmails);
               setEmailInput('');
+          }
+      }
+
+      let finalPlaylistEmails = [...playlistEmails];
+      if (separatePlaylistAccess && playlistEmailInput.trim()) {
+          const lingeringPlaylist = playlistEmailInput
+              .split(/[\s,]+/)
+              .map(s => s.trim())
+              .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !playlistEmails.includes(s));
+          if (lingeringPlaylist.length > 0) {
+              finalPlaylistEmails = Array.from(new Set([...finalPlaylistEmails, ...lingeringPlaylist]));
+              setPlaylistEmails(finalPlaylistEmails);
+              setPlaylistEmailInput('');
           }
       }
 
@@ -141,19 +166,14 @@ export function CreateRequest() {
         accessMode,
         artworkUrl: artworkUrl || null,
         ownerEmail: user.email, // Use Email as identifier
-        ownerPub: user.uid, // Keep UID as ownerPub equivalent for compatibility? Or just use ownerEmail. 
-                            // Let's store uid as ownerUid just in case.
+        ownerPub: user.uid, // Use ownerPub for Firebase
         createdAt: Date.now(), // Firestore timestamp is better, but number is used in types
-        // accessList: finalEmails, // Store emails directly
-        pending_emails: finalEmails, // Keeping legacy name or mapping to accessList? 
-                                     // Let's use accessList as the standard going forward,
-                                     // but keep pending_emails if the type definition requires it or migration expects it.
-                                     // Type definition has accessList.
-        accessList: finalEmails,
+        accessList: finalEmails, // Store emails directly
         inviteCode,
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
         hostEmail: user.email, // Explicit host email
+        previewTrackCount: previewTrackCount,
       };
 
       // Create in Firestore
@@ -164,6 +184,28 @@ export function CreateRequest() {
       
       const requestId = docRef.id;
 
+      // Create a linked playlist document
+      let playlistId: string | null = null;
+      let finalPlaylistLink: string | null = null;
+
+      const playlistAccessList = separatePlaylistAccess ? finalPlaylistEmails : finalEmails;
+      const playlistData = {
+          title: requestData.title,
+          description: requestData.description,
+          artworkUrl: requestData.artworkUrl,
+          ownerEmail: requestData.ownerEmail,
+          ownerPub: requestData.ownerPub,
+          requestId: requestId, // Link to the request
+          liveDate: playlistLiveDate ? new Date(playlistLiveDate).toISOString() : (deadline ? new Date(deadline).toISOString() : null), // Use playlistLiveDate if set, else request deadline
+          accessList: playlistAccessList,
+          createdAt: serverTimestamp()
+      };
+
+      const playlistDocRef = await addDoc(collection(db, 'playlists'), playlistData);
+      playlistId = playlistDocRef.id;
+      finalPlaylistLink = `${window.location.origin}/playlist/${playlistId}`;
+
+
       // Note: We are NOT sending notifications yet (Step 8 might add cloud functions or client-side emails).
       // Since we don't have a reliable way to map emails to users without a directory search (which we removed from client),
       // we rely on the Invite Link or manual distribution for now.
@@ -173,7 +215,7 @@ export function CreateRequest() {
            // Maybe include invite code if needed?
       }
       
-      setInviteLink(link);
+      setInviteLink(finalPlaylistLink || link); // Prioritize playlist link if created
       setCreatedRequestId(requestId);
       setShowSuccess(true);
       
@@ -289,6 +331,8 @@ export function CreateRequest() {
                    if (newMode === 'volunteer') {
                        setEmails([]);
                        setEmailInput('');
+                       setPlaylistEmails([]);
+                       setPlaylistEmailInput('');
                    }
                }}
                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
@@ -302,6 +346,19 @@ export function CreateRequest() {
                     Note: Participants will be added immediately and will see this request in their feed without needing to accept an invite.
                 </p>
              )}
+          </div>
+          <div>
+            <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
+                Preview Tracks Limit
+                <Tooltip content="Number of tracks visible to participants after they submit but before the deadline. Set to 0 to hide all." icon />
+            </label>
+            <input 
+              type="number" 
+              min="0"
+              value={previewTrackCount}
+              onChange={e => setPreviewTrackCount(parseInt(e.target.value) || 0)}
+              className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
+            />
           </div>
         </div>
 
@@ -359,6 +416,21 @@ export function CreateRequest() {
               <Tooltip content="Build your invite list here. Users must be invited to see this request (unless Volunteer Mode is on)." icon />
           </label>
           
+          {/* Option for separate playlist access */}
+          <div className="flex items-center mb-4">
+              <input 
+                  type="checkbox" 
+                  id="separatePlaylistAccess"
+                  checked={separatePlaylistAccess}
+                  onChange={e => setSeparatePlaylistAccess(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="separatePlaylistAccess" className="text-gray-400 text-sm ml-2 cursor-pointer select-none">
+                  Use separate access list for playlist
+              </label>
+              <Tooltip content="If checked, the playlist will have its own separate invite list. Otherwise, it uses the request's participant list." icon />
+          </div>
+
           {/* 1. Import from previous */}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
@@ -373,7 +445,12 @@ export function CreateRequest() {
                 >
                     <option value="">-- Select a previous request --</option>
                     {existingRequests.map(req => (
-                        <option key={req.id} value={req.id}>{req.title} ({new Date(req.createdAt).toLocaleDateString()})</option>
+                        <option 
+                            key={req.id} 
+                            value={req.id}
+                        >
+                            {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                        </option>
                     ))}
                 </select>
             </div>
@@ -394,13 +471,13 @@ export function CreateRequest() {
                     
                     // Auto-process on paste or delimiter
                     if (val.includes(',') || val.includes('\n')) {
-                        const raw = val.split(/[\n, ]+/);
+                        const raw = val.split(/[\n,\s]+/);
                         const valid: string[] = [];
                         let remaining = '';
 
                         raw.forEach((s, i) => {
                             const trimmed = s.trim();
-                            const endsWithDelimiter = val.trimEnd().match(/[\n,]$/);
+                            const endsWithDelimiter = val.trimEnd().match(/[`,]$/);
                             
                             // Check for internal spaces (invalid email)
                             const hasInternalSpace = trimmed.includes(' ');
@@ -422,7 +499,7 @@ export function CreateRequest() {
                     // Process remaining on blur
                     if (!emailInput.trim()) return;
                     const valid = emailInput
-                        .split(/[\n, ]+/) 
+                        .split(/[\n,\s]+/)
                         .map(s => s.trim())
                         .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
                     
@@ -441,7 +518,7 @@ export function CreateRequest() {
           {/* Selected Participants List */}
           {(emails.length > 0) && (
             <div className="bg-gray-900 p-3 rounded border border-gray-700">
-               <label className="block text-gray-400 text-xs mb-2 uppercase tracking-wide">Selected Participants</label>
+               <label className="block text-gray-400 text-xs mb-2 uppercase tracking-wide">Selected Request Participants</label>
                <div className="flex flex-wrap gap-2">
                  {/* Email Invites */}
                  {emails.map(email => (
@@ -451,6 +528,84 @@ export function CreateRequest() {
                    </span>
                  ))}
                </div>
+            </div>
+          )}
+
+          {/* Separate Playlist Participants */}
+          {separatePlaylistAccess && (
+            <div className="border-t border-gray-700 pt-4 space-y-4">
+              <label className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-2">
+                  Manage Playlist Participants
+                  <Tooltip content="Build the invite list specifically for the playlist. These users will only see the playlist content." icon />
+              </label>
+              <div>
+                <label className="block text-gray-500 text-xs mb-1 flex items-center gap-2">
+                    Invite by Email (Comma or newline separated)
+                    <Tooltip content="Add external users to the playlist. They will need the invite link to join." icon />
+                </label>
+                <div className="flex flex-col gap-2">
+                  <textarea 
+                    value={playlistEmailInput}
+                    onChange={e => {
+                        const val = e.target.value;
+                        setPlaylistEmailInput(val);
+                        
+                        if (val.includes(',') || val.includes('\n')) {
+                            const raw = val.split(/[\n,\s]+/);
+                            const valid: string[] = [];
+                            let remaining = '';
+
+                            raw.forEach((s, i) => {
+                                const trimmed = s.trim();
+                                const endsWithDelimiter = val.trimEnd().match(/[`,]$/);
+                                
+                                const hasInternalSpace = trimmed.includes(' ');
+
+                                if (i === raw.length - 1 && !endsWithDelimiter) { 
+                                    remaining = s; 
+                                } else if (trimmed.length > 5 && trimmed.includes('@') && !hasInternalSpace && !playlistEmails.includes(trimmed)) {
+                                    valid.push(trimmed);
+                                }
+                            });
+                            
+                            if (valid.length > 0) {
+                                setPlaylistEmails(prev => Array.from(new Set([...prev, ...valid])));
+                                setPlaylistEmailInput(remaining); 
+                            }
+                        }
+                    }}
+                    onBlur={() => {
+                        if (!playlistEmailInput.trim()) return;
+                        const valid = playlistEmailInput
+                            .split(/[\n,\s]+/)
+                            .map(s => s.trim())
+                            .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !playlistEmails.includes(s));
+                        
+                        if (valid.length > 0) {
+                            setPlaylistEmails(prev => Array.from(new Set([...prev, ...valid])));
+                            setPlaylistEmailInput(''); 
+                        }
+                    }}
+                    className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none h-20 text-sm"
+                    placeholder="playlistfriend@example.com (Press Enter or Comma to add)"
+                  />
+                  <p className="text-xs text-gray-500">Paste a list of emails here. Separate with commas or newlines.</p>
+                </div>
+              </div>
+              
+              {(playlistEmails.length > 0) && (
+                <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                   <label className="block text-gray-400 text-xs mb-2 uppercase tracking-wide">Selected Playlist Participants</label>
+                   <div className="flex flex-wrap gap-2">
+                     {playlistEmails.map(email => (
+                       <span key={email} className="bg-yellow-900 text-yellow-200 text-xs px-2 py-1 rounded flex items-center gap-2 border border-yellow-700">
+                         {email}
+                         <button type="button" onClick={() => removePlaylistEmail(email)} className="hover:text-white font-bold px-1">×</button>
+                       </span>
+                     ))}
+                   </div>
+                </div>
+              )}
             </div>
           )}
         </div>

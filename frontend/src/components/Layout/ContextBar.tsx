@@ -1,16 +1,57 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, UserPlus, Copy, X } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useGun } from '../../contexts/GunContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fixUrl } from '../../lib/url';
+import { db } from '../../lib/firebase';
+import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import type { UserProfile } from '../../types';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { gun, pubKey, userProfile, isConnected, isIdle, isInternetOnline, user: gunUser } = useGun(); // Aliased Gun user to avoid conflict if needed, or just let it be.
+  const { gun, pubKey, isConnected, isIdle, isInternetOnline, user: gunUser } = useGun(); // Aliased Gun user to avoid conflict if needed, or just let it be.
   // Actually, useAuth provides 'user' (Firebase) and 'logout'. 
   // useGun provides 'user' (Gun SEA). 
   // Let's destructure what we need carefully.
-  const { logout } = useAuth();
+  const { user, participantEmail, logout } = useAuth();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    let unsub = () => {};
+
+    const fetchProfile = async () => {
+        if (user?.uid) {
+            // Subscribe to profile by UID
+            unsub = onSnapshot(doc(db, 'profiles', user.uid), (doc) => {
+                if (doc.exists()) {
+                    setUserProfile(doc.data() as UserProfile);
+                } else {
+                    setUserProfile(null);
+                }
+            });
+        } else if (participantEmail) {
+            // Fetch by email (One-time fetch usually sufficient, or could set up watcher if needed)
+            // For participants, profile might not change often or doesn't exist yet.
+            try {
+                const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    setUserProfile(querySnapshot.docs[0].data() as UserProfile);
+                } else {
+                    setUserProfile(null);
+                }
+            } catch (e) {
+                console.error("Error fetching participant profile:", e);
+            }
+        } else {
+            setUserProfile(null);
+        }
+    };
+
+    fetchProfile();
+
+    return () => unsub();
+  }, [user, participantEmail]);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,18 +86,27 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
   };
 
   const generateInvite = () => {
-      if (!pubKey) return;
+      // Use Firebase UID if available, otherwise fallback to PubKey if still using Gun for invites
+      const fromId = user?.uid || pubKey;
+      if (!fromId) return;
+
       const code = crypto.randomUUID().substring(0, 8).toUpperCase();
       
-      // Save to global invites list
-      gun.get('invites').get(code).put({
-          from: pubKey,
-          createdAt: Date.now(),
-          status: 'active'
-      });
+      // Save to global invites list (Gun - kept for compatibility or needs migration?)
+      // Assuming we are migrating, we should probably write to Firestore 'invites' collection?
+      // For now, let's keep Gun logic if invites are still Gun-based, or just disable if not.
+      // The prompt didn't ask to migrate invites yet, so I'll leave it but guard against missing objects.
       
-      // Link to user profile (Scoped)
-      gunUser.get('my_invites').get(code).put(true);
+      if (gun && gunUser) {
+        gun.get('invites').get(code).put({
+            from: fromId,
+            createdAt: Date.now(),
+            status: 'active'
+        });
+        
+        // Link to user profile (Scoped)
+        gunUser.get('my_invites').get(code).put(true);
+      }
       
       // Generate full URL
       const url = `${window.location.origin}/?inviteCode=${code}`;
@@ -71,6 +121,10 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
   };
+
+  // Determine display name and avatar
+  const displayName = userProfile?.alias || userProfile?.displayName || (user?.displayName) || (user?.email?.split('@')[0]) || (participantEmail?.split('@')[0]) || 'Guest';
+  const avatarUrl = userProfile?.avatarUrl || user?.photoURL;
 
   return (
     <>
@@ -138,14 +192,14 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
           className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 rounded-full pl-1 pr-3 py-1 border border-gray-700 transition"
         >
             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center overflow-hidden border border-gray-600">
-                {userProfile?.avatarUrl ? (
-                    <img src={fixUrl(userProfile.avatarUrl)} alt="Avatar" className="w-full h-full object-cover" />
+                {avatarUrl ? (
+                    <img src={fixUrl(avatarUrl)} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                     <UserIcon className="w-5 h-5 text-white" />
                 )}
             </div>
             <span className="text-xs font-mono text-gray-300 hidden md:inline-block">
-                {userProfile?.alias || pubKey?.substring(0, 8)}
+                {displayName}
             </span>
         </button>
         
@@ -154,8 +208,8 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                 <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)}></div>
                 <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1">
                     <div className="px-4 py-3 border-b border-gray-700 md:hidden">
-                        <p className="text-sm text-white font-bold truncate">{userProfile?.alias || 'User'}</p>
-                        <p className="text-xs text-gray-500 truncate">{pubKey?.substring(0, 12)}...</p>
+                        <p className="text-sm text-white font-bold truncate">{displayName}</p>
+                        <p className="text-xs text-gray-500 truncate">{user?.email || participantEmail}</p>
                     </div>
                     
                     <button 

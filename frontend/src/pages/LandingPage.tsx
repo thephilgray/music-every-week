@@ -1,6 +1,18 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { ParticipantAuth } from '../components/ParticipantAuth';
 
 export function LandingPage() {
+  const { participantEmail } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (participantEmail) {
+      navigate('/', { replace: true });
+    }
+  }, [participantEmail, navigate]);
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center">
       

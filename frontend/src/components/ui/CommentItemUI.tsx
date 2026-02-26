@@ -4,8 +4,10 @@ import { Link } from 'react-router-dom'; // Import Link
 import { User as UserIcon, MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { MiniPlayer } from './MiniPlayer';
 import { fixUrl } from '../../lib/url';
+import { db } from '../../lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
-interface CommentItemUIProps {
+export interface CommentItemUIProps {
   id: string;
   text: string;
   authorEmail: string;
@@ -16,6 +18,7 @@ interface CommentItemUIProps {
   isOwnComment: boolean;
   onDelete?: (id: string) => void;
   onEdit?: (id: string, newText: string) => void;
+  onAuthorClick?: (email: string) => void;
   profileLinkPub?: string; // New prop for profile linking
 }
 
@@ -37,6 +40,27 @@ export function CommentItemUI({
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(text);
   const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
+  const [resolvedUid, setResolvedUid] = useState<string | undefined>(profileLinkPub);
+
+  useEffect(() => {
+      if (profileLinkPub) {
+          setResolvedUid(profileLinkPub);
+      } else if (authorEmail) {
+          // Fallback: Resolve UID from email if missing
+          const fetchProfile = async () => {
+              try {
+                  const q = query(collection(db, 'profiles'), where('email', '==', authorEmail));
+                  const querySnapshot = await getDocs(q);
+                  if (!querySnapshot.empty) {
+                      setResolvedUid(querySnapshot.docs[0].id);
+                  }
+              } catch (e) {
+                  // Ignore error
+              }
+          };
+          fetchProfile();
+      }
+  }, [profileLinkPub, authorEmail]);
 
   useEffect(() => {
     setEditedText(text); // Update editedText if original text changes
@@ -82,8 +106,8 @@ export function CommentItemUI({
          <div className="flex-1 min-w-0">
              <div className="flex items-baseline justify-between gap-2">
                 <div className="flex items-baseline gap-2">
-                    {profileLinkPub ? (
-                        <Link to={`/profile/${profileLinkPub}`} className="text-xs font-bold text-gray-300 hover:text-white hover:underline">
+                    {resolvedUid ? (
+                        <Link to={`/profile/${resolvedUid}`} className="text-xs font-bold text-gray-300 hover:text-white hover:underline">
                             {authorName}
                         </Link>
                     ) : (
@@ -138,19 +162,23 @@ export function CommentItemUI({
                      <textarea 
                         value={editedText}
                         onChange={e => setEditedText(e.target.value)}
+                        onFocus={(e) => {
+                            const val = e.target.value;
+                            e.target.setSelectionRange(val.length, val.length);
+                        }}
                         className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-blue-500 outline-none min-h-[60px]"
                         autoFocus
                      />
                      <div className="flex justify-end gap-2 mt-2">
                          <button 
                             onClick={handleCancelEdit}
-                            className="p-1 text-gray-400 hover:text-white"
+                            className="px-3 py-1 text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
                          >
                              Cancel
                          </button>
                          <button 
                             onClick={handleSaveEdit}
-                            className="p-1 text-green-400 hover:text-green-300"
+                            className="px-3 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition"
                          >
                              Save
                          </button>
@@ -158,7 +186,13 @@ export function CommentItemUI({
                  </div>
              ) : (
                  <>
-                    {text && <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">{text}</p>}
+                    {text && (
+                        <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">
+                            {text.split(/(@\w+)/g).map((part, i) => 
+                                part.startsWith('@') ? <span key={i} className="text-blue-400">{part}</span> : part
+                            )}
+                        </p>
+                    )}
                     {audioUrl && (
                         <div className="mt-1">
                             <MiniPlayer src={audioUrl} />

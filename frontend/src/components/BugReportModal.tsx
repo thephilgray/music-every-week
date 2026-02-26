@@ -1,21 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Send, Loader2, AlertCircle, Image as ImageIcon } from 'lucide-react';
-import { useGun } from '../contexts/GunContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { uploadFile } from '../lib/upload';
-import type { Notification } from '../types';
+import { uploadToR2 } from '../lib/r2';
+import type { Notification, UserProfile } from '../types'; // Keep UserProfile import
+import { db } from '../lib/firebase';
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 
 interface BugReportModalProps {
   onClose: () => void;
 }
 
 export function BugReportModal({ onClose }: BugReportModalProps) {
-  const { gun, pubKey, user, userProfile } = useGun();
+  const { user } = useAuth(); // Removed userProfile from destructuring
   const { success, error } = useToast();
   const [description, setDescription] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // State for fetched UserProfile
+
+  // Fetch UserProfile when user changes
+  useEffect(() => {
+    if (user && user.uid) {
+      const fetchProfile = async () => {
+        try {
+          const profileDoc = await getDoc(doc(db, 'profiles', user.uid));
+          if (profileDoc.exists()) {
+            setUserProfile(profileDoc.data() as UserProfile);
+          } else {
+            setUserProfile(null);
+          }
+        } catch (e) {
+          console.error("Error fetching user profile:", e);
+          setUserProfile(null);
+        }
+      };
+      fetchProfile();
+    } else {
+      setUserProfile(null);
+    }
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,29 +51,32 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
       // 1. Upload Screenshot if present
       let screenshotUrl = '';
       if (screenshot) {
-          // @ts-ignore
-          if (user.is) {
-              const res = await uploadFile(screenshot, (user as any).is);
+          if (user && user.uid) { // Check user authentication for upload
+              const res = await uploadToR2(screenshot); // Use uploadToR2
               screenshotUrl = res.url;
+          } else {
+              error("Authentication required to upload screenshot.");
+              setIsSending(false);
+              return;
           }
       }
 
-      // 2. Find Admins
-      const adminPubs: string[] = [];
-      await new Promise<void>(resolve => {
-          let count = 0;
-          // Scan directory for admins (inefficient but works for small app)
-          gun.get('all_users').map().once((u: any, pub: string) => {
-              if (u && u.isAdmin) {
-                  adminPubs.push(pub);
-              }
-              // Resolve after short timeout or if we found some
-              count++;
+      // 2. Find Admins in Firestore
+      const adminUids: string[] = [];
+      try {
+          const q = query(collection(db, 'profiles'), where('isAdmin', '==', true));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach((docSnap) => {
+              adminUids.push(docSnap.id); // doc.id is the UID
           });
-          setTimeout(resolve, 1000); 
-      });
+      } catch (e) {
+          console.error("Error fetching admins:", e);
+          error("Failed to find administrators.");
+          setIsSending(false);
+          return;
+      }
 
-      if (adminPubs.length === 0) {
+      if (adminUids.length === 0) {
           error("No admins found to receive report.");
           setIsSending(false);
           return;
@@ -61,7 +89,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
           `URL: ${window.location.href}`,
           `Screen: ${window.innerWidth}x${window.innerHeight}`,
           `Time: ${new Date().toISOString()}`,
-          `User: ${pubKey || 'Guest'} (${userProfile?.alias || 'Unknown'})`
+          `User: ${user?.uid || 'Guest'} (${userProfile?.alias || 'Unknown'})`
       ].join('\n');
 
       let reportContent = `BUG REPORT:\n\n${description}\n\n-- DIAGNOSTICS --\n${diagnostics}`;
@@ -72,27 +100,40 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
 
       const notification: Notification = {
           id: reportId,
-          type: 'comment', 
+          type: 'comment', // Can be bugReport type if added
           message: `BUG REPORT: ${description.substring(0, 50)}...`,
-          link: screenshotUrl || `/inbox`, 
-          fromPub: pubKey || 'guest',
-          createdAt: Date.now(),
+          link: screenshotUrl || `/inbox`,
+          fromUid: user?.uid || 'guest', // Changed fromPub to fromUid
+          createdAt: serverTimestamp(), // Use serverTimestamp
           read: false
       };
       
-      notification.message = reportContent;
+      notification.message = reportContent; // This will overwrite the message set above
+      // Let's make it more explicit that message is reportContent directly
+      const finalNotification: Notification = {
+          ...notification,
+          message: reportContent
+      };
 
-      // 4. Send to all admins
-      adminPubs.forEach(adminPub => {
-          gun.get('inboxes').get(adminPub).get(reportId).put(notification);
+
+      // 4. Send to all admins in their notifications collection
+      const notificationPromises: Promise<any>[] = [];
+      adminUids.forEach(adminUid => {
+          notificationPromises.push(
+              addDoc(collection(db, 'notifications'), { // Add to a global notifications collection
+                  ...finalNotification,
+                  recipientUid: adminUid // Target recipient
+              })
+          );
       });
+      await Promise.all(notificationPromises);
 
       success("Bug report sent to admins. Thank you!");
       onClose();
 
-    } catch (err) {
-      console.error(err);
-      error("Failed to send report.");
+    } catch (err: any) {
+      console.error("Failed to send report:", err);
+      error("Failed to send report: " + err.message);
     } finally {
       setIsSending(false);
     }
@@ -128,8 +169,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
             />
             
             {/* Screenshot Upload (Only if logged in) */}
-            {/* @ts-ignore */}
-            {user.is && (
+            {user && user.uid && ( // Changed user.is to user && user.uid
                 <div className="flex items-center gap-3">
                     <label className="flex items-center gap-2 cursor-pointer text-gray-400 hover:text-white text-sm bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded transition">
                         <ImageIcon className="w-4 h-4" />

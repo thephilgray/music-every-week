@@ -6,8 +6,9 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2'; // Replaced uploadFile
 import { db } from '../lib/firebase'; // Added firebase db import
-import { doc, updateDoc, collection, query, where, getDocs, onSnapshot, serverTimestamp } from 'firebase/firestore'; // Added specific firestore functions
+import { doc, updateDoc, collection, query, where, getDocs, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'; // Added specific firestore functions
 import { fixUrl } from '../lib/url';
+import { getTimestampAsNumber } from '../lib/utils';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { Tooltip } from '../components/ui/Tooltip';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -22,9 +23,10 @@ export function Profile() {
   const { success, error } = useToast();
   
   const targetUid = routePub || user?.uid; // Changed pubKey to user?.uid and targetPub to targetUid
-  const isOwnProfile = user?.uid === targetUid; // Changed pubKey to user?.uid and targetPub to targetUid
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  
+  const isOwnProfile = targetUid ? (user?.uid === targetUid || (profile?.email === authParticipantEmail)) : true;
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,178 +61,220 @@ export function Profile() {
       setLoading(false); // No UID or email, so nothing to load
       return;
     }
+    
+    // Helper to resolve UID
+    const resolve = async () => {
+        if (targetUid) {
+            // 1. Try Direct ID
+            const directDoc = await getDoc(doc(db, 'profiles', targetUid));
+            if (directDoc.exists()) {
+                setResolvedProfileUid(targetUid);
+                return;
+            }
 
-    // If targetUid is already present (admin or /profile/:pub), use it directly
-    if (targetUid) {
-      setResolvedProfileUid(targetUid);
-    } else if (authParticipantEmail) {
-      // If no targetUid, but participant email is available, query by email
-      const q = query(collection(db, 'profiles'), where('email', '==', authParticipantEmail));
-      getDocs(q).then(snapshot => {
-        if (!snapshot.empty) {
-          setResolvedProfileUid(snapshot.docs[0].id);
-        } else {
-          // No profile found for this email
-          setLoading(false);
+            // 2. Try Legacy Gun Pub Key
+            const qLegacy = query(collection(db, 'profiles'), where('migratedFromGunPub', '==', targetUid));
+            const legacySnap = await getDocs(qLegacy);
+            if (!legacySnap.empty) {
+                setResolvedProfileUid(legacySnap.docs[0].id);
+                return;
+            }
+
+            // Not found
+            setResolvedProfileUid(targetUid); // Fallback to let the snapshot listener confirm 404
+        } else if (authParticipantEmail) {
+            // 3. Try Email
+            const q = query(collection(db, 'profiles'), where('email', '==', authParticipantEmail));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                setResolvedProfileUid(snapshot.docs[0].id);
+            } else {
+                setLoading(false);
+            }
         }
-      }).catch(e => {
-        console.error("Error resolving profile by email:", e);
+    };
+
+    resolve().catch(e => {
+        console.error("Error resolving profile:", e);
         setLoading(false);
-      });
-    }
+    });
+
   }, [targetUid, authParticipantEmail]);
 
-  useEffect(() => {
-    if (!resolvedProfileUid) {
-      setProfile(null);
-      setSubmissions([]);
-      setRequests([]);
-      setLoading(false); // Ensure loading is false if UID is not resolved
-      return;
-    }
-
-    setLoading(true);
-    setProfile(null);
-    setSubmissions([]);
-    setRequests([]);
-
-    let isMounted = true;
-    const unsubscribeFunctions: (() => void)[] = [];
-
-    // Profile Listener
-    const profileDocRef = doc(db, 'profiles', resolvedProfileUid);
-    unsubscribeFunctions.push(onSnapshot(profileDocRef, (docSnap) => {
-        if (!isMounted) return;
-        if (docSnap.exists()) {
-            const data = docSnap.data() as UserProfile;
-            setProfile(currentProfile => {
-                if (currentProfile && currentProfile.uid === resolvedProfileUid) {
-                    return { ...currentProfile, ...data, uid: docSnap.id };
-                }
-                return { ...data, uid: docSnap.id };
-            });
-            if (isEditing === false) { // Only update edit states if not actively editing
-                setEditAlias(data.alias || '');
-                setEditDisplayName(data.displayName || data.alias || '');
-                setEditBio(data.bio || '');
-                setEditLocation(data.location || '');
-                setEditLinks(data.links || []);
-            }
-        } else {
-            setProfile(null);
-        }
-        // Only set loading to false after all subscriptions have potentially fired, or if profile is explicitly null
-        // This will be handled by the cleanup or a combined completion logic if needed, for now keep simple
-        // For initial load, set loading to false here for profile specifically.
-        if (isMounted) setLoading(false); 
-    }));
-
-    // Submissions Listener
-    // Prefer querying by Email if available to catch all historical/authless submissions
-    const identifierField = profile?.email ? 'uploaderEmail' : 'uploaderUid'; // Fallback to UID if no email
-    const identifierValue = profile?.email || resolvedProfileUid;
-
-    const submissionsQuery = query(
-        collection(db, 'submissions'),
-        where(identifierField, '==', identifierValue),
-        where('deleted', '!=', true)
-    );
-    unsubscribeFunctions.push(onSnapshot(submissionsQuery, (snapshot) => {
-        if (!isMounted) return;
-        const fetchedSubmissions: Submission[] = [];
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            fetchedSubmissions.push({
-                id: docSnap.id,
-                ...data,
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
-            } as Submission);
-        });
-        setSubmissions(fetchedSubmissions.sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
-    }));
-
-    return () => {
-      isMounted = false;
-      unsubscribeFunctions.forEach(unsub => unsub());
-    };
-  }, [resolvedProfileUid, isEditing, profile?.email]); // Added profile?.email dependency
-
-  // Third useEffect: Fetch Requests (by ownerEmail OR hostEmail)
-  useEffect(() => {
-    if (!resolvedProfileUid && !profile?.email) {
-      setRequests([]);
-      return;
-    }
-
-    let isMounted = true;
-    const unsubscribeFunctions: (() => void)[] = [];
-    const allRequests: Record<string, FileRequest> = {}; 
-
-    // Query 1: by owner (Email preferred)
-    const ownerIdentifierField = profile?.email ? 'ownerEmail' : 'ownerPub';
-    const ownerIdentifierValue = profile?.email || resolvedProfileUid;
-
-    if (ownerIdentifierValue) {
-      const ownerRequestsQuery = query(
-          collection(db, 'requests'),
-          where(ownerIdentifierField, '==', ownerIdentifierValue),
-          where('deleted', '!=', true)
-      );
-      unsubscribeFunctions.push(onSnapshot(ownerRequestsQuery, (snapshot) => {
-          if (!isMounted) return;
-          snapshot.docChanges().forEach(change => {
-            const data = change.doc.data();
-            const request: FileRequest = {
-                id: change.doc.id,
-                ...data,
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
-            } as FileRequest;
-            if (change.type === 'added' || change.type === 'modified') {
-                allRequests[request.id!] = request;
-            } else if (change.type === 'removed') {
-                delete allRequests[request.id!];
-            }
+      const [submissionsByUid, setSubmissionsByUid] = useState<Submission[]>([]);
+      const [submissionsByEmail, setSubmissionsByEmail] = useState<Submission[]>([]);
+      
+      const [requestsByUid, setRequestsByUid] = useState<FileRequest[]>([]);
+      const [requestsByOwnerEmail, setRequestsByOwnerEmail] = useState<FileRequest[]>([]);
+      const [requestsByHostEmail, setRequestsByHostEmail] = useState<FileRequest[]>([]);
+  
+      // Profile Listener
+      useEffect(() => {
+          if (!resolvedProfileUid) {
+              setProfile(null);
+              setSubmissions([]); // Clear derived state if needed, though separate states handle data
+              setRequests([]);
+              setLoading(false);
+              return;
+          }
+  
+          setLoading(true);
+          // Note: We don't clear profile immediately to avoid flicker if it's just a re-render, 
+          // but if UID changes, we should. For now, rely on loading state.
+  
+          let isMounted = true;
+          
+          const profileDocRef = doc(db, 'profiles', resolvedProfileUid);
+          const unsubscribe = onSnapshot(profileDocRef, (docSnap) => {
+              if (!isMounted) return;
+              if (docSnap.exists()) {
+                  const data = docSnap.data() as UserProfile;
+                  setProfile(currentProfile => {
+                      if (currentProfile && currentProfile.uid === resolvedProfileUid) {
+                          return { ...currentProfile, ...data, uid: docSnap.id };
+                      }
+                      return { ...data, uid: docSnap.id };
+                  });
+                  if (isEditing === false) { 
+                      setEditAlias(data.alias || '');
+                      setEditDisplayName(data.displayName || data.alias || '');
+                      setEditBio(data.bio || '');
+                      setEditLocation(data.location || '');
+                      setEditLinks(data.links || []);
+                  }
+              } else {
+                  setProfile(null);
+              }
+              if (isMounted) setLoading(false); 
           });
-          setRequests(Object.values(allRequests).sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
-      }));
-    }
-
-    // Query 2: by hostEmail (if profile email is available and different from ownerEmail query)
-    // If ownerEmail query handles it, we might duplicate, but Map handles dedupe.
-    // hostEmail is explicit "Host", ownerEmail is "Creator". Usually same.
-    if (profile?.email) {
-        const hostEmailRequestsQuery = query(
-            collection(db, 'requests'),
-            where('hostEmail', '==', profile.email),
-            where('deleted', '!=', true)
-        );
-        unsubscribeFunctions.push(onSnapshot(hostEmailRequestsQuery, (snapshot) => {
-            if (!isMounted) return;
-            snapshot.docChanges().forEach(change => {
-                const data = change.doc.data();
-                const request: FileRequest = {
-                    id: change.doc.id,
-                    ...data,
-                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
-                } as FileRequest;
-                if (change.type === 'added' || change.type === 'modified') {
-                    allRequests[request.id!] = request;
-                } else if (change.type === 'removed') {
-                    delete allRequests[request.id!];
-                }
-            });
-            setRequests(Object.values(allRequests).sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
-        }));
-    }
-
-    return () => {
-      isMounted = false;
-      unsubscribeFunctions.forEach(unsub => unsub());
-    };
-  }, [resolvedProfileUid, profile?.email]);
-
+  
+          return () => {
+              isMounted = false;
+              unsubscribe();
+          };
+      }, [resolvedProfileUid, isEditing]);
+  
+      // Combine Submissions
+      useEffect(() => {
+          const combined = new Map<string, Submission>();
+          submissionsByUid.forEach(s => combined.set(s.id!, s));
+          submissionsByEmail.forEach(s => combined.set(s.id!, s));
+          
+          setSubmissions(Array.from(combined.values())
+              .sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
+      }, [submissionsByUid, submissionsByEmail]);
+  
+      // Combine Requests
+      useEffect(() => {
+          const combined = new Map<string, FileRequest>();
+          requestsByUid.forEach(r => combined.set(r.id!, r));
+          requestsByOwnerEmail.forEach(r => combined.set(r.id!, r));
+          requestsByHostEmail.forEach(r => combined.set(r.id!, r));
+          
+          setRequests(Array.from(combined.values())
+              .sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
+      }, [requestsByUid, requestsByOwnerEmail, requestsByHostEmail]);
+  
+      // Submissions Listeners
+      useEffect(() => {
+          if (!resolvedProfileUid && !profile?.email) return;
+  
+          const unsubs: (() => void)[] = [];
+  
+                  // 1. By UID
+                  if (resolvedProfileUid) {
+                      const qUid = query(
+                          collection(db, 'submissions'),
+                          where('uploaderUid', '==', resolvedProfileUid)
+                      );
+                      unsubs.push(onSnapshot(qUid, (snapshot) => {
+                          const res: Submission[] = [];
+                          snapshot.forEach(doc => {
+                              const data = doc.data();
+                              if (data.deleted) return;
+                              res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as Submission);
+                          });
+                          setSubmissionsByUid(res);
+                      }));
+                  }
+          
+                  // 2. By Email
+                  if (profile?.email) {
+                      const qEmail = query(
+                          collection(db, 'submissions'),
+                          where('uploaderEmail', '==', profile.email)
+                      );
+                      unsubs.push(onSnapshot(qEmail, (snapshot) => {
+                          const res: Submission[] = [];
+                          snapshot.forEach(doc => {
+                              const data = doc.data();
+                              if (data.deleted) return;
+                              res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as Submission);
+                          });
+                          setSubmissionsByEmail(res);
+                      }));
+                  }  
+          return () => unsubs.forEach(u => u());
+      }, [resolvedProfileUid, profile?.email]);
+  
+      // Requests Listeners
+      useEffect(() => {
+          if (!resolvedProfileUid && !profile?.email) return;
+  
+          const unsubs: (() => void)[] = [];
+  
+                  // 1. By Owner UID
+                  if (resolvedProfileUid) {
+                      const qUid = query(
+                          collection(db, 'requests'),
+                          where('ownerPub', '==', resolvedProfileUid)
+                      );
+                      unsubs.push(onSnapshot(qUid, (snapshot) => {
+                          const res: FileRequest[] = [];
+                          snapshot.forEach(doc => {
+                              const data = doc.data();
+                              if (data.deleted) return;
+                              res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as FileRequest);
+                          });
+                          setRequestsByUid(res);
+                      }));
+                  }
+          
+                  // 2. By Owner Email
+                  if (profile?.email) {
+                      const qOwnerEmail = query(
+                          collection(db, 'requests'),
+                          where('ownerEmail', '==', profile.email)
+                      );
+                      unsubs.push(onSnapshot(qOwnerEmail, (snapshot) => {
+                          const res: FileRequest[] = [];
+                          snapshot.forEach(doc => {
+                              const data = doc.data();
+                              if (data.deleted) return;
+                              res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as FileRequest);
+                          });
+                          setRequestsByOwnerEmail(res);
+                      }));
+          
+                       // 3. By Host Email
+                      const qHostEmail = query(
+                          collection(db, 'requests'),
+                          where('hostEmail', '==', profile.email)
+                      );
+                      unsubs.push(onSnapshot(qHostEmail, (snapshot) => {
+                          const res: FileRequest[] = [];
+                          snapshot.forEach(doc => {
+                              const data = doc.data();
+                              if (data.deleted) return;
+                              res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as FileRequest);
+                          });
+                          setRequestsByHostEmail(res);
+                      }));
+                  }  
+          return () => unsubs.forEach(u => u());
+      }, [resolvedProfileUid, profile?.email]);
   const handleSaveProfile = async () => {
-      if (!isOwnProfile || !user || !user.uid) return;
+      if (!isOwnProfile || !resolvedProfileUid) return;
       setIsSaving(true);
       
       try {
@@ -241,6 +285,7 @@ export function Profile() {
           }
           
           const updates: Partial<UserProfile> = {
+              alias: editAlias,
               displayName: editDisplayName,
               bio: editBio,
               location: editLocation,
@@ -250,7 +295,7 @@ export function Profile() {
           };
           
           // Update Profile in Firestore
-          await updateDoc(doc(db, 'profiles', user.uid), updates);
+          await updateDoc(doc(db, 'profiles', resolvedProfileUid), updates);
           
           setIsEditing(false);
           setEditAvatar(null);
@@ -307,7 +352,7 @@ export function Profile() {
 
   const handleToggleVisibility = async (e: React.MouseEvent, sub: Submission) => { // Made async
       e.stopPropagation();
-      if (!isOwnProfile || !user || !sub.id) return;
+      if (!isOwnProfile || !sub.id) return;
       
       const newValue = !sub.hiddenFromProfile;
       
@@ -327,7 +372,7 @@ export function Profile() {
 
   const handleToggleRequestVisibility = async (e: React.MouseEvent, req: FileRequest) => { // Made async
       e.stopPropagation();
-      if (!isOwnProfile || !user || !req.id) return;
+      if (!isOwnProfile || !req.id) return;
       
       const currentHidden = req.hiddenFromProfile !== undefined 
           ? req.hiddenFromProfile 
@@ -606,12 +651,12 @@ export function Profile() {
                         </div>
                         
                         <div>
-                            <label className="block text-sm text-gray-400 mb-1">Username (Immutable)</label>
+                            <label className="block text-sm text-gray-400 mb-1">Username (Alias)</label>
                             <input 
                                 type="text" 
                                 value={editAlias}
-                                readOnly
-                                className="w-full bg-gray-900/50 border border-gray-700/50 rounded p-2 text-gray-400 cursor-not-allowed"
+                                onChange={e => setEditAlias(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"
                             />
                         </div>
 

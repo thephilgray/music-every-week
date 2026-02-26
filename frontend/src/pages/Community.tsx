@@ -3,7 +3,7 @@ import { MessageSquare } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc, where } from 'firebase/firestore';
 import type { Submission, FileRequest, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
@@ -24,9 +24,12 @@ export function Community() {
                 reqMap[doc.id] = data.title;
             });
 
+            const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
             // 2. Fetch Recent Submissions
             const subQuery = query(
                 collection(db, 'submissions'),
+                where('createdAt', '>=', cutoff),
                 orderBy('createdAt', 'desc'),
                 limit(50)
             );
@@ -57,6 +60,7 @@ export function Community() {
             // 3. Fetch Recent Comments
             const commQuery = query(
                 collection(db, 'comments'),
+                where('createdAt', '>=', cutoff),
                 orderBy('createdAt', 'desc'),
                 limit(50)
             );

@@ -17,10 +17,11 @@ interface CommentSectionProps {
   highlightCommentId?: string;
   submissionOwnerUid?: string; 
   submissionOwnerEmail?: string; // Added prop
+  currentUserEmail?: string | null; // Added prop for authless/manual auth
   // onCommentsLoaded?: (submissionId: string, count: number) => void; // Removed prop
 }
 
-export function CommentSection({ requestId, submissionId, highlightCommentId, submissionOwnerUid, submissionOwnerEmail }: CommentSectionProps) { // Removed prop
+export function CommentSection({ requestId, submissionId, highlightCommentId, submissionOwnerUid, submissionOwnerEmail, currentUserEmail }: CommentSectionProps) { // Removed prop
   const { participantEmail, user } = useAuth(); // Removed unused isAdmin
   const [comments, setComments] = useState<Comment[]>([]);
   const [firestoreProfile, setFirestoreProfile] = useState<any>(null); // Store fetched profile
@@ -33,9 +34,11 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
               }
           });
           return () => unsub();
-      } else if (participantEmail) {
+      } else if (participantEmail || currentUserEmail) {
           // Fetch profile by email for participants
-          const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
+          const email = participantEmail || currentUserEmail;
+          if (!email) return;
+          const q = query(collection(db, 'profiles'), where('email', '==', email));
           const unsub = onSnapshot(q, (snapshot) => {
               if (!snapshot.empty) {
                   setFirestoreProfile(snapshot.docs[0].data());
@@ -45,7 +48,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
           });
           return () => unsub();
       }
-  }, [user, participantEmail]);
+  }, [user, participantEmail, currentUserEmail]);
 
   const [newComment, setNewComment] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -71,18 +74,19 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const commentsEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
+  const commentsContainerRef = useRef<HTMLDivElement>(null); // Ref for container scrolling
 
   // Derive current user's profile for comments (Prefer Firestore > Auth > Email)
+  const effectiveEmail = participantEmail || currentUserEmail;
   const currentUserProfile = user ? {
     displayName: firestoreProfile?.displayName || firestoreProfile?.alias || user.displayName || user.email || 'Admin',
     avatarUrl: firestoreProfile?.avatarUrl || user.photoURL || null // Use null for Firestore compatibility
-  } : (participantEmail ? {
-    displayName: firestoreProfile?.displayName || firestoreProfile?.alias || participantEmail.split('@')[0], // Use profile data if available
+  } : (effectiveEmail ? {
+    displayName: firestoreProfile?.displayName || firestoreProfile?.alias || effectiveEmail.split('@')[0], // Use profile data if available
     avatarUrl: firestoreProfile?.avatarUrl || null // Use profile data if available
   } : null);
 
-  const isAuthorized = !!participantEmail || !!user;
+  const isAuthorized = !!effectiveEmail || !!user;
 
   // Debounced Draft Saving
   useEffect(() => {
@@ -165,8 +169,12 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
 
   // Auto-scroll to bottom when new comments appear
   useEffect(() => {
-    if (commentsEndRef.current) {
-        commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (commentsContainerRef.current) {
+        const { scrollHeight, clientHeight } = commentsContainerRef.current;
+        commentsContainerRef.current.scrollTo({
+            top: scrollHeight - clientHeight,
+            behavior: 'smooth'
+        });
     }
   }, [comments]); // Scroll when comments change
 
@@ -311,7 +319,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
     if (!newComment.trim() && !recordedFile) return;
 
     // Check if user is authenticated via participantEmail or Firebase user
-    const authorEmail = participantEmail || user?.email;
+    const authorEmail = participantEmail || user?.email || currentUserEmail;
     if (!authorEmail) {
         alert('You must be logged in to post a comment.');
         return;
@@ -466,7 +474,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
     <div className="mt-4 md:bg-gray-950/50 md:rounded md:p-4 md:border md:border-gray-800">
        <h5 className="text-sm font-semibold text-gray-400 mb-3">Comments</h5>
        
-       <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+       <div ref={commentsContainerRef} className="space-y-3 mb-4 max-h-60 overflow-y-auto">
           {comments.map(c => (
              <div key={c.id} id={`comment-${c.id}`} className="rounded transition-all duration-1000">
                 <CommentItemUI 
@@ -485,7 +493,6 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
              </div>
           ))}
           {comments.length === 0 && <p className="text-xs text-gray-600 italic">No comments yet.</p>}
-          <div ref={commentsEndRef} /> {/* Scroll target */}
        </div>
 
        <form onSubmit={handleSubmit} className="flex flex-col gap-2 relative">

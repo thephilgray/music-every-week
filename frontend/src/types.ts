@@ -63,6 +63,7 @@ export interface FileRequest {
 export interface Submission {
   id?: string;
   requestId: string;
+  playlistId?: string;
   audioUrl: string;
   artworkUrl?: string;
   lyrics?: string;
@@ -128,4 +129,6 @@ export interface Playlist {
   }[];
   artworkUrl?: string;
   accessList?: string[];
+  accessMode?: 'public' | 'private';
+  requestId?: string;
 }

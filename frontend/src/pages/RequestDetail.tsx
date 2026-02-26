@@ -1,16 +1,13 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, Clock, Upload, Play, FileAudio, Pause, MessageSquare, Edit, Lock, ListPlus, Copy, Check, AlertTriangle, Loader2, FileText } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, Play, Pause, Edit, Lock, Copy, Check, AlertTriangle, Loader2 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Waveform } from '../components/ui/Waveform';
-import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
-import { CollaboratorList } from '../components/ui/CollaboratorList'; // Added import
 import { SubmitTrack } from '../components/SubmitTrack';
 import { EditRequest } from '../components/EditRequest'; // Added import
-import { CommentSection } from '../components/CommentSection';
+import { SubmissionCard } from '../components/SubmissionCard';
 import { fixUrl } from '../lib/url';
 import type { FileRequest, Submission } from '../types';
 
@@ -27,7 +24,6 @@ export function RequestDetail() {
   
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
-  const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
   const [submissionCommentCounts, setSubmissionCommentCounts] = useState<Record<string, number>>({});
   
@@ -443,171 +439,39 @@ export function RequestDetail() {
                         {filteredSubmissions.map((sub) => {
                             const locked = isLocked(sub);
                             const isMySubmission = sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase();
+                            const commentCount = submissionCommentCounts[sub.id!] || 0;
+                            const isCurrent = currentTrack?.id === sub.id;
                             
                             return (
-                            <div 
-                                id={`submission-${sub.id}`} 
-                                key={sub.id} 
-                                className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group ${!locked ? 'cursor-pointer hover:border-gray-700' : ''}`}
-                                onClick={(e) => {
-                                    if (locked) return;
-                                    // Don't toggle if clicking buttons
-                                    if ((e.target as HTMLElement).closest('button')) return;
-
-                                    const isExpanding = expandedSubmissionId !== sub.id;
-                                    setExpandedSubmissionId(isExpanding ? (sub.id || null) : null);
-                                    
-                                    // Also toggle lyrics if they exist
-                                    if (sub.lyrics) {
-                                        setExpandedLyricsMap(prev => ({
-                                            ...prev,
-                                            [sub.id!]: isExpanding
-                                        }));
-                                    }
-                                }}
-                            >
-                                <div className="flex flex-col md:flex-row md:items-center gap-4">
-                                    {/* Artwork and Info Group */}
-                                    <div className="flex items-center gap-4 flex-1 min-w-0 w-full">
-                                        <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0 relative">
-                                            <ArtworkDisplay 
-                                                src={!locked ? sub.artworkUrl : null}
-                                                alt="Art"
-                                                className="w-full h-full object-cover rounded"
-                                                FallbackIcon={FileAudio}
-                                            />
-                                            {locked && (
-                                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded">
-                                                    <Lock className="w-4 h-4 text-gray-400" />
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
-                                                {locked ? 'Hidden Track' : sub.title}
-                                            </h4>
-                                            <div className="flex items-center gap-2">
-                                                <CollaboratorList 
-                                                    uploaderPub={sub.uploaderUid || sub.originalUploaderPub} 
-                                                    uploaderEmail={sub.uploaderEmail} // Added email fallback
-                                                    byline={sub.byline} 
-                                                    collaborators={sub.collaborators} 
-                                                    linkProfile={sub.linkProfile}
-                                                    proxyFor={sub.proxyFor}
-                                                    className="text-sm text-gray-400 truncate"
-                                                />
-                                                {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
-                                            </div>
-                                            {sub.waveform && sub.waveform.length > 0 && !locked && (
-                                                <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition hidden md:block">
-                                                    <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Buttons Row */}
-                                    <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-gray-800 md:border-none">
-                                        <div className="flex items-center gap-2">
-                                            
-                                            {sub.lyrics && (
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] })); }}
-                                                    disabled={locked}
-                                                    className={`p-2 rounded-full transition ${expandedLyricsMap[sub.id!] ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                    title="Lyrics / Notes"
-                                                >
-                                                    <FileText className="w-4 h-4" />
-                                                </button>
-                                            )}
-
-                                            <button 
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const isExpanding = expandedSubmissionId !== sub.id;
-                                                    setExpandedSubmissionId(isExpanding ? (sub.id || null) : null);
-                                                }}
-                                                className={`relative p-2 rounded-full transition ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                title="View Comments"
-                                                disabled={locked}
-                                            >
-                                                <MessageSquare className="w-4 h-4" />
-                                                {submissionCommentCounts[sub.id!] > 0 && (
-                                                    <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
-                                                        {submissionCommentCounts[sub.id!]}
-                                                    </span>
-                                                )}
-                                            </button>
-                                            
-                                            <button                                      
-                                                disabled
-                                                className={`p-2 rounded-full transition text-gray-600 cursor-not-allowed`}
-                                                title="Add to Playlist (Coming Soon)"
-                                            >
-                                                <ListPlus className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                        
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (locked) return;
-                                                if (currentTrack?.id === sub.id && isPlaying) {
-                                                    pause();
-                                                } else {
-                                                    const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
-                                                    play(sub, visibleSubmissions, {
-                                                        type: 'request',
-                                                        id: request.id!,
-                                                        name: request.title,
-                                                        link: `/request/${request.id}`
-                                                    });
-                                                }
-                                            }}
-                                            disabled={locked}
-                                            className={`w-10 h-10 md:w-8 md:h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition ml-2 ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        >
-                                            {locked ? (
-                                                <Lock className="w-3 h-3 text-gray-500" />
-                                            ) : currentTrack?.id === sub.id && isPlaying ? (
-                                                <Pause className="w-4 h-4" />
-                                            ) : (
-                                                <Play className="w-4 h-4 ml-0.5" />
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                {/* Mobile Waveform */}
-                                {sub.waveform && sub.waveform.length > 0 && !locked && (
-                                    <div className="mt-2 w-full opacity-70 block md:hidden">
-                                        <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
-                                    </div>
-                                )}
-                                
-                                {(expandedLyricsMap[sub.id!] && !locked) && (
-                                    <div className="mt-4 px-2 md:px-4 pb-2">
-                                        <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Lyrics / Notes</h5>
-                                        <div className="bg-gray-950 p-2 md:p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap break-words font-mono">
-                                            {sub.lyrics}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-                                    <div className="mt-4 cursor-default" onClick={(e) => e.stopPropagation()}>
-                                        <CommentSection 
-                                            requestId={id} 
-                                            submissionId={sub.id} 
-                                            submissionOwnerUid={sub.uploaderUid || sub.originalUploaderPub}
-                                            submissionOwnerEmail={sub.uploaderEmail}
-                                            highlightCommentId={new URLSearchParams(location.search).get('comment') || undefined}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        )})}
+                                <SubmissionCard
+                                    key={sub.id}
+                                    submission={sub}
+                                    isLocked={locked}
+                                    isPlaying={isPlaying}
+                                    isCurrent={isCurrent}
+                                    onPlay={() => {
+                                        const visibleSubmissions = filteredSubmissions.filter(s => !isLocked(s));
+                                        play(sub, visibleSubmissions, {
+                                            type: 'request',
+                                            id: request.id!,
+                                            name: request.title,
+                                            link: `/request/${request.id}`
+                                        });
+                                    }}
+                                    onPause={pause}
+                                    commentCount={commentCount}
+                                    isExpanded={expandedSubmissionId === sub.id}
+                                    onToggleExpand={() => {
+                                        const isExpanding = expandedSubmissionId !== sub.id;
+                                        setExpandedSubmissionId(isExpanding ? (sub.id || null) : null);
+                                    }}
+                                    currentUserEmail={participantEmail}
+                                    requestId={id}
+                                    isMySubmission={isMySubmission}
+                                    highlightCommentId={new URLSearchParams(location.search).get('comment') || undefined}
+                                />
+                            );
+                        })}
                     </div>
                 )}
             </div>

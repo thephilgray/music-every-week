@@ -5,13 +5,30 @@ import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2';
 import { fixUrl } from '../lib/url';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, serverTimestamp, query, where, collection, getDocs } from 'firebase/firestore';
 import type { UserProfile } from '../types';
 
 export function Settings() {
-  const { user, logout } = useAuth();
+  const { user, participantEmail, logout } = useAuth();
   const { success, error } = useToast();
   
+  const [resolvedUid, setResolvedUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.uid) {
+        setResolvedUid(user.uid);
+    } else if (participantEmail) {
+        const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
+        getDocs(q).then(snap => {
+            if (!snap.empty) {
+                setResolvedUid(snap.docs[0].id);
+            }
+        }).catch(e => console.error("Error finding participant profile", e));
+    } else {
+        setResolvedUid(null);
+    }
+  }, [user, participantEmail]);
+
   // Profile State
   const [username, setUsername] = useState(''); // Immutable (Alias)
   const [displayName, setDisplayName] = useState(''); // Mutable
@@ -37,9 +54,9 @@ export function Settings() {
 
   // Load Initial Data
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!resolvedUid) return;
 
-    const profileRef = doc(db, 'profiles', user.uid);
+    const profileRef = doc(db, 'profiles', resolvedUid);
     const unsubscribe = onSnapshot(profileRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
@@ -68,10 +85,10 @@ export function Settings() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [resolvedUid]);
 
   const handleSaveProfile = async () => {
-    if (!user?.uid) return;
+    if (!resolvedUid) return;
     setIsSavingProfile(true);
 
     try {
@@ -84,6 +101,7 @@ export function Settings() {
 
       // Update Profile in Firestore
       const updates: any = {
+        alias: username,
         displayName,
         bio,
         location,
@@ -92,7 +110,7 @@ export function Settings() {
         updatedAt: serverTimestamp()
       };
       
-      await updateDoc(doc(db, 'profiles', user.uid), updates);
+      await updateDoc(doc(db, 'profiles', resolvedUid), updates);
 
       // Reset file input
       setAvatar(null);
@@ -125,9 +143,9 @@ export function Settings() {
 
   // Helper to update specific fields
   const updateSetting = async (field: string, value: any, nestedPath?: string) => {
-      if (!user?.uid) return;
+      if (!resolvedUid) return;
       try {
-          const ref = doc(db, 'profiles', user.uid);
+          const ref = doc(db, 'profiles', resolvedUid);
           let updateData = {};
           
           if (nestedPath) {
@@ -235,13 +253,13 @@ export function Settings() {
             {/* Fields */}
             <div className="grid grid-cols-1 gap-4">
                 <div>
-                    <label className="block text-sm text-gray-400 mb-1">Username (Immutable)</label>
+                    <label className="block text-sm text-gray-400 mb-1">Username (Alias)</label>
                     <input 
                         type="text" 
                         value={username}
-                        readOnly
-                        className="w-full bg-gray-900/50 border border-gray-700/50 rounded-lg p-3 text-gray-400 cursor-not-allowed"
-                        placeholder={!user?.uid ? 'Loading...' : 'Not set'}
+                        onChange={e => { setUsername(e.target.value); isDirty.current = true; }}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
+                        placeholder={!resolvedUid ? 'Loading...' : 'Not set'}
                     />
                 </div>
                 <div>

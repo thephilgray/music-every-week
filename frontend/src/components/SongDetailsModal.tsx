@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import { X, Music, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { AuthlessComments as CommentSection } from '../pages/authless/components/AuthlessComments'; // Corrected import path and alias
+import { CommentSection } from './CommentSection';
 import { fixUrl } from '../lib/url';
-
-// Define a basic UserProfile type for consistency
-interface UserProfile {
-    displayName?: string;
-    avatarUrl?: string;
-}
 
 interface Track {
     id?: string; // Submission ID
@@ -18,6 +12,8 @@ interface Track {
     lyrics?: string;
     artworkUrl?: string;
     uploaderPub?: string; // This would typically be an ID in Firestore, not a GunDB pub key
+    uploaderEmail?: string; // Added for email notifications
+    uploaderUid?: string; // Firebase UID
     linkProfile?: boolean;
     stage?: string;
     feedbackFocus?: string[];
@@ -30,11 +26,10 @@ interface Track {
 interface SongDetailsModalProps {
     currentTrack: Track;
     onClose: () => void;
-    currentUserEmail: string; // Add currentUserEmail prop
-    userProfile?: UserProfile; // Optional userProfile prop
+    currentUserEmail?: string | null; // Add currentUserEmail prop
 }
 
-export function SongDetailsModal({ currentTrack, onClose, currentUserEmail, userProfile }: SongDetailsModalProps) {
+export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: SongDetailsModalProps) {
     const [imgError, setImgError] = useState(false);
     const draftKey = `comment_draft_${currentTrack.requestId}_${currentTrack.id || 'request'}`;
     const hasDraft = localStorage.getItem(draftKey) !== null;
@@ -123,9 +118,10 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail, user
                                                   <CommentSection
                                                       key={currentTrack.id}
                                                       requestId={currentTrack.requestId}
-                                                      submissionId={currentTrack.id}
+                                                      submissionId={currentTrack.id!}
+                                                      submissionOwnerUid={currentTrack.uploaderUid || currentTrack.uploaderPub}
+                                                      submissionOwnerEmail={currentTrack.uploaderEmail}
                                                       currentUserEmail={currentUserEmail}
-                                                      userProfile={userProfile}
                                                   />
                                               </div>
                                           )}

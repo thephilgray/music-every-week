@@ -198,6 +198,7 @@ export function CreateRequest() {
           requestId: requestId, // Link to the request
           liveDate: playlistLiveDate ? new Date(playlistLiveDate).toISOString() : (deadline ? new Date(deadline).toISOString() : null), // Use playlistLiveDate if set, else request deadline
           accessList: playlistAccessList,
+          accessMode: (accessMode === 'direct') ? 'public' : 'private',
           createdAt: serverTimestamp()
       };
 

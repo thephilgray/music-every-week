@@ -5,6 +5,7 @@ import { fixUrl } from '../lib/url';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import type { UserProfile } from '../types';
+import { formatCommentDate } from '../lib/utils';
 
 export interface FeedItemData {
     id: string;
@@ -116,7 +117,7 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
                         </span>
                     </div>
                     <span className="text-xs text-gray-600 whitespace-nowrap self-end md:self-auto">
-                        {item.createdAt > 0 ? new Date(item.createdAt).toLocaleDateString() : 'Date unknown'}
+                        {item.createdAt > 0 ? formatCommentDate(item.createdAt) : 'Date unknown'}
                     </span>
                 </div>
 

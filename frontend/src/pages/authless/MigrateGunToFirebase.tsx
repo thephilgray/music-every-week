@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGun } from '../../contexts/GunContext';
 import { db, auth } from '../../lib/firebase';
-import { collection, addDoc, updateDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, serverTimestamp, getDocs, query, where, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { fixUrl } from '../../lib/url';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +10,8 @@ export function MigrateGunToFirebase() {
   const { gun } = useGun();
   const navigate = useNavigate();
   const [requestId, setRequestId] = useState('');
+  const [cleanupRequestId, setCleanupRequestId] = useState('');
+  const [commentMigrationRequestId, setCommentMigrationRequestId] = useState('');
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -342,6 +344,233 @@ export function MigrateGunToFirebase() {
     }
   };
 
+  const handleMigrateComments = async () => {
+    if (!commentMigrationRequestId.trim()) return;
+    setLoading(true);
+    setLogs([]);
+    addLog(`Starting Partial Comment Migration for Gun Request ID: ${commentMigrationRequestId}`);
+
+    try {
+        // 1. Find the corresponding Firestore Request
+        addLog(`Searching for Firestore Request for Gun ID ${commentMigrationRequestId}...`);
+        const qReq = query(collection(db, 'requests'), where('migratedFromGunId', '==', commentMigrationRequestId));
+        const reqSnapshot = await getDocs(qReq);
+
+        if (reqSnapshot.empty) {
+            throw new Error(`No Firestore Request found for Gun ID ${commentMigrationRequestId}. Please run full migration first.`);
+        }
+
+        const firestoreRequest = reqSnapshot.docs[0];
+        const firestoreRequestId = firestoreRequest.id;
+        const firestorePlaylistId = firestoreRequest.data().playlistId;
+        addLog(`Found Firestore Request: ${firestoreRequestId} (Playlist: ${firestorePlaylistId})`);
+
+        // 2. Scan GunDB Submissions
+        addLog(`Scanning GunDB submissions for '${commentMigrationRequestId}'...`);
+        const submissionKeys: string[] = await new Promise((resolve) => {
+            const keys: string[] = [];
+            const timeoutId = setTimeout(() => {
+                resolve(keys);
+            }, 5000);
+            void timeoutId;
+            gun.get('request_submissions').get(commentMigrationRequestId).map((_data, key) => {
+                if (key && !keys.includes(key)) keys.push(key);
+            });
+        });
+        addLog(`Found ${submissionKeys.length} submission keys in GunDB.`);
+
+        // 3. Process each submission
+        for (const gunSubKey of submissionKeys) {
+            // Find Firestore Submission
+            const qSub = query(collection(db, 'submissions'), where('migratedFromGunId', '==', gunSubKey));
+            const subSnapshot = await getDocs(qSub);
+
+            if (subSnapshot.empty) {
+                addLog(`Skipping Gun Submission ${gunSubKey} (No Firestore match).`);
+                continue;
+            }
+
+            const firestoreSubmission = subSnapshot.docs[0];
+            const firestoreSubmissionId = firestoreSubmission.id;
+            addLog(`Processing Submission: ${gunSubKey} -> ${firestoreSubmissionId}`);
+
+            // Fetch Gun Comments
+            const allCommentsNode = gun.get('submission_comments').get(gunSubKey);
+            const commentsRawData: any = await new Promise((resolve) => {
+                const listener = (data: any) => {
+                    if (data !== undefined && data !== null) {
+                        clearTimeout(timeoutId);
+                        allCommentsNode.off();
+                        resolve(data);
+                    }
+                };
+                const timeoutId = setTimeout(() => {
+                    allCommentsNode.off();
+                    resolve(undefined);
+                }, 3000);
+                void timeoutId;
+                allCommentsNode.once(listener);
+            });
+
+            if (!commentsRawData) continue;
+
+            const gunCommentKeys = Object.keys(commentsRawData).filter(k => 
+                k !== '_' && typeof commentsRawData[k] === 'object' && commentsRawData[k] !== null && commentsRawData[k].id === k
+            );
+            
+            addLog(`  Found ${gunCommentKeys.length} comments in GunDB.`);
+
+            for (const gunCommentKey of gunCommentKeys) {
+                // Check if already in Firestore
+                const qComment = query(collection(db, 'comments'), where('migratedFromGunId', '==', gunCommentKey));
+                const commentSnapshot = await getDocs(qComment);
+
+                if (!commentSnapshot.empty) {
+                    addLog(`  - Comment ${gunCommentKey} already exists. Skipping.`);
+                    continue;
+                }
+
+                // Need to migrate!
+                const commentData = commentsRawData[gunCommentKey];
+                addLog(`  - Migrating NEW Comment ${gunCommentKey}...`);
+
+                // Fetch Author Profile
+                const authorPub = commentData.authorPub;
+                let commenterProfile: any = { email: null, displayName: 'Unknown', avatarUrl: null };
+
+                if (authorPub) {
+                     // Check Firestore Profile first (faster/cleaner if already migrated)
+                     // const qProfile = query(collection(db, 'profiles'), where('pub', '==', authorPub)); // Assuming 'pub' was saved
+                     // Actually, earlier migration saved 'pub' in profile.
+                     // But let's check Gun just in case profile wasn't migrated or linked correctly.
+                     // Or just fetch from Gun quickly.
+                     
+                     const profileData: any = await new Promise((resolve) => {
+                         gun.get('all_users').get(authorPub).once((d) => resolve(d));
+                     });
+                     
+                     if (profileData) {
+                         commenterProfile = {
+                             email: profileData.email,
+                             displayName: profileData.displayName || profileData.alias || (profileData.email ? profileData.email.split('@')[0] : 'Anonymous'),
+                             avatarUrl: profileData.avatarUrl
+                         };
+                     }
+                }
+
+                await addDoc(collection(db, 'comments'), {
+                    requestId: firestoreRequestId,
+                    submissionId: firestoreSubmissionId,
+                    playlistId: firestorePlaylistId,
+                    authorEmail: commenterProfile.email || 'migrated_commenter@example.com',
+                    text: commentData.text || '',
+                    createdAt: new Date(commentData.createdAt || new Date()) || serverTimestamp(),
+                    migratedFromGunId: gunCommentKey,
+                    userProfile: {
+                        displayName: commenterProfile.displayName,
+                        avatarUrl: commenterProfile.avatarUrl || null,
+                    }
+                });
+                addLog(`  -> Success.`);
+            }
+        }
+        addLog("Partial Comment Migration Complete.");
+
+    } catch (err: any) {
+        console.error(err);
+        addLog(`Error: ${err.message}`);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+
+  const handleCleanup = async () => {
+    if (!cleanupRequestId.trim()) return;
+    if (!window.confirm(`Are you SURE you want to delete Request ${cleanupRequestId} and ALL associated data (Playlist, Submissions, Comments)? This cannot be undone.`)) return;
+
+    setLoading(true);
+    setLogs([]);
+    addLog(`Starting cleanup for Firestore Request ID: ${cleanupRequestId}`);
+
+    try {
+        const user = auth.currentUser;
+        if (!user || !user.email) throw new Error("Not authenticated");
+
+        // 1. Fetch Request to get Playlist ID
+        const requestRef = doc(db, 'requests', cleanupRequestId);
+        const requestSnap = await getDoc(requestRef);
+
+        if (!requestSnap.exists()) {
+            throw new Error(`Request ${cleanupRequestId} not found.`);
+        }
+
+        const requestData = requestSnap.data();
+        const playlistId = requestData.playlistId;
+
+        // 2. Fetch all Submissions
+        addLog(`Fetching submissions for Request ${cleanupRequestId}...`);
+        const qSub = query(collection(db, 'submissions'), where('requestId', '==', cleanupRequestId));
+        const subSnapshot = await getDocs(qSub);
+        const submissionIds: string[] = [];
+        subSnapshot.forEach(doc => submissionIds.push(doc.id));
+        addLog(`Found ${submissionIds.length} submissions.`);
+
+        // 3. Delete Comments (linked to submission OR requestId)
+        // First, by Submission ID
+        let deletedComments = 0;
+        for (const subId of submissionIds) {
+            const qCom = query(collection(db, 'comments'), where('submissionId', '==', subId));
+            const comSnapshot = await getDocs(qCom);
+            for (const d of comSnapshot.docs) {
+                await deleteDoc(d.ref);
+                deletedComments++;
+            }
+        }
+        // Then, by Request ID directly (orphan check)
+        const qComReq = query(collection(db, 'comments'), where('requestId', '==', cleanupRequestId));
+        const comReqSnapshot = await getDocs(qComReq);
+        for (const d of comReqSnapshot.docs) {
+             // Only delete if exists (it might have been deleted above if it had both fields)
+             // Firestore deleteDoc is safe to call on non-existent doc? No, but we can try/catch or just let it be.
+             // Actually, if we just iterate and delete, it's fine.
+             // But wait, if we already deleted it, getting a reference to it again is fine, but deleting again?
+             // Since we fetched `comReqSnapshot` *before* deleting anything? No, we are fetching now.
+             // But we deleted `comSnapshot` docs already.
+             // So let's just do it.
+             try {
+                await deleteDoc(d.ref);
+                deletedComments++; // Count might be inflated if duplicates, but okay for logs.
+             } catch (e) { /* ignore already deleted */ }
+        }
+        addLog(`Deleted approx ${deletedComments} comments.`);
+
+        // 4. Delete Submissions
+        addLog(`Deleting ${submissionIds.length} submissions...`);
+        for (const subDoc of subSnapshot.docs) {
+            await deleteDoc(subDoc.ref);
+        }
+
+        // 5. Delete Playlist
+        if (playlistId) {
+            addLog(`Deleting Playlist ${playlistId}...`);
+            await deleteDoc(doc(db, 'playlists', playlistId));
+        }
+
+        // 6. Delete Request
+        addLog(`Deleting Request ${cleanupRequestId}...`);
+        await deleteDoc(requestRef);
+
+        addLog("Cleanup Complete!");
+
+    } catch (err: any) {
+        console.error(err);
+        addLog(`Error: ${err.message}`);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   const handleMigrateProfiles = async () => {
       setLoading(true);
       setLogs([]);
@@ -461,7 +690,7 @@ export function MigrateGunToFirebase() {
             </button>
         </div>
 
-        <div>
+        <div className="mb-8 border-b border-gray-800 pb-8">
             <h2 className="text-lg font-bold mb-4 text-green-400">2. Migrate All User Profiles</h2>
             <p className="text-sm text-gray-400 mb-4">
                 Scans all GunDB users and updates/creates Firestore profiles based on email matches. 
@@ -473,6 +702,56 @@ export function MigrateGunToFirebase() {
                 className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full flex justify-center items-center gap-2"
             >
                 {loading ? <Loader2 className="animate-spin" /> : 'Migrate All Profiles'}
+            </button>
+        </div>
+
+        <div>
+            <h2 className="text-lg font-bold mb-4 text-red-400">3. Clean Up Duplicate Request</h2>
+            <p className="text-sm text-gray-400 mb-4">
+                Enter a <strong>Firestore Request ID</strong> (UUID) to delete it and ALL associated data (Playlist, Submissions, Comments). 
+                Use this to remove duplicate migrations.
+            </p>
+            <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Firestore Request ID</label>
+                <input 
+                    type="text" 
+                    value={cleanupRequestId}
+                    onChange={(e) => setCleanupRequestId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+                    placeholder="e.g. 7f8a9d..."
+                />
+            </div>
+            <button
+                onClick={handleCleanup}
+                disabled={loading}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded w-full flex justify-center items-center gap-2"
+            >
+                {loading ? <Loader2 className="animate-spin" /> : 'Delete Request & Data'}
+            </button>
+        </div>
+
+        <div>
+            <h2 className="text-lg font-bold mb-4 text-purple-400">4. Migrate Latest Comments</h2>
+            <p className="text-sm text-gray-400 mb-4">
+                Migrate ONLY new comments for an already migrated request. 
+                Enter the <strong>GunDB Request ID</strong>.
+            </p>
+            <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Gun Request ID (Node ID)</label>
+                <input 
+                    type="text" 
+                    value={commentMigrationRequestId}
+                    onChange={(e) => setCommentMigrationRequestId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+                    placeholder="e.g. request_uuid_..."
+                />
+            </div>
+            <button
+                onClick={handleMigrateComments}
+                disabled={loading}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded w-full flex justify-center items-center gap-2"
+            >
+                {loading ? <Loader2 className="animate-spin" /> : 'Migrate Comments'}
             </button>
         </div>
 

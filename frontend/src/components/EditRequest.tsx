@@ -430,6 +430,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
           const playlistUpdates: any = {
               liveDate: separatePlaylistAccess && finalPlaylistLiveDate ? new Date(finalPlaylistLiveDate).toISOString() : (finalDeadline ? new Date(finalDeadline).toISOString() : null),
               accessList: separatePlaylistAccess ? finalPlaylistEmails : finalPendingEmails,
+              accessMode: (accessMode === 'direct') ? 'public' : 'private',
               updatedAt: serverTimestamp()
           };
           await updateDoc(playlistDocRef, playlistUpdates);

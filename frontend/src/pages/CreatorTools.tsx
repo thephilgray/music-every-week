@@ -28,82 +28,135 @@ export function CreatorTools() {
   const [activeTab, setActiveTab] = useState<'requests' | 'submissions'>('requests');
 
   // Requests Data
+  const [requestsByUid, setRequestsByUid] = useState<FileRequest[]>([]);
+  const [requestsByEmail, setRequestsByEmail] = useState<FileRequest[]>([]);
   const [myRequests, setMyRequests] = useState<FileRequest[]>([]);
+
   const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [isEditRequestOpen, setIsEditRequestOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
   // Submissions Data
+  const [submissionsByUid, setSubmissionsByUid] = useState<Submission[]>([]);
+  const [submissionsByEmail, setSubmissionsByEmail] = useState<Submission[]>([]);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [isEditSubmissionOpen, setIsEditSubmissionOpen] = useState(false);
 
   const [, setLoading] = useState(false);
 
-  // Fetch Requests
+  // Combine Requests
+  useEffect(() => {
+      const combined = new Map<string, FileRequest>();
+      requestsByUid.forEach(r => combined.set(r.id!, r));
+      requestsByEmail.forEach(r => combined.set(r.id!, r));
+      
+      const sorted = Array.from(combined.values()).sort((a, b) => 
+          getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt)
+      );
+      setMyRequests(sorted);
+  }, [requestsByUid, requestsByEmail]);
+
+  // Combine Submissions
+  useEffect(() => {
+      const combined = new Map<string, Submission>();
+      submissionsByUid.forEach(s => combined.set(s.id!, s));
+      submissionsByEmail.forEach(s => combined.set(s.id!, s));
+
+      const sorted = Array.from(combined.values()).sort((a, b) => 
+          getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt)
+      );
+      setMySubmissions(sorted);
+  }, [submissionsByUid, submissionsByEmail]);
+
+  // Fetch Requests (Dual Query)
   useEffect(() => {
     if (!user?.uid && !participantEmail) return;
     
-    // Prefer Email for broader matching
-    const identifierField = (user?.email || participantEmail) ? 'ownerEmail' : 'ownerPub';
-    const identifierValue = user?.email || participantEmail || user?.uid;
+    const unsubs: (() => void)[] = [];
 
-    const requestsQuery = query(
-      collection(db, 'requests'),
-      where(identifierField, '==', identifierValue),
-      where('deleted', '!=', true) 
-    );
+    // 1. Query by UID (ownerPub)
+    if (user?.uid) {
+        const qUid = query(
+            collection(db, 'requests'),
+            where('ownerPub', '==', user.uid)
+        );
+        unsubs.push(onSnapshot(qUid, (snapshot) => {
+            const res: FileRequest[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.deleted) return;
+                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
+            });
+            setRequestsByUid(res);
+        }));
+    }
 
-    const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
-      const fetchedRequests: FileRequest[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data && data.title) {
-            fetchedRequests.push({ 
-                id: docSnap.id, 
-                ...data,
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt 
-            } as FileRequest);
-        }
-      });
-      fetchedRequests.sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
-      setMyRequests(fetchedRequests);
-    });
+    // 2. Query by Email (ownerEmail)
+    const email = user?.email || participantEmail;
+    if (email) {
+        const qEmail = query(
+            collection(db, 'requests'),
+            where('ownerEmail', '==', email)
+        );
+        unsubs.push(onSnapshot(qEmail, (snapshot) => {
+            const res: FileRequest[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.deleted) return;
+                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
+            });
+            setRequestsByEmail(res);
+        }));
+    }
 
-    return () => unsubscribe(); 
+    return () => unsubs.forEach(u => u());
   }, [user, participantEmail]);
 
-  // Fetch Submissions
+  // Fetch Submissions (Dual Query)
   useEffect(() => {
       if (!user?.uid && !participantEmail) return;
       
-      const identifierField = (user?.email || participantEmail) ? 'uploaderEmail' : 'uploaderUid';
-      const identifierValue = user?.email || participantEmail || user?.uid;
+      const unsubs: (() => void)[] = [];
 
-      const submissionsQuery = query(
-        collection(db, 'submissions'), 
-        where(identifierField, '==', identifierValue),
-        where('deleted', '!=', true) 
-      );
+      // 1. Query by UID (uploaderUid)
+      if (user?.uid) {
+          const qUid = query(
+              collection(db, 'submissions'), 
+              where('uploaderUid', '==', user.uid)
+          );
+          unsubs.push(onSnapshot(qUid, (snapshot) => {
+              const res: Submission[] = [];
+              snapshot.forEach(doc => {
+                  const data = doc.data();
+                  if (data.deleted) return;
+                  if (data.title) res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as Submission);
+              });
+              setSubmissionsByUid(res);
+          }));
+      }
 
-      const unsubscribe = onSnapshot(submissionsQuery, (snapshot) => {
-        const fetchedSubmissions: Submission[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data && data.title) {
-            fetchedSubmissions.push({ 
-                id: docSnap.id, 
-                ...data,
-                createdAt: getTimestampAsNumber(data.createdAt)
-            } as Submission);
-          }
-        });
-        fetchedSubmissions.sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
-        setMySubmissions(fetchedSubmissions);
-      });
+      // 2. Query by Email (uploaderEmail)
+      const email = user?.email || participantEmail;
+      if (email) {
+          const qEmail = query(
+              collection(db, 'submissions'), 
+              where('uploaderEmail', '==', email)
+          );
+          unsubs.push(onSnapshot(qEmail, (snapshot) => {
+              const res: Submission[] = [];
+              snapshot.forEach(doc => {
+                  const data = doc.data();
+                  if (data.deleted) return;
+                  if (data.title) res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as Submission);
+              });
+              setSubmissionsByEmail(res);
+          }));
+      }
 
-      return () => unsubscribe(); 
+      return () => unsubs.forEach(u => u());
   }, [user, participantEmail]);
 
   // Fetch details for selectedRequest
@@ -198,21 +251,38 @@ export function CreatorTools() {
               const submissionSnapshot = await getDocs(submissionsQuery);
               submissionSnapshot.forEach(subDoc => {
                   const subData = subDoc.data();
-                  if (subData.uploaderUid) {
-                      const p = rows.get(subData.uploaderUid);
-                      if (p && p.status !== 'submitted') {
-                          rows.set(subData.uploaderUid, { ...p, status: 'submitted' });
-                      } else if (!p) {
-                          rows.set(subData.uploaderUid, {
-                              id: subData.uploaderUid,
-                              name: 'Loading...', 
-                              contact: subData.uploaderUid,
-                              status: 'submitted',
-                              type: 'user',
-                              extensionHours: 0,
-                              hasPass: false
-                          });
+                  const uid = subData.uploaderUid;
+                  const email = subData.uploaderEmail;
+
+                  let p = uid ? rows.get(uid) : undefined;
+                  
+                  // Deduplicate: Check if we have an invited row by email for this submitter
+                  if (!p && email) {
+                      const emailRow = rows.get(email);
+                      if (emailRow) {
+                          if (uid) {
+                              // Convert email row to user row
+                              p = { ...emailRow, id: uid, type: 'user', contact: email };
+                              rows.delete(email);
+                              rows.set(uid, p);
+                          }
                       }
+                  }
+
+                  if (p) {
+                      if (p.status !== 'submitted') {
+                          rows.set(uid || p.id, { ...p, status: 'submitted' });
+                      }
+                  } else if (uid) {
+                      rows.set(uid, {
+                          id: uid,
+                          name: 'Loading...', 
+                          contact: email || uid,
+                          status: 'submitted',
+                          type: 'user',
+                          extensionHours: 0,
+                          hasPass: false
+                      });
                   }
               });
           }
@@ -228,6 +298,14 @@ export function CreatorTools() {
                               const profileData = profileDoc.data() as UserProfile;
                               if (profileData.alias) {
                                   rows.set(id, { ...row, name: profileData.alias, contact: profileData.email || profileData.uid });
+                              }
+                              
+                              // Final Deduplication: Remove any lingering invited rows that match this profile email
+                              if (profileData.email && rows.has(profileData.email)) {
+                                  const invitedRow = rows.get(profileData.email);
+                                  if (invitedRow && invitedRow.type === 'email') {
+                                      rows.delete(profileData.email);
+                                  }
                               }
                           }
                       } catch (e) {

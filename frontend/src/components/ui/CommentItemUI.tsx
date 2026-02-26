@@ -6,6 +6,7 @@ import { MiniPlayer } from './MiniPlayer';
 import { fixUrl } from '../../lib/url';
 import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { formatCommentDate } from '../../lib/utils';
 
 export interface CommentItemUIProps {
   id: string;
@@ -115,7 +116,9 @@ export function CommentItemUI({
                             {authorName}
                         </span>
                     )}
-                    <span className="text-xs text-gray-600">{new Date(createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span className="text-xs text-gray-600" title={new Date(createdAt).toLocaleString()}>
+                        {formatCommentDate(createdAt)}
+                    </span>
                 </div>
                 
                 {isOwnComment && !isEditing && (

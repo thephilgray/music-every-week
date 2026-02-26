@@ -1,17 +1,15 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-// import { useGun } from '../contexts/GunContext'; // Removed useGun
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore'; // Added specific Firebase functions
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy, documentId } from 'firebase/firestore';
 import type { Playlist, Submission, FileRequest } from '../types';
-import { getTimestampAsNumber } from '../lib/utils';
+import { getTimestampAsNumber, seededRandom } from '../lib/utils';
 import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio } from 'lucide-react';
-// removed RequestCard import
+import { RequestCard } from '../components/RequestCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
-import { seededRandom } from '../lib/utils';
 import { FilterPopover } from '../components/ui/FilterPopover';
 import { fixUrl } from '../lib/url';
 
@@ -26,21 +24,25 @@ export function Playlists() {
 }
 
 // ==========================================
-// EXISTING GunDB LIST VIEW
+// EXISTING GunDB LIST VIEW -> Refactored for Firestore & Migration
 // ==========================================
 function PlaylistList() {
-  const { user } = useAuth(); // Changed from useGun
+  const { user, participantEmail } = useAuth(); // Added participantEmail
   const { play } = usePlayer();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  
+  // State for different playlist sources
+  const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
+  const [hostedRequests, setHostedRequests] = useState<FileRequest[]>([]); // Merged state for requests
+  
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
 
-  // Removed entire public playlists useEffect
-  
-
+  // 1. My Playlists (Created by Me) - Kept as Playlists
   useEffect(() => {
-     setPlaylists([]);
-     if (!user || !user.uid) return; // Guard
+     if (!user || !user.uid) {
+         setMyPlaylists([]);
+         return;
+     }
      
      const playlistsQuery = query(
         collection(db, 'playlists'),
@@ -58,14 +60,115 @@ function PlaylistList() {
                 createdAt: getTimestampAsNumber(data.createdAt)
             } as Playlist);
         });
-        setPlaylists(fetchedPlaylists);
+        setMyPlaylists(fetchedPlaylists);
      });
      return () => unsubscribe();
-  }, [user]); // Removed gun and selectedPlaylist?.id dependencies, simplified
+  }, [user]);
 
+  // 2. Fetch Hosted/Public/Contributed Requests
+  useEffect(() => {
+      const email = user?.email || participantEmail;
+      const uid = user?.uid;
+      
+      const fetchRequests = async () => {
+          // A. Public Requests
+          const qPublic = query(
+              collection(db, 'requests'), 
+              where('accessMode', 'in', ['public', 'direct']), 
+              orderBy('createdAt', 'desc')
+          );
+
+          // B. Shared Requests (Invite/Volunteer where I'm added)
+          let qShared = null;
+          if (email) {
+              qShared = query(
+                  collection(db, 'requests'), 
+                  where('accessList', 'array-contains', email), 
+                  orderBy('createdAt', 'desc')
+              );
+          }
+
+          // C. Contributed Requests (Where I submitted)
+          let contributedIds: string[] = [];
+          
+          if (email || uid) {
+              let migratedPub: string | null = null;
+              if (uid) {
+                  const profileDoc = await getDoc(doc(db, 'profiles', uid));
+                  if (profileDoc.exists()) migratedPub = profileDoc.data().migratedFromGunPub;
+              } else if (email) {
+                  const qP = query(collection(db, 'profiles'), where('email', '==', email));
+                  const pSnap = await getDocs(qP);
+                  if (!pSnap.empty) migratedPub = pSnap.docs[0].data().migratedFromGunPub;
+              }
+
+              const subQueries = [];
+              if (email) subQueries.push(query(collection(db, 'submissions'), where('uploaderEmail', '==', email)));
+              if (migratedPub) subQueries.push(query(collection(db, 'submissions'), where('originalUploaderPub', '==', migratedPub)));
+              
+              if (subQueries.length > 0) {
+                  const subSnaps = await Promise.all(subQueries.map(q => getDocs(q)));
+                  const requestIds = new Set<string>();
+                  subSnaps.forEach(snap => {
+                      snap.forEach(doc => {
+                          const data = doc.data();
+                          if (data.requestId) requestIds.add(data.requestId);
+                      });
+                  });
+                  contributedIds = Array.from(requestIds);
+              }
+          }
+
+          // Execute Queries
+          const promises = [getDocs(qPublic)];
+          if (qShared) promises.push(getDocs(qShared));
+          
+          // Batch fetch contributed requests by ID
+          if (contributedIds.length > 0) {
+              for (let i = 0; i < contributedIds.length; i += 10) {
+                  const batch = contributedIds.slice(i, i + 10);
+                  promises.push(getDocs(query(collection(db, 'requests'), where(documentId(), 'in', batch))));
+              }
+          }
+
+          const snapshots = await Promise.all(promises);
+          
+          // Merge and Deduplicate
+          const uniqueRequests = new Map<string, FileRequest>();
+          snapshots.forEach(snap => {
+              snap.forEach(doc => {
+                  const data = doc.data();
+                  // Exclude my own requests from "Hosted Playlists" section if desired, 
+                  // but user said "Public playlists that I have access to", which usually implies others'.
+                  // "My Playlists" section covers personal lists.
+                  // If I created a Public Request, it shows in "Hosted Playlists" too? 
+                  // Usually yes, or "My Requests" section (which we don't have here).
+                  // Let's exclude if ownerPub === user.uid to avoid duplication with a potential "My Requests" page?
+                  // Actually, "My Playlists" are specifically the `playlists` collection items created manually.
+                  // Requests are different. Let's show all accessible requests here.
+                  
+                  uniqueRequests.set(doc.id, { 
+                      id: doc.id, 
+                      ...data,
+                      createdAt: getTimestampAsNumber(data.createdAt)
+                  } as FileRequest);
+              });
+          });
+
+          // Sort by createdAt desc
+          const sorted = Array.from(uniqueRequests.values()).sort((a, b) => 
+              (b.createdAt as number) - (a.createdAt as number)
+          );
+          
+          setHostedRequests(sorted);
+      };
+
+      fetchRequests();
+  }, [user, participantEmail]);
 
 
   const handlePlay = async (playlist: Playlist, startIndex = 0) => {
+      // ... (Existing handlePlay logic) ...
       console.log("handlePlay initiated for playlist:", playlist.id);
       if (!playlist.tracks || playlist.tracks.length === 0) return;
       setLoadingId(playlist.id);
@@ -144,76 +247,109 @@ function PlaylistList() {
       }
   };
 
+  const PlaylistGrid = ({ list, isOwner }: { list: Playlist[], isOwner: boolean }) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {list.map(pl => (
+              <div key={pl.id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 group hover:border-gray-700 transition">
+                  <div className="flex justify-between items-start mb-4">
+                      <div className="min-w-0 flex-1 pr-2">
+                          <h3 className="text-xl font-bold text-white truncate" title={pl.title}>{pl.title}</h3>
+                          <p className="text-sm text-gray-500">{pl.tracks?.length || 0} tracks</p>
+                      </div>
+                      {isOwner && (
+                          <div className="flex gap-1 flex-shrink-0">
+                              <button 
+                                  onClick={() => setSelectedPlaylist(pl)}
+                                  className="p-1 text-gray-600 hover:text-white transition"
+                                  title="Edit Playlist"
+                              >
+                                  <Edit className="w-4 h-4" />
+                              </button>
+                              <button 
+                                  onClick={() => deletePlaylist(pl.id)}
+                                  className="p-1 text-gray-600 hover:text-red-500 transition"
+                                  title="Delete Playlist"
+                              >
+                                  <Trash2 className="w-4 h-4" />
+                              </button>
+                          </div>
+                      )}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                       <button 
+                          onClick={() => handlePlay(pl)}
+                          disabled={loadingId === pl.id || !pl.tracks?.length}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                       >
+                          {loadingId === pl.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                          Play
+                       </button>
+                  </div>
+                  
+                  <div 
+                      className="mt-4 space-y-1 cursor-pointer hover:bg-gray-800/50 p-2 rounded -mx-2 transition"
+                      onClick={() => handlePlay(pl)} // Play on click anywhere on track list preview
+                  >
+                      {pl.tracks?.slice(0, 3).map((t, i) => (
+                          <div key={i} className="text-xs text-gray-400 truncate flex justify-between">
+                              <span>{i+1}. {t.title}</span>
+                              <span className="text-gray-600 max-w-[80px] truncate">{t.artist}</span>
+                          </div>
+                      ))}
+                      {(pl.tracks?.length || 0) > 3 && (
+                          <div className="text-xs text-gray-600 pt-1">
+                              + {(pl.tracks?.length || 0) - 3} more
+                          </div>
+                      )}
+                      {(pl.tracks?.length || 0) === 0 && <span className="text-xs text-gray-600">Empty</span>}
+                  </div>
+              </div>
+          ))}
+      </div>
+  );
+
   return (
-    <div className="max-w-5xl mx-auto p-2 pb-4 sm:p-8 sm:pb-32">
-        <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
-            <ListMusic className="w-8 h-8 text-blue-500" />
-            My Playlists
-        </h1>
-        
-        {playlists.length === 0 ? (
-            <div className="text-center py-20 text-gray-500 border border-gray-800 border-dashed rounded-lg">
-                <p>No playlists yet.</p>
-                <p className="text-sm mt-2">Create one from a track's menu.</p>
-            </div>
-        ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {playlists.map(pl => (
-                    <div key={pl.id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 group hover:border-gray-700 transition">
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <h3 className="text-xl font-bold text-white">{pl.title}</h3>
-                                <p className="text-sm text-gray-500">{pl.tracks?.length || 0} tracks</p>
-                            </div>
-                            <div className="flex gap-1">
-                                <button 
-                                    onClick={() => setSelectedPlaylist(pl)}
-                                    className="p-1 text-gray-600 hover:text-white transition"
-                                    title="Edit Playlist"
-                                >
-                                    <Edit className="w-4 h-4" />
-                                </button>
-                                <button 
-                                    onClick={() => deletePlaylist(pl.id)}
-                                    className="p-1 text-gray-600 hover:text-red-500 transition"
-                                    title="Delete Playlist"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                             <button 
-                                onClick={() => handlePlay(pl)}
-                                disabled={loadingId === pl.id || !pl.tracks?.length}
-                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                             >
-                                {loadingId === pl.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
-                                Play
-                             </button>
-                        </div>
-                        
-                        <div 
-                            className="mt-4 space-y-1 cursor-pointer hover:bg-gray-800/50 p-2 rounded -mx-2 transition"
-                            onClick={() => setSelectedPlaylist(pl)}
-                        >
-                            {pl.tracks?.slice(0, 3).map((t, i) => (
-                                <div key={i} className="text-xs text-gray-400 truncate flex justify-between">
-                                    <span>{i+1}. {t.title}</span>
-                                    <span className="text-gray-600 max-w-[80px] truncate">{t.artist}</span>
-                                </div>
-                            ))}
-                            {(pl.tracks?.length || 0) > 3 && (
-                                <div className="text-xs text-gray-600 pt-1">
-                                    + {(pl.tracks?.length || 0) - 3} more
-                                </div>
-                            )}
-                            {(pl.tracks?.length || 0) === 0 && <span className="text-xs text-gray-600">Empty</span>}
-                        </div>
+    <div className="max-w-6xl mx-auto p-2 pb-4 sm:p-8 sm:pb-32 space-y-12">
+        {/* Hosted Playlists Section (Now displaying Requests) */}
+        <section>
+            <h2 className="text-3xl font-bold text-white mb-6 flex items-center gap-3">
+                <ListMusic className="w-8 h-8 text-blue-500" />
+                Hosted Playlists
+            </h2>
+            {hostedRequests.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
+                    <p>No hosted playlists found.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {hostedRequests.map(req => (
+                        <RequestCard 
+                            key={req.id} 
+                            request={req} 
+                            isClosed={false} 
+                            hideStatus={true} // New prop to hide CLOSED tag
+                        />
+                    ))}
+                </div>
+            )}
+        </section>
+
+        {/* My Playlists Section */}
+        {user && (
+            <section>
+                <h2 className="text-2xl font-bold text-white mb-6 border-t border-gray-800 pt-8">
+                    My Playlists
+                </h2>
+                {myPlaylists.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
+                        <p>No playlists yet.</p>
+                        <p className="text-sm mt-2">Create one from a track's menu.</p>
                     </div>
-                ))}
-            </div>
+                ) : (
+                    <PlaylistGrid list={myPlaylists} isOwner={true} />
+                )}
+            </section>
         )}
 
         {/* Edit Modal (Existing GunDB Implementation) */}
@@ -458,9 +594,58 @@ function PlaylistDetail({ id }: { id: string }) {
     if (error || !playlist) return <div className="text-center p-20 text-red-500">{error || "Not Found"}</div>;
 
     // Access Check using isAllowed properly
-    const isAllowed = isHost || playlist.accessList?.some((e: string) => e.toLowerCase() === participantEmail?.toLowerCase()) || (playlist as any).accessMode === 'public';
+    // isHost is already destructured from computedVisibleSubmissions
+    const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
     
-    if (!isAllowed) {
+    // 1. Strict Playlist Access List Check
+    // If playlist has an explicit access list, user MUST be on it (or be Host/Admin)
+    const hasPlaylistAccessList = playlist.accessList && playlist.accessList.length > 0;
+    const isOnPlaylistAccessList = playlist.accessList?.some(e => e.toLowerCase() === participantEmail?.toLowerCase());
+    
+    if (hasPlaylistAccessList && !isOnPlaylistAccessList && !isHost) {
+         return (
+            <div className="flex flex-col items-center justify-center p-20 text-center">
+                 <Lock className="w-12 h-12 text-red-500 mb-4" />
+                 <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+                 <p className="text-gray-500">You do not have permission to view this playlist.</p>
+            </div>
+        );
+    }
+
+    // 2. Request-based Logic (Submission & Deadline enforcement)
+    // If on Request Access List + No Submission + Past Due -> Content Locked (but page visible)
+    const isOnRequestAccessList = request?.accessList?.some(e => e.toLowerCase() === participantEmail?.toLowerCase());
+    const isPastDeadline = request?.deadline && Date.now() > new Date(request.deadline).getTime();
+    
+    let contentLocked = false;
+    let lockReason = "";
+
+    if (isOnRequestAccessList && !isHost && !hasSubmitted && isPastDeadline) {
+        contentLocked = true;
+        lockReason = "You did not submit a track in time. Content is locked.";
+    }
+
+    // 3. Existing Preview/Live Logic (Refined)
+    if (!isHost && request?.playlistLiveDate) {
+        const liveDate = new Date(request.playlistLiveDate).getTime();
+        if (Date.now() < liveDate) {
+            if (hasSubmitted) {
+                // Preview Mode: Handled in computedVisibleSubmissions or here? 
+                // computedVisibleSubmissions handles the filtering/shuffling.
+                // We just need to ensure we don't override it with a full lock unless necessary.
+                lockReason = `Playlist is not live yet. Preview mode active.`;
+            } else {
+                contentLocked = true;
+                lockReason = "Playlist is locked until the live date.";
+            }
+        }
+    }
+
+    // Basic Public/Fallback Check if not caught above
+    // If no specific blocking, we check generic visibility
+    const isAllowed = isHost || isOnPlaylistAccessList || playlist.accessMode === 'public' || isOnRequestAccessList;
+    
+    if (!isAllowed && !contentLocked) { // If contentLocked is true, we allow view (metadata) but lock tracks
         return (
             <div className="flex flex-col items-center justify-center p-20 text-center">
                  <Lock className="w-12 h-12 text-red-500 mb-4" />
@@ -489,17 +674,25 @@ function PlaylistDetail({ id }: { id: string }) {
                             </button>
                         )}
                         
-                        {lockMessage && (
+                        {(lockReason || lockMessage) && (
                             <div className="mt-4 inline-flex items-center gap-2 bg-yellow-900/30 text-yellow-200 px-3 py-1 rounded-full text-xs font-bold border border-yellow-700/50">
-                                <Lock className="w-3 h-3" /> {lockMessage}
+                                <Lock className="w-3 h-3" /> {lockReason || lockMessage}
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Controls */}
-            <div className="flex justify-between items-center mb-6 relative">
+            {contentLocked ? (
+                <div className="text-center py-20 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
+                    <Lock className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                    <h3 className="text-xl font-bold text-white mb-2">Content Locked</h3>
+                    <p>{lockReason}</p>
+                </div>
+            ) : (
+                <>
+                    {/* Controls */}
+                    <div className="flex justify-between items-center mb-6 relative">
                  <div className="flex gap-2">
                      <button onClick={handlePlayAll} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold transition">
                          {isPlaying && visibleSubmissions.some(s => s.id === currentTrack?.id) ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -590,6 +783,8 @@ function PlaylistDetail({ id }: { id: string }) {
             )}
             
             <div className="h-32" />
+            </>
+            )}
         </div>
     );
 }

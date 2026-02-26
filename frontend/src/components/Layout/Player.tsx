@@ -5,9 +5,6 @@ import { SongDetailsModal } from '../SongDetailsModal';
 import { QueueModal } from './QueueModal';
 import { Waveform } from '../ui/Waveform';
 import { ArtworkDisplay } from '../ui/ArtworkDisplay';
-import type { UserProfile } from '../../types'; // Assuming UserProfile is defined in types.ts
-import { db } from '../../lib/firebase'; // Import db
-import { collection, query, where, getDocs } from 'firebase/firestore'; // Import Firestore functions
 
 
 export function Player() { // Removed props
@@ -18,37 +15,12 @@ export function Player() { // Removed props
 
   // Manage currentUserEmail and userProfile internally
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | undefined>(undefined);
 
   // Effect to load currentUserEmail from sessionStorage
   useEffect(() => {
     const email = sessionStorage.getItem('mew_auth_email');
     setCurrentUserEmail(email);
   }, []);
-
-  // Effect to fetch userProfile based on currentUserEmail
-  useEffect(() => {
-    async function fetchUserProfile() {
-      if (currentUserEmail) {
-        try {
-          const q = query(collection(db, 'profiles'), where('email', '==', currentUserEmail));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            const profileData = querySnapshot.docs[0].data() as UserProfile;
-            setUserProfile(profileData);
-          } else {
-            setUserProfile(undefined); // No profile found
-          }
-        } catch (error) {
-          console.error("Error fetching user profile in Player:", error);
-          setUserProfile(undefined);
-        }
-      } else {
-        setUserProfile(undefined);
-      }
-    }
-    fetchUserProfile();
-  }, [currentUserEmail]);
 
 
   // Auto-expand on track change
@@ -71,12 +43,11 @@ export function Player() { // Removed props
 
   return (
     <>
-      {showLyrics && currentTrack && currentUserEmail && ( // Ensure currentUserEmail exists before rendering
+      {showLyrics && currentTrack && ( 
         <SongDetailsModal 
             currentTrack={currentTrack} 
             onClose={() => setShowLyrics(false)} 
             currentUserEmail={currentUserEmail} 
-            userProfile={userProfile} 
         />
       )}
 

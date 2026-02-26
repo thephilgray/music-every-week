@@ -3,17 +3,16 @@ import { useParams } from 'react-router-dom';
 import { db, auth } from '../../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import type { User } from 'firebase/auth'; // Import User type
-import { Loader2, Music2, UserCircle, Play, Pause, Lock, ListMusic, FileAudio, FileText, MessageSquare, ListPlus, Shuffle, Filter } from 'lucide-react';
+import { Loader2, Music2, UserCircle, Play, Pause, Lock, ListMusic, Shuffle, Filter } from 'lucide-react';
 import { AuthlessLogin } from './components/AuthlessLogin';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { MyPlaylistsModal } from './components/MyPlaylistsModal';
 import { seededRandom } from '../../lib/utils';
 import type { Submission, FileRequest } from '../../types'; // Re-use types if possible, or cast
 import { ArtworkDisplay } from '../../components/ui/ArtworkDisplay';
-import { Waveform } from '../../components/ui/Waveform';
-import { AuthlessComments as CommentSection } from './components/AuthlessComments';
 import { FilterPopover } from '../../components/ui/FilterPopover'; // NEW IMPORT
 import { fixUrl } from '../../lib/url';
+import { SubmissionCard } from '../../components/SubmissionCard';
 
 interface PlaylistData {
   id: string;
@@ -44,7 +43,6 @@ export function PlaylistView() {
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [hostName, setHostName] = useState<string>('');
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
-  const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [showFilterPopover, setShowFilterPopover] = useState(false); // NEW STATE FOR FILTER POPOVER
 
@@ -178,14 +176,14 @@ export function PlaylistView() {
         filtered = Array.from(new Set(filtered));
         currentLockMessage = `Playlist is not live yet. Here is a preview of ${filtered.length} tracks.`;
       } else if (now < liveDate && !hasSubmitted) {
-        currentLockMessage = "Playlist is locked until the live date. Submit a track to get a preview!";
-        filtered = [];
+            currentLockMessage = "Playlist is locked until the live date. Submit a track to get a preview!";
+            filtered = [];
       } else {
         currentLockMessage = "";
-      }
+        }
     } else if (isHost) {
       currentLockMessage = "Playlist unlocked (Host View)";
-    } else {
+      } else {
       currentLockMessage = "";
     }
     return { filtered, lockMessage: currentLockMessage };
@@ -340,12 +338,6 @@ export function PlaylistView() {
         link: `/p/${playlistData!.id}`
       });
     }
-  };
-
-  const handleBylineClick = (uploaderEmail: string) => {
-    console.log("Navigating to profile for:", uploaderEmail);
-    // Implement actual navigation to /profile/userProfileId later
-    // For now, assume userProfile can be found by email for a clickable byline.
   };
 
   const handlePlayAll = () => {
@@ -639,325 +631,29 @@ export function PlaylistView() {
 
                 {visibleSubmissions.map((sub) => {
                   const isCurrent = currentTrack?.id === sub.id;
-
-                  const locked = isLocked(sub); // Assuming isLocked is defined
-
+                  const locked = isLocked(sub);
                   const isMySubmission = currentUserEmail === sub.uploaderEmail;
-
-
+                  const commentCount = commentCounts[sub.id!] || 0;
+                  const index = submissions.findIndex(originalSub => originalSub.id === sub.id);
 
                   return (
-
-                    <div
-
-                      id={`submission-${sub.id}`}
-
+                    <SubmissionCard
                       key={sub.id}
-
-                      className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group ${!locked ? 'cursor-pointer hover:border-gray-700' : ''}`}
-
-                      onClick={(e) => {
-
-                        if (locked) return;
-
-                        // Don't toggle if clicking buttons
-
-                        if ((e.target as HTMLElement).closest('button')) return;
-
-
-
-                        const isExpanding = expandedSubmissionId !== sub.id;
-
-                        setExpandedSubmissionId(isExpanding ? (sub.id || null) : null);
-
-
-
-                        // Also toggle lyrics if they exist
-
-                        if (sub.lyrics) {
-
-                          setExpandedLyricsMap(prev => ({
-
-                            ...prev,
-
-                            [sub.id!]: isExpanding
-
-                          }));
-
-                        }
-
-                      }}
-
-                    >
-
-                      <div className="flex flex-col md:flex-row md:items-center gap-4 relative z-10">
-
-                        {/* Watermark Track Number */}
-
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-800 text-9xl font-black opacity-5 select-none z-0">
-
-                          {submissions.findIndex(originalSub => originalSub.id === sub.id) + 1}.
-
-                        </div>
-
-                        {/* Artwork and Info Group */}
-
-                        <div className="flex items-center gap-4 flex-1 min-w-0 w-full">
-
-                          <div className="w-12 h-12 bg-gray-800 rounded flex items-center justify-center flex-shrink-0 relative">
-
-                            <ArtworkDisplay
-
-                              src={!locked ? sub.artworkUrl : null}
-
-                              alt="Art"
-
-                              className="w-full h-full object-cover rounded"
-
-                              FallbackIcon={FileAudio}
-
-                            />
-
-                            {locked && (
-
-                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded">
-
-                                <Lock className="w-4 h-4 text-gray-400" />
-
-                              </div>
-
-                            )}
-
-                          </div>
-
-
-
-                          <div className="flex-1 min-w-0">
-
-                            <h4 className={`text-xl font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}> {/* Adjusted title prominence */}
-
-                              {locked ? 'Hidden Track' : sub.title}
-
-                            </h4>
-
-                            <div className="flex items-center gap-2">
-
-                              <p
-
-                                className={`text-sm text-gray-400 truncate ${sub.uploaderEmail ? 'cursor-pointer hover:text-white' : ''}`}
-
-                                onClick={(e) => { // Modify onClick to stop propagation
-
-                                  e.stopPropagation(); // Prevent event from bubbling up to parent div
-
-                                  sub.uploaderEmail && handleBylineClick(sub.uploaderEmail)
-
-                                }}
-
-                              >
-
-                                {sub.byline || 'Anonymous'}
-
-                              </p>
-
-                              {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
-
-                            </div>
-
-                            {sub.waveform && sub.waveform.length > 0 && !locked && (
-
-                              <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition hidden md:block">
-
-                                <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
-
-                              </div>
-
-                            )}
-
-                          </div>
-
-                        </div>
-
-
-
-                        {/* Buttons Row */}
-
-                        <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-gray-800 md:border-none">
-
-                          <div className="flex items-center gap-2">
-
-                            {sub.lyrics && (
-
-                              <button
-
-                                onClick={(e) => { e.stopPropagation(); setExpandedLyricsMap(prev => ({ ...prev, [sub.id!]: !prev[sub.id!] })); }}
-
-                                disabled={locked}
-
-                                className={`p-2 rounded-full transition ${expandedLyricsMap[sub.id!] ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-
-                                title="Lyrics / Notes"
-
-                              >
-
-                                <FileText className="w-4 h-4" />
-
-                              </button>
-
-                            )}
-
-
-
-                            <button
-
-                              onClick={(e) => { e.stopPropagation(); setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null)); }}
-
-                              disabled={locked}
-
-                              className={`p-2 rounded-full transition flex items-center gap-1 ${expandedSubmissionId === sub.id ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-
-                              title="Comments"
-
-                            >
-
-                              <MessageSquare className="w-4 h-4" />
-
-                              {commentCounts[sub.id!] > 0 && (
-
-                                <span className="text-xs font-bold">{commentCounts[sub.id!]}</span>
-
-                              )}
-
-                            </button>
-
-
-
-                            <button
-
-                              // onClick={(e) => { e.stopPropagation(); setAddToPlaylistSubmission(sub); }} // Add to playlist is for RequestDetail, not PlaylistView
-
-                              disabled={true} // Disable for now
-
-                              className={`p-2 rounded-full transition text-gray-400 hover:text-white ${true ? 'opacity-50 cursor-not-allowed' : ''}`}
-
-                              title="Add to Playlist (Disabled in Playlist View)"
-
-                            >
-
-                              <ListPlus className="w-4 h-4" />
-
-                            </button>
-
-                          </div>
-
-
-
-                          <button
-
-                            onClick={(e) => {
-
-                              e.stopPropagation();
-
-                              if (locked) return;
-
-                              handlePlay(sub, visibleSubmissions);
-
-                            }}
-
-                            disabled={locked}
-
-                            className={`w-10 h-10 md:w-8 md:h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition ml-2 ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-
-                          >
-
-                            {locked ? (
-
-                              <Lock className="w-3 h-3 text-gray-500" />
-
-                            ) : isCurrent && isPlaying ? (
-
-                              <Pause className="w-4 h-4" />
-
-                            ) : (
-
-                              <Play className="w-4 h-4 ml-0.5" />
-
-                            )}
-
-                          </button>
-
-                        </div>
-
-                      </div>
-
-
-
-                      {(sub.waveform && sub.waveform.length > 0 && !locked) && (
-
-                        <div className="mt-2 w-full opacity-70 block md:hidden">
-
-                          <Waveform data={Array.isArray(sub.waveform) ? sub.waveform : []} />
-
-                        </div>
-
-                      )}
-
-
-
-                      {(expandedLyricsMap[sub.id!] && !locked) && (
-
-                        <div
-
-                          className="mt-4 px-2 md:px-4 pb-2">
-
-                          <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Lyrics / Notes</h5>
-
-                          <div className="bg-gray-950 p-2 md:p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap break-words font-mono">
-
-                            {sub.lyrics}
-
-                          </div>
-
-                        </div>
-
-                      )}
-
-
-
-                      {expandedSubmissionId === sub.id && id && sub.id && !locked && (
-
-                        <div
-
-                          className="mt-4 px-0 md:px-4 cursor-auto"
-
-                          onClick={(e) => e.stopPropagation()}
-
-                        >
-
-                          <CommentSection
-
-                            requestId={requestData!.id!}
-
-                            submissionId={sub.id}
-
-                            // highlightCommentId={linkedCommentId || undefined} // No deep linking for now
-
-                            // accessMode={request.accessMode} // No access mode for now
-
-                            // requestTitle={request.title} // Not directly needed
-
-                            currentUserEmail={currentUserEmail!} // Pass current user email for comment form
-
-                          />
-
-                        </div>
-
-                      )}
-
-                    </div>
-
+                      submission={sub}
+                      isLocked={locked}
+                      isPlaying={isPlaying}
+                      isCurrent={isCurrent}
+                      onPlay={() => handlePlay(sub, visibleSubmissions)}
+                      onPause={pause}
+                      commentCount={commentCount}
+                      isExpanded={expandedSubmissionId === sub.id}
+                      onToggleExpand={() => setExpandedSubmissionId(expandedSubmissionId === sub.id ? null : (sub.id || null))}
+                      currentUserEmail={currentUserEmail}
+                      requestId={requestData?.id}
+                      isMySubmission={isMySubmission}
+                      index={index}
+                    />
                   );
-
                 })}
 
               </div>

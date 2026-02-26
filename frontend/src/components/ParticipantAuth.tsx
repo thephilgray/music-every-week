@@ -30,7 +30,7 @@ export function ParticipantAuth() {
     try {
         // In the future, this might involve an actual backend check or magic link.
         // For now, it's just setting the context.
-        loginParticipant(trimmedEmail);
+        await loginParticipant(trimmedEmail);
         // Navigation will be handled by the parent/router logic responding to auth state change
     } catch (err) {
         console.error(err);

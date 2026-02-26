@@ -27,8 +27,7 @@ export function HostLogin({ redirectTo }: HostLoginProps) {
       
       if (user.email && allowedEmails.includes(user.email.toLowerCase())) {
         // Automatically log in as participant
-        loginParticipant(user.email);
-        
+                  await loginParticipant(user.email);        
         const dest = (location.state as any)?.from?.pathname || redirectTo || '/host/dashboard';
         navigate(dest);
       } else {

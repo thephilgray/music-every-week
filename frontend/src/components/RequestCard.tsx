@@ -5,14 +5,15 @@ import type { FileRequest } from '../types';
 interface RequestCardProps {
   request: FileRequest;
   isClosed: boolean;
+  hideStatus?: boolean;
 }
 
-export function RequestCard({ request, isClosed }: RequestCardProps) {
+export function RequestCard({ request, isClosed, hideStatus }: RequestCardProps) {
   // TODO: Add submission count from Firestore (denormalized field on request or separate query)
   
   return (
     <Link to={`/request/${request.id}`} className="block group">
-      <div className={`bg-gray-800 border ${isClosed ? 'border-red-900/50 opacity-80' : 'border-gray-700'} rounded-lg overflow-hidden hover:border-blue-500 transition-colors h-full flex flex-col`}>
+      <div className={`bg-gray-800 border ${isClosed && !hideStatus ? 'border-red-900/50 opacity-80' : 'border-gray-700'} rounded-lg overflow-hidden hover:border-blue-500 transition-colors h-full flex flex-col`}>
         <div className="aspect-video bg-gray-700 relative">
           {request.artworkUrl ? (
             <img src={fixUrl(request.artworkUrl)} alt={request.title} className="w-full h-full object-cover" />
@@ -34,7 +35,7 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
               VOLUNTEER
             </div>
           ) : null}
-          {isClosed && (
+          {isClosed && !hideStatus && (
             <div className="absolute bottom-2 right-2 px-2 py-1 bg-red-900/90 text-red-200 rounded text-xs font-bold border border-red-700">
               CLOSED
             </div>
@@ -46,8 +47,8 @@ export function RequestCard({ request, isClosed }: RequestCardProps) {
           <p className="text-gray-400 text-sm mb-4 line-clamp-2 flex-1">{request.description}</p>
           
           <div className="flex items-center justify-between text-xs text-gray-500 mt-auto pt-4 border-t border-gray-700/50">
-            <span className={isClosed ? 'text-red-400' : ''}>
-              {isClosed ? 'Ended: ' : 'Due: '} 
+            <span className={isClosed && !hideStatus ? 'text-red-400' : ''}>
+              {hideStatus ? 'Ended: ' : (isClosed ? 'Ended: ' : 'Due: ')} 
               {request.deadline ? new Date(request.deadline).toLocaleDateString() : 'No Deadline'}
             </span>
           </div>

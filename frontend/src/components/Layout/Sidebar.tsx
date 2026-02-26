@@ -57,10 +57,10 @@ export function Sidebar({ onClose }: SidebarProps) {
   }, [user, participantEmail]); // Depend on user and participantEmail  
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
+    { icon: ListMusic, label: 'Playlists', path: '/playlists' },
     { icon: Globe, label: 'Community', path: '/feed' },
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     { icon: Users, label: 'Directory', path: '/directory' },
-    { icon: ListMusic, label: 'Playlists', path: '/playlists' },
     { icon: Archive, label: 'Archive', path: '/archive' },
     { icon: Layers, label: 'Creator Tools', path: '/creator' },
     { icon: User, label: 'Profile', path: '/profile' },

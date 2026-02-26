@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { type User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, googleProvider, db } from '../lib/firebase'; // Added db
-import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection } from 'firebase/firestore'; // Added Firestore functions
+import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, addDoc } from 'firebase/firestore'; // Added Firestore functions
 
 interface AuthContextType {
   user: User | null;
@@ -9,7 +9,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   loginAdmin: () => Promise<void>;
-  loginParticipant: (email: string) => void;
+  loginParticipant: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -92,7 +92,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loginParticipant = (email: string) => {
+  const loginParticipant = async (email: string) => {
+    try {
+      // Check if profile exists by email
+      const q = query(collection(db, 'profiles'), where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        // Create new profile for participant
+        const alias = email.split('@')[0] + Math.floor(Math.random() * 1000);
+        await addDoc(collection(db, 'profiles'), {
+          email: email,
+          alias: alias,
+          createdAt: serverTimestamp(),
+          isAdmin: false,
+          isHost: false
+        });
+        console.log("Created basic profile for participant:", email);
+      }
+    } catch (e) {
+      console.error("Error creating participant profile:", e);
+    }
+
     localStorage.setItem('mew_participant_email', email);
     setParticipantEmail(email);
   };

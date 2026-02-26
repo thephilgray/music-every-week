@@ -105,54 +105,64 @@ const updateNotificationState = useCallback(async (
     const notifsMap = new Map<string, Notification & { fromAlias?: string }>();
 
     // 2. Subscribe to Notifications
-    // Query by recipientUid (if user) OR recipientEmail (if participant)
-    let notificationsQuery;
-    if (user?.uid) {
-        notificationsQuery = query(
-            collection(db, 'notifications'),
-            where('recipientUid', '==', user.uid),
-            orderBy('createdAt', 'desc')
-        );
-    } else if (participantEmail) {
-         notificationsQuery = query(
-            collection(db, 'notifications'),
-            where('recipientEmail', '==', participantEmail),
-            orderBy('createdAt', 'desc')
-        );
-    }
+    // Query by recipientUid (if user) AND recipientEmail (if available) to catch all
+    const unsubs: (() => void)[] = [];
 
-    let unsubscribeNotifications = () => {};
+    const setupListeners = () => {
+        if (!user?.uid && !participantEmail) return;
 
-    if (notificationsQuery) {
-        unsubscribeNotifications = onSnapshot(notificationsQuery, (snapshot) => {
-            if (!isMounted.current) return; // Use ref for isMounted
-            snapshot.docChanges().forEach(change => {
-                const data = change.doc.data();
-                const notification: Notification & { fromAlias?: string } = {
-                    ...data,
-                    id: change.doc.id,
-                    createdAt: getTimestampAsNumber(data.createdAt) // Ensure createdAt is number
-                } as Notification & { fromAlias?: string };
+        const queries = [];
 
-                if (change.type === 'added' || change.type === 'modified') {
-                    notifsMap.set(change.doc.id, notification);
-                } else if (change.type === 'removed') {
-                    notifsMap.delete(change.doc.id);
-                }
+        // Query 1: By UID
+        if (user?.uid) {
+            queries.push(query(
+                collection(db, 'notifications'),
+                where('recipientUid', '==', user.uid),
+                orderBy('createdAt', 'desc')
+            ));
+        }
+
+        // Query 2: By Email (if available)
+        const email = user?.email || participantEmail;
+        if (email) {
+            queries.push(query(
+                collection(db, 'notifications'),
+                where('recipientEmail', '==', email),
+                orderBy('createdAt', 'desc')
+            ));
+        }
+
+        queries.forEach(q => {
+            const unsub = onSnapshot(q, (snapshot) => {
+                if (!isMounted.current) return;
+                snapshot.docChanges().forEach(change => {
+                    const data = change.doc.data();
+                    const notification: Notification & { fromAlias?: string } = {
+                        ...data,
+                        id: change.doc.id,
+                        createdAt: getTimestampAsNumber(data.createdAt)
+                    } as Notification & { fromAlias?: string };
+
+                    if (change.type === 'added' || change.type === 'modified') {
+                        notifsMap.set(change.doc.id, notification);
+                    } else if (change.type === 'removed') {
+                        notifsMap.delete(change.doc.id);
+                    }
+                });
+                updateNotificationState(isMounted, notifsMap);
+            }, (error) => {
+                console.error("Error fetching notifications:", error);
             });
-            updateNotificationState(isMounted, notifsMap); // Call the memoized function
-        }, (error) => {
-            console.error("Error fetching notifications:", error);
-            if (isMounted.current) setLoading(false); // Use ref for isMounted
+            unsubs.push(unsub);
         });
-    } else {
-        setLoading(false);
-    }
+    };
+
+    setupListeners();
 
     return () => {
         isMounted.current = false; // Use ref for isMounted
         unsubscribeProfile();
-        unsubscribeNotifications();
+        unsubs.forEach(u => u());
     };
 
 

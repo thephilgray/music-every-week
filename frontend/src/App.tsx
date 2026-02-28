@@ -14,6 +14,8 @@ import { ToastProvider } from './contexts/ToastContext';
 import { IdleMonitor } from './components/IdleMonitor';
 import { LandingPage } from './pages/LandingPage';
 import { ScrollToTop } from './components/ScrollToTop';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
+import { TermsOfService } from './pages/TermsOfService';
 
 // Auth Guard
 import { AuthGuard } from './components/AuthGuard';
@@ -29,6 +31,7 @@ import { AuthlessLayout } from './components/Layout/AuthlessLayout';
 
 // Auth Provider
 import { AuthProvider } from './contexts/AuthContext';
+import { FinishSignIn } from './pages/FinishSignIn';
 
 
 function App() {
@@ -40,6 +43,9 @@ function App() {
           <Routes>
             {/* Public / Authless Routes */}
             <Route path="/login" element={<LandingPage />} />
+            <Route path="/finish-sign-in" element={<FinishSignIn />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
             
             {/* Host / Admin Routes */}
             <Route path="/host/login" element={<HostLogin />} />

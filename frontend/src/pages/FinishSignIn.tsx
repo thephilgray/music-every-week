@@ -8,7 +8,7 @@ export function FinishSignIn() {
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(true);
+  
 
   useEffect(() => {
     async function handleSignIn() {
@@ -35,12 +35,12 @@ export function FinishSignIn() {
           navigate(redirectPath || '/');
         } else {
           setError('Email is required to complete sign in.');
-          setIsProcessing(false);
+          
         }
       } catch (err: any) {
         console.error("Error during magic link sign in:", err);
         setError(err.message || "Failed to sign in. The link may be invalid or expired.");
-        setIsProcessing(false);
+        
       }
     }
 

@@ -7,7 +7,7 @@ import { fixUrl } from '../../lib/url';
 import { useNavigate } from 'react-router-dom';
 
 const gun = Gun({
-    peers: [import.meta.env.MODE === 'production' ? 'https://mew2-relay-service-c0b302f-6xaixpnemq-uw.a.run.app/gun' : 'http://localhost:8765/gun'],
+    peers: ['https://mew2-relay-service-c0b302f-6xaixpnemq-uw.a.run.app/gun'],
     multicast: false, // Disable UDP multicast by default in browser
     ws: undefined, // Let Gun choose WebSocket polyfill
 });

@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, googleProvider } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { Loader2, AlertCircle } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
 
 interface HostLoginProps {
   redirectTo?: string;
@@ -12,7 +11,6 @@ interface HostLoginProps {
 export function HostLogin({ redirectTo }: HostLoginProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { loginParticipant } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +24,6 @@ export function HostLogin({ redirectTo }: HostLoginProps) {
       const user = result.user;
       
       if (user.email && allowedEmails.includes(user.email.toLowerCase())) {
-        // Automatically log in as participant
-                  await loginParticipant(user.email);        
         const dest = (location.state as any)?.from?.pathname || redirectTo || '/host/dashboard';
         navigate(dest);
       } else {

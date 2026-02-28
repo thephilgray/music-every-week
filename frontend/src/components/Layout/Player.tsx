@@ -5,22 +5,23 @@ import { SongDetailsModal } from '../SongDetailsModal';
 import { QueueModal } from './QueueModal';
 import { Waveform } from '../ui/Waveform';
 import { ArtworkDisplay } from '../ui/ArtworkDisplay';
+import { useAuth } from '../../contexts/AuthContext';
 
 
 export function Player() { // Removed props
   const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, volume, muted, setVolume, toggleMute, queue, play, context } = usePlayer();
+  const { participantEmail } = useAuth();
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
 
   // Manage currentUserEmail and userProfile internally
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(participantEmail);
 
-  // Effect to load currentUserEmail from sessionStorage
+  // Effect to load currentUserEmail from AuthContext
   useEffect(() => {
-    const email = sessionStorage.getItem('mew_auth_email');
-    setCurrentUserEmail(email);
-  }, []);
+    setCurrentUserEmail(participantEmail);
+  }, [participantEmail]);
 
 
   // Auto-expand on track change

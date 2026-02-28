@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ParticipantAuth } from '../components/ParticipantAuth';
 
@@ -63,8 +63,14 @@ export function LandingPage() {
 
       </main>
 
-      <footer className="w-full p-6 text-center text-gray-700 text-xs border-t border-gray-900 mt-12">
-          &copy; {new Date().getFullYear()} Music Every Week.
+      <footer className="w-full p-6 text-center border-t border-gray-900 mt-12 flex flex-col items-center gap-4">
+          <p className="text-xs text-gray-700">
+            &copy; {new Date().getFullYear()} Music Every Week.
+          </p>
+          <div className="flex gap-4 text-xs">
+            <Link to="/privacy-policy" className="text-gray-500 hover:text-gray-300 transition">Privacy Policy</Link>
+            <Link to="/terms-of-service" className="text-gray-500 hover:text-gray-300 transition">Terms of Service</Link>
+          </div>
       </footer>
     </div>
   );

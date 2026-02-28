@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { db, auth } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc } from 'firebase/firestore'; // Firebase functions
 import { Loader2, ArrowRight, UserCircle, Clock } from 'lucide-react'; // Lucide icons
 import { AuthlessLogin } from './components/AuthlessLogin';
@@ -9,6 +9,7 @@ import { AuthlessSubmissionForm } from './components/AuthlessSubmissionForm';
 import { ArtworkDisplay } from '../../components/ui/ArtworkDisplay';
 import { uploadToR2 } from '../../lib/r2';
 import type { Submission } from '../../types'; // Re-use types if possible, or cast
+import { useAuth } from '../../contexts/AuthContext';
 
 interface RequestData {
   id: string;
@@ -32,16 +33,22 @@ interface UserProfile {
 
 export function RequestView() {
   const { id } = useParams<{ id: string }>();
+  const { participantEmail, sendMagicLink } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [requestData, setRequestData] = useState<RequestData | null>(null);
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(sessionStorage.getItem('mew_auth_email'));
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(participantEmail);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [extendedDeadline, setExtendedDeadline] = useState<string | null>(null);
-  const [userSubmission, setUserSubmission] = useState<Submission | null>(null); // NEW STATE
+  const [userSubmission, setUserSubmission] = useState<Submission | null>(null);
+
+  // Sync auth state
+  useEffect(() => {
+    setCurrentUserEmail(participantEmail);
+  }, [participantEmail]);
 
   // Load Request Data
   useEffect(() => {
@@ -95,19 +102,6 @@ export function RequestView() {
     }
   }, [searchParams, requestData, id]);
 
-  // Auto-login Host
-  useEffect(() => {
-      if (requestData?.hostEmail && !currentUserEmail) {
-          const unsubscribe = auth.onAuthStateChanged(user => {
-              if (user?.email && user.email.toLowerCase() === requestData.hostEmail?.toLowerCase()) {
-                  sessionStorage.setItem('mew_auth_email', user.email);
-                  setCurrentUserEmail(user.email);
-              }
-          });
-          return () => unsubscribe();
-      }
-  }, [requestData, currentUserEmail]);
-
   // Load User Submission if logged in and requestData is available
   useEffect(() => {
     async function loadUserSubmission() {
@@ -136,7 +130,7 @@ export function RequestView() {
       }
     }
     loadUserSubmission();
-  }, [id, currentUserEmail, requestData]); // Dependencies: re-run if these change
+  }, [id, currentUserEmail, requestData]);
 
   // Load User Profile if logged in
   useEffect(() => {
@@ -159,21 +153,19 @@ export function RequestView() {
     loadProfile();
   }, [currentUserEmail]);
 
-  const handleLogin = (email: string) => {
+  const handleLogin = async (email: string) => {
     if (!requestData) return;
     
     // Check if email is in access list (case insensitive trim)
     const normalizedEmail = email.toLowerCase().trim();
     const isAllowed = requestData.accessList.some(e => e.toLowerCase().trim() === normalizedEmail);
-    const isHost = (sessionStorage.getItem('mew_host_secret') === requestData.hostSecret) || 
-                   (requestData.hostEmail && requestData.hostEmail.toLowerCase() === normalizedEmail);
+    const isHost = (requestData.hostEmail && requestData.hostEmail.toLowerCase() === normalizedEmail);
 
     if (isAllowed || isHost) {
-      sessionStorage.setItem('mew_auth_email', normalizedEmail);
-      setCurrentUserEmail(normalizedEmail);
       setError(null);
+      await sendMagicLink(normalizedEmail, window.location.pathname, true);
     } else {
-      setError('Access denied: Email not on the list.');
+      throw new Error('Access denied: Email not on the list.');
     }
   };
 
@@ -215,7 +207,7 @@ export function RequestView() {
     );
   }
 
-  if (error && !currentUserEmail) { // Show error only if not logged in (e.g. 404)
+  if (error && !currentUserEmail) {
      return (
       <div className="min-h-screen bg-black flex items-center justify-center text-white">
         <div className="text-center">

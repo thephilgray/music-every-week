@@ -13,6 +13,7 @@ import { ArtworkDisplay } from '../../components/ui/ArtworkDisplay';
 import { FilterPopover } from '../../components/ui/FilterPopover'; // NEW IMPORT
 import { fixUrl } from '../../lib/url';
 import { SubmissionCard } from '../../components/SubmissionCard';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PlaylistData {
   id: string;
@@ -25,6 +26,7 @@ interface PlaylistData {
 export function PlaylistView() {
   const { id } = useParams<{ id: string }>();
   const { play, currentTrack, isPlaying, pause, resume } = usePlayer();
+  const { participantEmail, sendMagicLink } = useAuth();
 
   // ==========================================================================================
   // 1. ALL STATE DECLARATIONS (useState) - MUST be at the very top, unconditionally
@@ -33,7 +35,7 @@ export function PlaylistView() {
   const [playlistData, setPlaylistData] = useState<PlaylistData | null>(null);
   const [requestData, setRequestData] = useState<FileRequest | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(sessionStorage.getItem('mew_auth_email'));
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(participantEmail);
   const [error, setError] = useState<string | null>(null);
 
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -45,6 +47,11 @@ export function PlaylistView() {
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [showFilterPopover, setShowFilterPopover] = useState(false); // NEW STATE FOR FILTER POPOVER
+
+  // Sync auth state
+  useEffect(() => {
+    setCurrentUserEmail(participantEmail);
+  }, [participantEmail]);
 
   // States for filtering and sorting
   const [searchTerm, setSearchTerm] = useState(localStorage.getItem('playlistSearchTerm') || '');
@@ -312,18 +319,17 @@ export function PlaylistView() {
   // 4. HELPER FUNCTIONS (NOT hooks themselves, but can use hooks' results)
   //    These are defined here so they can be passed down or used in JSX.
   // ==========================================================================================
-  const handleLogin = (email: string) => {
+  const handleLogin = async (email: string) => {
     if (!playlistData) return;
 
     const normalizedEmail = email.toLowerCase().trim();
     const isAllowed = playlistData.accessList.some(e => e.toLowerCase().trim() === normalizedEmail);
 
     if (isAllowed) {
-      sessionStorage.setItem('mew_auth_email', normalizedEmail);
-      setCurrentUserEmail(normalizedEmail);
       setError(null);
+      await sendMagicLink(normalizedEmail, window.location.pathname, true);
     } else {
-      setError('Access denied: Email not on the playlist access list.');
+      throw new Error('Access denied: Email not on the playlist access list.');
     }
   };
 

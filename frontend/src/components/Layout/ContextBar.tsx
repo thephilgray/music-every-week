@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Edit, Wifi, WifiOff, UserPlus } from 'lucide-react';
+import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Wifi, WifiOff } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { fixUrl } from '../../lib/url';
@@ -174,35 +174,16 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                         <UserIcon className="w-4 h-4" />
                         My Profile
                     </button>
-                    
-                    <button 
-                        onClick={() => { navigate('/profile?edit=true'); setDropdownOpen(false); }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
-                    >
-                        <Edit className="w-4 h-4" />
-                        Edit Profile
-                    </button>
-
-                    {userProfile?.isHost && (
-                    <button 
-                        onClick={() => { alert("Invite functionality is being migrated. Please use admin tools for invites."); setDropdownOpen(false); }}
-                        className="w-full text-left px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 hover:text-blue-300 flex items-center gap-2"
-                    >
-                        <UserPlus className="w-4 h-4" />
-                        Invite a Friend
-                    </button>
-                    )}
 
                     <div className="border-t border-gray-700 my-1"></div>
-                    
+
                     <button 
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2"
                     >
                         <LogOut className="w-4 h-4" />
                         Logout
-                    </button>
-                </div>
+                    </button>                </div>
             </>
         )}
       </div>

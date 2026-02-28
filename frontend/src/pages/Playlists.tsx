@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -6,7 +6,7 @@ import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy, documentId } from 'firebase/firestore';
 import type { Playlist, Submission, FileRequest } from '../types';
 import { getTimestampAsNumber, seededRandom } from '../lib/utils';
-import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio } from 'lucide-react';
+import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio, GripVertical, Check } from 'lucide-react';
 import { RequestCard } from '../components/RequestCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
@@ -36,6 +36,9 @@ function PlaylistList() {
   
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editTitleValue, setEditTitleValue] = useState('');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // 1. My Playlists (Created by Me) - Kept as Playlists
   useEffect(() => {
@@ -64,6 +67,20 @@ function PlaylistList() {
      });
      return () => unsubscribe();
   }, [user]);
+
+  // Keep selectedPlaylist in sync with realtime updates from myPlaylists
+  useEffect(() => {
+      if (selectedPlaylist) {
+          const updatedPlaylist = myPlaylists.find(pl => pl.id === selectedPlaylist.id);
+          if (updatedPlaylist && JSON.stringify(updatedPlaylist.tracks) !== JSON.stringify(selectedPlaylist.tracks)) {
+              // Only sync if tracks actually changed from the DB to avoid interfering with active dragging
+              // If we are currently dragging, DON'T sync from DB until drag is done
+              if (draggedIndex === null) {
+                  setSelectedPlaylist(updatedPlaylist);
+              }
+          }
+      }
+  }, [myPlaylists, selectedPlaylist?.id, draggedIndex]);
 
   // 2. Fetch Hosted/Public/Contributed Requests
   useEffect(() => {
@@ -248,6 +265,63 @@ function PlaylistList() {
       }
   };
 
+  const handleRename = async (id: string, newTitle: string) => {
+      if (!newTitle.trim()) {
+          setEditingTitleId(null);
+          return;
+      }
+      try {
+          await updateDoc(doc(db, 'playlists', id), { title: newTitle });
+          setEditingTitleId(null);
+          if (selectedPlaylist?.id === id) {
+              setSelectedPlaylist(prev => prev ? { ...prev, title: newTitle } : null);
+          }
+      } catch (e) {
+          console.error("Error renaming playlist:", e);
+          alert("Failed to rename playlist.");
+      }
+  };
+
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  const handleDragStart = (index: number) => {
+      dragItem.current = index;
+      setDraggedIndex(index);
+  };
+
+  const handleDragEnter = (index: number) => {
+      dragOverItem.current = index;
+  };
+
+  const handleDragEnd = async () => {
+      setDraggedIndex(null);
+      if (dragItem.current === null || dragOverItem.current === null || !selectedPlaylist || !selectedPlaylist.id) {
+          dragItem.current = null;
+          dragOverItem.current = null;
+          return;
+      }
+      
+      const newTracks = [...selectedPlaylist.tracks];
+      const draggedItemContent = newTracks.splice(dragItem.current, 1)[0];
+      newTracks.splice(dragOverItem.current, 0, draggedItemContent);
+      
+      dragItem.current = null;
+      dragOverItem.current = null;
+      
+      // Optimistically update UI
+      setSelectedPlaylist({ ...selectedPlaylist, tracks: newTracks });
+      
+      try {
+          await updateDoc(doc(db, 'playlists', selectedPlaylist.id), {
+              tracks: newTracks,
+              updatedAt: serverTimestamp()
+          });
+      } catch (e) {
+          console.error("Failed to save reordered tracks", e);
+      }
+  };
+
   const PlaylistGrid = ({ list, isOwner }: { list: Playlist[], isOwner: boolean }) => (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {list.map(pl => (
@@ -358,10 +432,39 @@ function PlaylistList() {
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                 <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[80vh] flex flex-col">
                     <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-                        <h2 className="text-xl font-bold text-white">{selectedPlaylist.title}</h2>
-                        <button onClick={() => setSelectedPlaylist(null)} className="text-gray-500 hover:text-white">
-                            <X className="w-5 h-5" />
-                        </button>
+                        {editingTitleId === selectedPlaylist.id ? (
+                            <div className="flex gap-2 w-full mr-4">
+                                <input 
+                                    autoFocus
+                                    value={editTitleValue}
+                                    onChange={e => setEditTitleValue(e.target.value)}
+                                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1 text-white outline-none focus:border-blue-500"
+                                    onKeyDown={e => e.key === 'Enter' && handleRename(selectedPlaylist.id, editTitleValue)}
+                                />
+                                <button onClick={() => handleRename(selectedPlaylist.id, editTitleValue)} className="text-green-400 hover:text-green-300 transition">
+                                    <Check className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => setEditingTitleId(null)} className="text-gray-400 hover:text-white transition">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-xl font-bold text-white">{selectedPlaylist.title}</h2>
+                                <button 
+                                    onClick={() => { setEditingTitleId(selectedPlaylist.id); setEditTitleValue(selectedPlaylist.title); }} 
+                                    className="text-gray-500 hover:text-white transition"
+                                    title="Rename Playlist"
+                                >
+                                    <Edit className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                        {editingTitleId !== selectedPlaylist.id && (
+                            <button onClick={() => setSelectedPlaylist(null)} className="text-gray-500 hover:text-white transition">
+                                <X className="w-5 h-5" />
+                            </button>
+                        )}
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -369,8 +472,18 @@ function PlaylistList() {
                              <p className="text-gray-500 text-center py-8">No tracks in this playlist.</p>
                          )}
                          {selectedPlaylist.tracks?.map((track, i) => (
-                             <div key={i} className="flex items-center justify-between p-3 bg-gray-800/50 rounded hover:bg-gray-800 transition group">
+                             <div 
+                                key={track.submissionId + i} 
+                                draggable
+                                onDragStart={() => handleDragStart(i)}
+                                onDragEnter={() => handleDragEnter(i)}
+                                onDragEnd={handleDragEnd}
+                                className={`flex items-center justify-between p-3 bg-gray-800/50 rounded hover:bg-gray-800 transition group cursor-grab active:cursor-grabbing ${draggedIndex === i ? 'opacity-50 border border-blue-500/50' : 'border border-transparent'}`}
+                             >
                                  <div className="flex items-center gap-3 overflow-hidden">
+                                     <div className="text-gray-600 hover:text-gray-400 cursor-grab opacity-50 group-hover:opacity-100 transition" title="Drag to reorder">
+                                         <GripVertical className="w-4 h-4" />
+                                     </div>
                                      <span className="text-gray-500 text-sm font-mono w-6 text-right">{i+1}</span>
                                      <div className="min-w-0">
                                          <p className="text-white text-sm font-medium truncate">{track.title}</p>

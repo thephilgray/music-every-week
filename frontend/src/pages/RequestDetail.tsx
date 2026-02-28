@@ -523,13 +523,13 @@ export function RequestDetail() {
 
             {/* Submissions List */}
             <div className="border-t border-gray-800 pt-8">
-                <div className="flex items-center justify-between mb-4 relative"> {/* Made this parent div relative */}
-                    <h3 className="text-xl font-bold text-gray-200">Submissions ({visibleSubmissions.length})</h3>
-                    <div className="flex gap-2 items-center"> {/* Flex container for play/shuffle/filter buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-y-4 mb-4 relative"> {/* Made this parent div relative */}
+                    <h3 className="text-xl font-bold text-gray-200 whitespace-nowrap pr-4">Submissions ({visibleSubmissions.length})</h3>
+                    <div className="flex gap-2 items-center flex-shrink-0"> {/* Flex container for play/shuffle/filter buttons */}
                         {visibleSubmissions.length > 0 && (
-                            <button 
+                            <button
                                 onClick={handlePlayAll}
-                                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600"
+                                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600 whitespace-nowrap"
                             >
                                 {context?.id === request.id && isPlaying ? (
                                     <>
@@ -545,12 +545,11 @@ export function RequestDetail() {
                         {visibleSubmissions.length > 0 && (
                             <button
                                 onClick={handleShufflePlay}
-                                className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition" title="Shuffle"
+                                className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition flex-shrink-0" title="Shuffle"
                             >
                                 <Shuffle className="w-5 h-5" />
                             </button>
-                        )}
-                        {/* Filter Button and Popover, now directly within the wider flex container */}
+                        )}                        {/* Filter Button and Popover, now directly within the wider flex container */}
                         <button 
                             onClick={() => setShowFilterPopover(!showFilterPopover)} 
                             className={`p-2 rounded-full transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}

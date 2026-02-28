@@ -695,21 +695,20 @@ function PlaylistDetail({ id }: { id: string }) {
             ) : (
                 <>
                     {/* Controls */}
-                    <div className="flex justify-between items-center mb-6 relative">
-                 <div className="flex gap-2">
-                     <button onClick={handlePlayAll} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold transition">
+                    <div className="flex flex-wrap justify-between items-center gap-y-4 mb-6 relative">
+                    <div className="flex gap-2 flex-shrink-0">
+                     <button onClick={handlePlayAll} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap">
                          {isPlaying && visibleSubmissions.some(s => s.id === currentTrack?.id) ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                          Play All
                      </button>
-                     <button onClick={handleShufflePlay} className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition" title="Shuffle">
+                     <button onClick={handleShufflePlay} className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition flex-shrink-0" title="Shuffle">
                          <Shuffle className="w-5 h-5" />
                      </button>
-                 </div>
-                 
-                 <div className="flex gap-2 relative">
-                     <button 
-                         onClick={() => setShowFilterPopover(!showFilterPopover)} 
-                         className={`p-2 rounded-lg transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                    </div>
+
+                    <div className="flex gap-2 relative flex-shrink-0">
+                     <button
+                         onClick={() => setShowFilterPopover(!showFilterPopover)}                         className={`p-2 rounded-lg transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
                      >
                          <Filter className="w-5 h-5" />
                      </button>

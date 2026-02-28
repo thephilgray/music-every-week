@@ -84,8 +84,13 @@ export function Directory() {
       <div className="max-w-6xl mx-auto pb-20">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <div>
-                <h1 className="text-3xl font-bold text-white">Community Directory</h1>
-                <p className="text-gray-400 text-sm mt-1">Connect with other creators.</p>
+                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                  Community Directory
+                  <span className="text-sm font-medium bg-gray-800 text-gray-400 px-3 py-1 rounded-full border border-gray-700">
+                    {filteredUsers.length}
+                  </span>
+                </h1>
+                <p className="text-gray-400 text-sm mt-2">Connect with other creators.</p>
               </div>
               
               <div className="relative w-full md:w-64">

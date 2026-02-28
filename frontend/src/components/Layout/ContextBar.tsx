@@ -109,8 +109,8 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                 const isLast = index === pathnames.length - 1;
                 // Simple capitalization and truncation for IDs
                 let label = name;
-                if (label.length > 24) {
-                    label = label.substring(0, 8) + '...';
+                if (label.length > 15) {
+                    label = label.substring(0, 6) + '...';
                 } else {
                     label = label.charAt(0).toUpperCase() + label.slice(1);
                 }

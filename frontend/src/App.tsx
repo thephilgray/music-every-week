@@ -20,19 +20,9 @@ import { TermsOfService } from './pages/TermsOfService';
 // Auth Guard
 import { AuthGuard } from './components/AuthGuard';
 
-// Authless Pages / POC
-import { HostLogin } from './pages/authless/HostLogin';
-import { HostDashboard } from './pages/authless/HostDashboard';
-import { HostCreate } from './pages/authless/HostCreate';
-import { RequestView } from './pages/authless/RequestView';
-import { PlaylistView } from './pages/authless/PlaylistView';
-import { MigrateGunToFirebase } from './pages/authless/MigrateGunToFirebase';
-import { AuthlessLayout } from './components/Layout/AuthlessLayout';
-
 // Auth Provider
 import { AuthProvider } from './contexts/AuthContext';
 import { FinishSignIn } from './pages/FinishSignIn';
-
 
 function App() {
   return (
@@ -41,29 +31,12 @@ function App() {
         <IdleMonitor />
         <AuthProvider>
           <Routes>
-            {/* Public / Authless Routes */}
+            {/* Public Routes */}
             <Route path="/login" element={<LandingPage />} />
             <Route path="/finish-sign-in" element={<FinishSignIn />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             
-            {/* Host / Admin Routes */}
-            <Route path="/host/login" element={<HostLogin />} />
-            <Route path="/host/app-login" element={<HostLogin redirectTo="/" />} />
-            
-            <Route element={<AuthGuard require="admin" />}>
-                <Route path="/host/dashboard" element={<HostDashboard />} />
-                <Route path="/host/create" element={<HostCreate />} />
-                <Route path="/host/edit/:id" element={<HostCreate />} />
-                <Route path="/host/migrate" element={<MigrateGunToFirebase />} />
-            </Route>
-            
-            {/* Legacy POC Routes (Self-contained Auth) */}
-            <Route element={<AuthlessLayout />}>
-              <Route path="/s/:id" element={<RequestView />} />
-              <Route path="/p/:id" element={<PlaylistView />} />
-            </Route>
-
             {/* Main App Routes (Protected by Participant Auth) */}
             <Route element={<AuthGuard require="participant" />}>
               <Route element={<AppLayout />}>

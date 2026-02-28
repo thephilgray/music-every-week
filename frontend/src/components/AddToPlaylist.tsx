@@ -107,7 +107,7 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
       const trackEntry = {
           submissionId: submission.id,
           requestId: submission.requestId,
-          addedAt: serverTimestamp(), // Use server timestamp for addedAt
+          addedAt: Date.now(), // Use local timestamp since serverTimestamp is not supported in arrays
           title: submission.title,
           artist: submission.byline || 'Unknown'
       };

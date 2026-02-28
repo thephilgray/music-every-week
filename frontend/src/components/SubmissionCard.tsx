@@ -4,6 +4,7 @@ import { ArtworkDisplay } from './ui/ArtworkDisplay';
 import { Waveform } from './ui/Waveform';
 import { CollaboratorList } from './ui/CollaboratorList';
 import { CommentSection } from './CommentSection';
+import { AddToPlaylist } from './AddToPlaylist';
 import type { Submission } from '../types';
 
 interface SubmissionCardProps {
@@ -40,6 +41,7 @@ export function SubmissionCard({
     index
 }: SubmissionCardProps) {
     const [showLyrics, setShowLyrics] = useState(false);
+    const [showPlaylistModal, setShowPlaylistModal] = useState(false);
 
     const handlePlayClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -167,9 +169,10 @@ export function SubmissionCard({
                         </button>
                         
                         <button                                      
-                            disabled
-                            className={`p-2 rounded-full transition text-gray-600 cursor-not-allowed`}
-                            title="Add to Playlist (Coming Soon)"
+                            onClick={(e) => { e.stopPropagation(); setShowPlaylistModal(true); }}
+                            disabled={locked}
+                            className={`p-2 rounded-full transition text-gray-400 hover:text-white ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="Add to Playlist"
                         >
                             <ListPlus className="w-4 h-4" />
                         </button>
@@ -218,6 +221,13 @@ export function SubmissionCard({
                         currentUserEmail={currentUserEmail}
                     />
                 </div>
+            )}
+
+            {showPlaylistModal && (
+                <AddToPlaylist 
+                    submission={submission} 
+                    onClose={() => setShowPlaylistModal(false)} 
+                />
             )}
         </div>
     );

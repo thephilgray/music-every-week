@@ -178,7 +178,7 @@ function PlaylistList() {
           return Promise.race([
               new Promise<Submission | null>(async (resolve) => { // Added async
                   try {
-                      const subDoc = await getDoc(doc(db, 'requests', track.requestId, 'submissions', track.submissionId)); // Firebase getDoc
+                      const subDoc = await getDoc(doc(db, 'submissions', track.submissionId)); // Firebase getDoc
                       if (subDoc.exists()) {
                           const data = subDoc.data();
                           let parsedWaveform = data.waveform;

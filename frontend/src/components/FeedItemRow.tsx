@@ -73,8 +73,12 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
 
                 if (isMounted && profileData) {
                     if (profileData.avatarUrl) setAuthorAvatar(profileData.avatarUrl);
-                    if (!item.authorName && (profileData.displayName || profileData.alias)) {
-                        setAuthorAlias(profileData.displayName || profileData.alias);
+                    
+                    // Prioritize profile's displayName or alias over the item's historical name
+                    if (profileData.displayName || profileData.alias) {
+                        setAuthorAlias(profileData.displayName || profileData.alias || item.authorName || 'Unknown User');
+                    } else if (!item.authorName && item.authorEmail) {
+                        setAuthorAlias(item.authorEmail.split('@')[0]);
                     }
                 }
             } catch (error) {

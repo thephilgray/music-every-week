@@ -5,7 +5,7 @@ import { User as UserIcon, MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { MiniPlayer } from './MiniPlayer';
 import { fixUrl } from '../../lib/url';
 import { db } from '../../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { formatCommentDate } from '../../lib/utils';
 
 export interface CommentItemUIProps {
@@ -42,18 +42,33 @@ export function CommentItemUI({
   const [editedText, setEditedText] = useState(text);
   const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
   const [resolvedUid, setResolvedUid] = useState<string | undefined>(profileLinkPub);
+  const [liveProfile, setLiveProfile] = useState<{ displayName?: string, alias?: string, avatarUrl?: string } | null>(null);
 
   useEffect(() => {
+      let isMounted = true;
       if (profileLinkPub) {
           setResolvedUid(profileLinkPub);
+          // Fetch profile directly by UID
+          const fetchProfileByUid = async () => {
+              try {
+                  const profileDoc = await getDoc(doc(db, 'profiles', profileLinkPub));
+                  if (profileDoc.exists() && isMounted) {
+                      setLiveProfile(profileDoc.data() as any);
+                  }
+              } catch (e) {
+                  // Ignore
+              }
+          };
+          fetchProfileByUid();
       } else if (authorEmail) {
           // Fallback: Resolve UID from email if missing
           const fetchProfile = async () => {
               try {
                   const q = query(collection(db, 'profiles'), where('email', '==', authorEmail));
                   const querySnapshot = await getDocs(q);
-                  if (!querySnapshot.empty) {
+                  if (!querySnapshot.empty && isMounted) {
                       setResolvedUid(querySnapshot.docs[0].id);
+                      setLiveProfile(querySnapshot.docs[0].data() as any);
                   }
               } catch (e) {
                   // Ignore error
@@ -61,6 +76,7 @@ export function CommentItemUI({
           };
           fetchProfile();
       }
+      return () => { isMounted = false; };
   }, [profileLinkPub, authorEmail]);
 
   useEffect(() => {
@@ -95,11 +111,14 @@ export function CommentItemUI({
       }
   };
 
+  const finalName = liveProfile?.displayName || liveProfile?.alias || authorName;
+  const finalAvatar = liveProfile?.avatarUrl || authorAvatarUrl;
+
   return (
     <div className="flex gap-2 group relative">
          <div className="w-6 h-6 bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden mt-1">
-             {authorAvatarUrl ? (
-                 <img src={fixUrl(authorAvatarUrl)} alt={authorName} className="w-full h-full object-cover" />
+             {finalAvatar ? (
+                 <img src={fixUrl(finalAvatar)} alt={finalName} className="w-full h-full object-cover" />
              ) : (
                  <UserIcon className="w-3 h-3 text-gray-400" />
              )}
@@ -109,11 +128,11 @@ export function CommentItemUI({
                 <div className="flex items-baseline gap-2">
                     {resolvedUid ? (
                         <Link to={`/profile/${resolvedUid}`} className="text-xs font-bold text-gray-300 hover:text-white hover:underline">
-                            {authorName}
+                            {finalName}
                         </Link>
                     ) : (
                         <span className="text-xs font-bold text-gray-300">
-                            {authorName}
+                            {finalName}
                         </span>
                     )}
                     <span className="text-xs text-gray-600" title={new Date(createdAt).toLocaleString()}>

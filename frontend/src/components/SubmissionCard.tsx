@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Pause, Lock, FileText, MessageSquare, ListPlus, FileAudio, Heart } from 'lucide-react';
+import { Play, Pause, Lock, FileText, MessageSquare, ListPlus, FileAudio, Heart, CheckCircle2 } from 'lucide-react';
 import { ArtworkDisplay } from './ui/ArtworkDisplay';
 import { Waveform } from './ui/Waveform';
 import { CollaboratorList } from './ui/CollaboratorList';
@@ -22,6 +22,7 @@ interface SubmissionCardProps {
     isMySubmission?: boolean;
     highlightCommentId?: string;
     index?: number;
+    isListened?: boolean;
 }
 
 export function SubmissionCard({ 
@@ -38,7 +39,8 @@ export function SubmissionCard({
     requestId,
     isMySubmission = false,
     highlightCommentId,
-    index
+    index,
+    isListened = false
 }: SubmissionCardProps) {
     const [showLyrics, setShowLyrics] = useState(false);
     const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -91,8 +93,9 @@ export function SubmissionCard({
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                        <h4 className={`text-white font-medium truncate ${locked ? 'blur-sm select-none' : ''}`}>
+                        <h4 className={`text-white font-medium truncate flex items-center gap-2 ${locked ? 'blur-sm select-none' : ''}`}>
                             {locked ? 'Hidden Track' : submission.title}
+                            {isListened && !locked && <span title="Listened"><CheckCircle2 className="w-4 h-4 text-green-500/70" /></span>}
                         </h4>
                         <div className="flex items-center gap-2">
                             <CollaboratorList 

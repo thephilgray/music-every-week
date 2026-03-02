@@ -22,7 +22,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ requestId, submissionId, highlightCommentId, submissionOwnerUid, submissionOwnerEmail, currentUserEmail }: CommentSectionProps) { // Removed prop
-  const { participantEmail, user } = useAuth(); // Removed unused isAdmin
+  const { participantEmail, user, addPoints } = useAuth(); // Removed unused isAdmin
   const [comments, setComments] = useState<Comment[]>([]);
   const [firestoreProfile, setFirestoreProfile] = useState<any>(null); // Store fetched profile
 
@@ -350,6 +350,11 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
         }
 
         const docRef = await addDoc(collection(db, 'comments'), commentData);
+        
+        // Award points for leaving a comment
+        if (addPoints) {
+            addPoints(15);
+        }
         
         // Notify Submission Owner (if not self)
         const isSelf = (user?.uid && user.uid === submissionOwnerUid) || 

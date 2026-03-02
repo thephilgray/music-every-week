@@ -1,51 +1,11 @@
-import { useState, useEffect } from 'react';
-import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Wifi, WifiOff } from 'lucide-react';
+import { useState } from 'react';
+import { LogOut, User as UserIcon, ChevronRight, Home, Menu, Wifi, WifiOff, Star } from 'lucide-react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { fixUrl } from '../../lib/url';
-import { db } from '../../lib/firebase';
-import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
-import type { UserProfile } from '../../types';
 
 export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { user, participantEmail, logout, isLoading } = useAuth();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-  useEffect(() => {
-    let unsub = () => {};
-
-    const fetchProfile = async () => {
-        if (user?.uid) {
-            // Subscribe to profile by UID
-            unsub = onSnapshot(doc(db, 'profiles', user.uid), (doc) => {
-                if (doc.exists()) {
-                    setUserProfile(doc.data() as UserProfile);
-                } else {
-                    setUserProfile(null);
-                }
-            });
-        } else if (participantEmail) {
-            // Fetch by email (One-time fetch usually sufficient, or could set up watcher if needed)
-            try {
-                const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
-                const querySnapshot = await getDocs(q);
-                if (!querySnapshot.empty) {
-                    setUserProfile(querySnapshot.docs[0].data() as UserProfile);
-                } else {
-                    setUserProfile(null);
-                }
-            } catch (e) {
-                console.error("Error fetching participant profile:", e);
-            }
-        } else {
-            setUserProfile(null);
-        }
-    };
-
-    fetchProfile();
-
-    return () => unsub();
-  }, [user, participantEmail]);
+  const { user, profile, participantEmail, logout, isLoading } = useAuth();
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -78,8 +38,9 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
   };
 
   // Determine display name and avatar
-  const displayName = userProfile?.alias || userProfile?.displayName || (user?.displayName) || (user?.email?.split('@')[0]) || (participantEmail?.split('@')[0]) || 'Guest';
-  const avatarUrl = userProfile?.avatarUrl || user?.photoURL;
+  const displayName = profile?.alias || profile?.displayName || (user?.displayName) || (user?.email?.split('@')[0]) || (participantEmail?.split('@')[0]) || 'Guest';
+  const avatarUrl = profile?.avatarUrl || user?.photoURL;
+  const points = profile?.points || 0;
 
   return (
     <>
@@ -129,8 +90,15 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
         </div>
       </div>
 
-      {/* User Dropdown */}
-      <div className="relative flex items-center gap-3">
+      {/* Right Side: Points + User Dropdown */}
+      <div className="relative flex items-center gap-3 md:gap-4">
+        
+        {/* Mew Points */}
+        <div className="flex items-center gap-1.5 bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-800/50 px-3 py-1 rounded-full text-xs font-bold text-purple-200 shadow-sm" title="Mew Points">
+            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+            <span>{points.toLocaleString()}</span>
+        </div>
+
         {/* Status Indicator (Firebase/Network) */}
         <div className="group relative flex items-center justify-center">
             <div 

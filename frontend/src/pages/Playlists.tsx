@@ -11,6 +11,7 @@ import { RequestCard } from '../components/RequestCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
 import { FilterPopover } from '../components/ui/FilterPopover';
+import { useListenedTracks } from '../hooks/useListenedTracks';
 import { fixUrl } from '../lib/url';
 
 export function Playlists() {
@@ -555,14 +556,16 @@ function PlaylistDetail({ id }: { id: string }) {
     // Filters State
     const [showFilterPopover, setShowFilterPopover] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha'>('newest');
+    const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>('newest');
     const [filterByAI, setFilterByAI] = useState(false);
     const [filterByFragile, setFilterByFragile] = useState(false);
+    const [filterByUnlistened, setFilterByUnlistened] = useState(false);
+    const { listenedTracks } = useListenedTracks();
     const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>([]);
 
     const areFiltersActive = useMemo(() => {
-        return searchTerm !== '' || sortBy !== 'newest' || filterByAI || filterByFragile || filterByFeedbackFocus.length > 0;
-    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus]);
+        return searchTerm !== '' || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFeedbackFocus.length > 0;
+    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus]);
 
     // Fetch Data
     useEffect(() => {
@@ -613,6 +616,7 @@ function PlaylistDetail({ id }: { id: string }) {
         setSortBy('newest');
         setFilterByAI(false);
         setFilterByFragile(false);
+        setFilterByUnlistened(false);
         setFilterByFeedbackFocus([]);
     }, []);
 
@@ -632,6 +636,7 @@ function PlaylistDetail({ id }: { id: string }) {
 
         if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
         if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+        if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
         if (filterByFeedbackFocus.length > 0) {
             filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
         }
@@ -641,6 +646,12 @@ function PlaylistDetail({ id }: { id: string }) {
             if (sortBy === 'newest') return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
             if (sortBy === 'oldest') return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
             if (sortBy === 'alpha') return a.title.localeCompare(b.title);
+            if (sortBy === 'unlistenedFirst') {
+                const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
+                const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
+                if (aListened !== bListened) return aListened - bListened;
+                return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+            }
             // Comment sort is mocked as 0 diff for now since we don't have comments loaded here easily without extra fetch
             return 0; 
         });
@@ -836,6 +847,8 @@ function PlaylistDetail({ id }: { id: string }) {
                              setFilterByAI={setFilterByAI}
                              filterByFragile={filterByFragile}
                              setFilterByFragile={setFilterByFragile}
+                             filterByUnlistened={filterByUnlistened}
+                             setFilterByUnlistened={setFilterByUnlistened}
                              filterByFeedbackFocus={filterByFeedbackFocus}
                              setFilterByFeedbackFocus={setFilterByFeedbackFocus}
                              onClose={() => setShowFilterPopover(false)}

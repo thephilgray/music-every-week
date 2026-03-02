@@ -11,6 +11,7 @@ import { SubmissionCard } from '../components/SubmissionCard';
 import { fixUrl } from '../lib/url';
 import { seededRandom, getTimestampAsNumber } from '../lib/utils'; // Added imports
 import { FilterPopover } from '../components/ui/FilterPopover'; // Added import
+import { useListenedTracks } from '../hooks/useListenedTracks'; // Added import
 import type { FileRequest, Submission } from '../types';
 
 export function RequestDetail() {
@@ -35,11 +36,13 @@ export function RequestDetail() {
   // Filter/Sort States
   const [showFilterPopover, setShowFilterPopover] = useState(false);
   const [searchTerm, setSearchTerm] = useState(localStorage.getItem('requestSearchTerm') || '');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha'>(
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>(
     (localStorage.getItem('requestSortBy') as any) || 'newest'
   );
   const [filterByAI, setFilterByAI] = useState(localStorage.getItem('requestFilterByAI') === 'true');
   const [filterByFragile, setFilterByFragile] = useState(localStorage.getItem('requestFilterByFragile') === 'true');
+  const [filterByUnlistened, setFilterByUnlistened] = useState(localStorage.getItem('requestFilterByUnlistened') === 'true');
+  const { listenedTracks } = useListenedTracks();
   const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>(
     JSON.parse(localStorage.getItem('requestFilterByFeedbackFocus') || '[]')
   );
@@ -50,9 +53,10 @@ export function RequestDetail() {
       sortBy !== 'newest' ||
       filterByAI === true ||
       filterByFragile === true ||
+      filterByUnlistened === true ||
       filterByFeedbackFocus.length > 0
     );
-  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus]);
+  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus]);
 
   // Debounce search term
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
@@ -78,6 +82,10 @@ export function RequestDetail() {
   useEffect(() => {
     localStorage.setItem('requestFilterByFragile', String(filterByFragile));
   }, [filterByFragile]);
+
+  useEffect(() => {
+    localStorage.setItem('requestFilterByUnlistened', String(filterByUnlistened));
+  }, [filterByUnlistened]);
 
   useEffect(() => {
     localStorage.setItem('requestFilterByFeedbackFocus', JSON.stringify(filterByFeedbackFocus));
@@ -290,6 +298,7 @@ export function RequestDetail() {
       // Apply specific filter toggles
       if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
       if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+      if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
       if (filterByFeedbackFocus.length > 0) {
           filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
       }
@@ -307,6 +316,12 @@ export function RequestDetail() {
                   return (submissionCommentCounts[b.id!] || 0) - (submissionCommentCounts[a.id!] || 0);
               case 'fewestComments':
                   return (submissionCommentCounts[a.id!] || 0) - (submissionCommentCounts[b.id!] || 0);
+              case 'unlistenedFirst': {
+                  const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
+                  const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
+                  if (aListened !== bListened) return aListened - bListened;
+                  return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+              }
               default:
                   return 0;
           }
@@ -324,11 +339,11 @@ export function RequestDetail() {
 
           // If not live yet, only preview tracks for submitters
           const previewCount = request?.previewTrackCount !== undefined ? request.previewTrackCount : 5;
-          return hasSubmitted && previewCount > 0 && previewTrackIds.includes(sub.id);
+          return hasSubmitted && previewCount > 0 && previewTrackIds.includes(sub.id!);
       });
 
       return visibleAfterLocking;
-  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByFeedbackFocus, sortBy, submissionCommentCounts, isOwner, isAdmin, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds]);
+  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, sortBy, submissionCommentCounts, listenedTracks, isOwner, isAdmin, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds]);
 
   const visibleSubmissions = computedVisibleSubmissions;
 
@@ -337,6 +352,7 @@ export function RequestDetail() {
     setSortBy('newest');
     setFilterByAI(false);
     setFilterByFragile(false);
+    setFilterByUnlistened(false);
     setFilterByFeedbackFocus([]);
   }, []);
 
@@ -567,6 +583,8 @@ export function RequestDetail() {
                                 setFilterByAI={setFilterByAI}
                                 filterByFragile={filterByFragile}
                                 setFilterByFragile={setFilterByFragile}
+                                filterByUnlistened={filterByUnlistened}
+                                setFilterByUnlistened={setFilterByUnlistened}
                                 filterByFeedbackFocus={filterByFeedbackFocus}
                                 setFilterByFeedbackFocus={setFilterByFeedbackFocus}
                                 onClose={() => setShowFilterPopover(false)}
@@ -623,6 +641,7 @@ export function RequestDetail() {
                                     requestId={id}
                                     isMySubmission={isMySubmission}
                                     highlightCommentId={new URLSearchParams(location.search).get('comment') || undefined}
+                                    isListened={sub.id ? listenedTracks.has(sub.id) : false}
                                 />
                             );
                         })}

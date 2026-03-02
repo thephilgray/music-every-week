@@ -21,7 +21,7 @@ interface SubmitTrackProps {
 }
 
 export function SubmitTrack({ requestId, participants, existingSubmission, onClose, onSuccess }: SubmitTrackProps) {
-  const { user, participantEmail, isAdmin } = useAuth();
+  const { user, participantEmail, isAdmin, addPoints } = useAuth();
   const [title, setTitle] = useState('');
   const [byline, setByline] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false); // Default: Not Anonymous (Linked)
@@ -278,6 +278,11 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 ...submissionData,
                 createdAt: serverTimestamp()
             });
+            
+            if (addPoints) {
+                addPoints(50);
+            }
+            
             onSuccess({ id: docRef.id, ...submissionData });
         }
 

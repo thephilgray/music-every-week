@@ -18,6 +18,7 @@ export interface UserProfile {
   joinedAt?: number;
   updatedAt?: FieldValue;
   deleted?: boolean;
+  points?: number; // Gamification points
   settings?: {
     privacy?: {
       acceptUnsolicited?: boolean;

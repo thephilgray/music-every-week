@@ -1,10 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { type User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
 import { auth, googleProvider, db } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, onSnapshot, updateDoc, increment } from 'firebase/firestore';
+
+import { type UserProfile } from '../types';
 
 interface AuthContextType {
   user: User | null;
+  profile: UserProfile | null;
   participantEmail: string | null;
   isAdmin: boolean;
   isHost: boolean;
@@ -15,12 +18,14 @@ interface AuthContextType {
   sendMagicLink: (email: string, redirectPath?: string, skipAccessCheck?: boolean) => Promise<void>;
   completeMagicLinkSignIn: (url: string, email: string) => Promise<void>;
   logout: () => Promise<void>;
+  addPoints: (amount: number) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [participantEmail, setParticipantEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isHost, setIsHost] = useState(false);
@@ -127,10 +132,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setIsHost(!!data.isHost); 
                     
                     setSettings(data.settings || {});
+                    setProfile(data as UserProfile);
                 } else {
                     setIsAdmin(false);
                     setIsHost(false);
                     setSettings({});
+                    setProfile(null);
                 }
                 setIsLoading(false);
             }, (err) => {
@@ -246,6 +253,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addPoints = async (amount: number) => {
+      if (!user?.uid) return;
+      try {
+          const profileRef = doc(db, 'profiles', user.uid);
+          await updateDoc(profileRef, {
+              points: increment(amount)
+          });
+      } catch (e) {
+          console.error("Failed to add points:", e);
+      }
+  };
+
   const logout = async () => {
     if (user) {
       await firebaseSignOut(auth);
@@ -258,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = {
     user,
+    profile,
     participantEmail,
     isAdmin,
     isHost,
@@ -267,7 +287,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithGoogle,
     sendMagicLink,
     completeMagicLinkSignIn,
-    logout
+    logout,
+    addPoints
   };
 
   return (

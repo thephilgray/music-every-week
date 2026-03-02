@@ -12,12 +12,14 @@ const FEEDBACK_FOCUS_CATEGORIES = {
 interface FilterPopoverProps {
     searchTerm: string;
     setSearchTerm: (term: string) => void;
-    sortBy: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha';
-    setSortBy: (sort: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha') => void;
+    sortBy: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst';
+    setSortBy: (sort: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst') => void;
     filterByAI: boolean;
     setFilterByAI: (filter: boolean) => void;
     filterByFragile: boolean;
     setFilterByFragile: (filter: boolean) => void;
+    filterByUnlistened: boolean;
+    setFilterByUnlistened: (filter: boolean) => void;
     filterByFeedbackFocus: string[];
     setFilterByFeedbackFocus: (filters: string[]) => void;
     onClose: () => void; // Function to close the popover
@@ -32,24 +34,31 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
     setFilterByAI,
     filterByFragile,
     setFilterByFragile,
+    filterByUnlistened,
+    setFilterByUnlistened,
     filterByFeedbackFocus,
     setFilterByFeedbackFocus,
     onClose
 }) => {
     // Check if any filters are active to show/hide "Clear Filters" button
-    const hasActiveFilters = searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByFeedbackFocus.length > 0;
+    const hasActiveFilters = searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFeedbackFocus.length > 0;
 
     const handleClearFilters = () => {
         setSearchTerm('');
         setSortBy('newest');
         setFilterByAI(false);
         setFilterByFragile(false);
+        setFilterByUnlistened(false);
         setFilterByFeedbackFocus([]);
     };
 
     return (
-        <div className="absolute right-0 top-0 mt-2 mr-2 max-w-lg bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4 z-[60] animate-in fade-in slide-in-from-right-2">
-            <div className="flex justify-between items-center mb-4">
+        <>
+            {/* Mobile Backdrop */}
+            <div className="fixed inset-0 bg-black/80 z-[60] md:hidden backdrop-blur-sm" onClick={onClose} />
+            
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto z-[60] md:absolute md:top-0 md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-12 md:w-[320px] lg:w-[380px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 md:slide-in-from-right-2">
+                <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                     <Filter className="w-5 h-5" /> Filters & Sort
                 </h3>
@@ -84,11 +93,22 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
                         <option value="mostComments">Most Comments</option>
                         <option value="fewestComments">Fewest Comments</option>
                         <option value="alpha">Alphabetical</option>
+                        <option value="unlistenedFirst">Unlistened First</option>
                     </select>
                 </div>
 
                 {/* Checkbox Filters */}
                 <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="filter-unlistened"
+                            checked={filterByUnlistened}
+                            onChange={(e) => setFilterByUnlistened(e.target.checked)}
+                            className="w-4 h-4 rounded bg-gray-800 border-gray-700 text-yellow-500 focus:ring-yellow-500"
+                        />
+                        <label htmlFor="filter-unlistened" className="text-sm text-yellow-500">Unlistened Tracks Only</label>
+                    </div>
                     <div className="flex items-center gap-2">
                         <input
                             type="checkbox"
@@ -154,6 +174,7 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
                     </button>
                 )}
             </div>
-        </div>
+            </div>
+        </>
     );
 };

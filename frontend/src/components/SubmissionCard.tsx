@@ -60,7 +60,7 @@ export function SubmissionCard({
     return (
         <div 
             id={`submission-${submission.id}`} 
-            className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : 'border-gray-800'} rounded-lg p-4 transition group ${!locked ? 'cursor-pointer hover:border-gray-700' : ''} relative overflow-hidden`}
+            className={`bg-gray-900 border ${locked ? 'border-gray-800/50 opacity-75' : isCurrent ? 'border-green-500/50 border-l-4 border-l-green-500' : 'border-gray-800'} rounded-lg p-4 transition group ${!locked ? 'cursor-pointer hover:border-gray-700' : ''} relative overflow-hidden`}
             onClick={(e) => {
                 if (locked) return;
                 // Don't toggle if clicking buttons

@@ -65,7 +65,7 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
                                )}
                            </p>
                            {currentTrack.context && (
-                               <Link to={currentTrack.context.link} className="text-blue-400 hover:text-blue-300 hover:underline text-xs flex items-center gap-1 mt-2 w-fit">
+                               <Link to={currentTrack.context.link} className="text-blue-400 hover:text-blue-300 hover:underline text-xs flex items-center gap-1 mt-2 w-fit" onClick={onClose}>
                                    <span className="truncate">From: {currentTrack.context.name}</span>
                                    <ExternalLink className="w-3 h-3" />
                                </Link>

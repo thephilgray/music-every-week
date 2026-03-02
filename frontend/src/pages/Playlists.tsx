@@ -620,6 +620,8 @@ function PlaylistDetail({ id }: { id: string }) {
         setFilterByFeedbackFocus([]);
     }, []);
 
+    const scrolledRef = useRef(false);
+
     // Filter Logic
     const computedVisibleSubmissions = useMemo(() => {
         let filtered = submissions;
@@ -685,6 +687,22 @@ function PlaylistDetail({ id }: { id: string }) {
     }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isAdmin]);
 
     const { filtered: visibleSubmissions, lockMessage, isHost } = computedVisibleSubmissions;
+
+    // Scroll to current track on load
+    useEffect(() => {
+        if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0) {
+            const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
+            if (trackIsVisible) {
+                setTimeout(() => {
+                    const el = document.getElementById(`track-${currentTrack.id}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        scrolledRef.current = true;
+                    }
+                }, 500);
+            }
+        }
+    }, [visibleSubmissions, currentTrack]);
 
     const handlePlayAll = () => {
         if (visibleSubmissions.length > 0) {
@@ -871,7 +889,7 @@ function PlaylistDetail({ id }: { id: string }) {
             ) : (
                 <div className="space-y-4">
                     {visibleSubmissions.map((sub) => (
-                        <div key={sub.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col gap-4 hover:border-gray-700 transition">
+                        <div key={sub.id} id={`track-${sub.id}`} className={`bg-gray-900 border ${currentTrack?.id === sub.id ? 'border-green-500/50 border-l-4 border-l-green-500' : 'border-gray-800'} rounded-lg p-4 flex flex-col gap-4 hover:border-gray-700 transition`}>
                              <div className="flex items-center gap-4">
                                  <div className="w-12 h-12 bg-gray-800 rounded overflow-hidden flex-shrink-0 relative">
                                      <ArtworkDisplay src={fixUrl(sub.artworkUrl)} alt="Art" className="w-full h-full object-cover" FallbackIcon={FileAudio} />

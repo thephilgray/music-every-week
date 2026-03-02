@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, Pause, Edit, Lock, Copy, Check, AlertTriangle, Loader2, Shuffle, Filter } from 'lucide-react';
 import { db } from '../lib/firebase';
@@ -346,6 +346,24 @@ export function RequestDetail() {
   }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, sortBy, submissionCommentCounts, listenedTracks, isOwner, isAdmin, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds]);
 
   const visibleSubmissions = computedVisibleSubmissions;
+
+  const scrolledRef = useRef(false);
+
+  // Scroll to current track on load
+  useEffect(() => {
+      if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0) {
+          const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
+          if (trackIsVisible) {
+              setTimeout(() => {
+                  const el = document.getElementById(`submission-${currentTrack.id}`);
+                  if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      scrolledRef.current = true;
+                  }
+              }, 500);
+          }
+      }
+  }, [visibleSubmissions, currentTrack]);
 
   const handleClearAllFilters = useCallback(() => {
     setSearchTerm('');

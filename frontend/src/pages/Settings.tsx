@@ -407,6 +407,7 @@ export function Settings() {
                 </button>
             </div>
 
+            {isAdmin && (
             <div className="flex items-center justify-between border-t border-gray-800 pt-4 gap-x-4">
                 <div>
                     <h3 className="text-white font-medium mb-1 flex items-center gap-2">
@@ -423,6 +424,7 @@ export function Settings() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isHost ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
             </div>
+            )}
         </div>
       </section>
       )}

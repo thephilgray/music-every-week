@@ -32,7 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const allowedEmails = (import.meta.env.VITE_ADMIN_EMAILS || '').split(',').map((e: string) => e.trim().toLowerCase());
+  const allowedEmails = (import.meta.env.VITE_ADMIN_EMAILS || '')
+    .split(',')
+    .map((e: string) => e.trim().toLowerCase())
+    .filter((e: string) => e.length > 0);
 
   // 1. Auth State Listener
   useEffect(() => {
@@ -40,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(currentUser);
       if (currentUser?.email) {
         setParticipantEmail(currentUser.email);
+        const isEmailAdmin = allowedEmails.includes(currentUser.email.toLowerCase());
+        setIsAdmin(isEmailAdmin);
       } else {
         setParticipantEmail(null);
         setIsAdmin(false);
@@ -120,16 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             unsub = onSnapshot(profileRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // Hardcode isAdmin to .env for absolute security, regardless of what's in DB
                     
+                    // isAdmin is strictly tied to the .env file for security
+                    const adminStatus = isAllowedEmail;
+                    setIsAdmin(adminStatus);
                     
-                    setIsAdmin(isAllowedEmail); // Strictly enforce .env
-                    setIsHost(isAllowedEmail ? !!data.isHost : false); // Only admins can be hosts based on current setup, or you can allow data.isHost if users can be hosts
-                    
-                    // Actually, if users can be hosts independently of admins, we should use data.isHost. 
-                    // Let's use data.isHost but ONLY if they didn't accidentally get it. 
-                    // Since we stripped it during migration, if they have it now, an admin gave it to them.
-                    setIsHost(!!data.isHost); 
+                    // isHost is true if user is admin OR if they have the isHost flag in Firestore
+                    setIsHost(adminStatus || !!data.isHost); 
                     
                     setSettings(data.settings || {});
                     setProfile(data as UserProfile);

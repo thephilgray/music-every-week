@@ -2,30 +2,56 @@ import { useState, useEffect } from 'react';
 import { Archive as ArchiveIcon } from 'lucide-react';
 import { RequestList } from '../components/RequestList';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
 import type { FileRequest } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { getTimestampAsNumber } from '../lib/utils';
 
 export function Archive() {
+  const { user, participantEmail } = useAuth();
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
+    if (!user && !participantEmail) return;
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const loadedRequests = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        } as FileRequest));
-        setRequests(loadedRequests);
+    setLoading(true);
+    const email = user?.email || participantEmail;
+    const uid = user?.uid;
+
+    const unsubs: (() => void)[] = [];
+    const resultsMap = new Map<string, FileRequest>();
+
+    const updateState = () => {
+        const sorted = Array.from(resultsMap.values())
+            .filter(req => !req.deleted)
+            .sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
+        setRequests(sorted);
         setLoading(false);
-    }, (error) => {
-        console.error("Error fetching requests:", error);
-        setLoading(false);
-    });
-    
-    return () => unsubscribe();
-  }, []);
+    };
+
+    // 1. Query for Owner
+    if (uid) {
+        const qOwner = query(collection(db, 'requests'), where('ownerPub', '==', uid));
+        unsubs.push(onSnapshot(qOwner, (snap) => {
+            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as FileRequest));
+            updateState();
+        }));
+    }
+
+    // 2. Query for Invited
+    if (email) {
+        const qInvited = query(collection(db, 'requests'), where('accessList', 'array-contains', email));
+        unsubs.push(onSnapshot(qInvited, (snap) => {
+            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as FileRequest));
+            updateState();
+        }));
+    }
+
+    // 3. (REMOVED) Public Volunteer Pools and Direct Links are NOT shown here by default.
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user, participantEmail]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">

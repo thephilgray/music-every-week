@@ -7,12 +7,12 @@ import { Check, Copy, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Tooltip } from './ui/Tooltip';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, serverTimestamp, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function CreateRequest() {
   const { user } = useAuth(); // Use Auth Context
-  const { error } = useToast();
+  const { success, error } = useToast();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
@@ -60,7 +60,10 @@ export function CreateRequest() {
             const querySnapshot = await getDocs(q);
             const reqs: FileRequest[] = [];
             querySnapshot.forEach((doc) => {
-                reqs.push({ id: doc.id, ...doc.data() } as FileRequest);
+                const data = doc.data();
+                if (!data.deleted) {
+                    reqs.push({ id: doc.id, ...data } as FileRequest);
+                }
             });
             // Sort by createdAt desc, explicitly converting to number
             reqs.sort((a, b) => 
@@ -96,9 +99,11 @@ export function CreateRequest() {
       setTitle('');
       setDesc('');
       setDeadline('');
+      setPlaylistLiveDate('');
       setFile(null);
       setPreviewTrackCount(5);
       setEmails([]);
+      setPlaylistEmails([]);
       setSelectedImportId('');
       setShowSuccess(false);
       setCreatedRequestId('');
@@ -109,11 +114,12 @@ export function CreateRequest() {
     e.preventDefault();
     if (loading) return;
 
-    if (!user) {
+    if (!user?.uid || !user?.email) {
       error("Authentication required to create a request.");
       return;
     }
     setLoading(true);
+    console.log("CreateRequest: Starting submission...");
 
     try {
       // Process any lingering email input
@@ -146,9 +152,11 @@ export function CreateRequest() {
       let artworkUrl = '';
       if (file) {
         try {
+            console.log("CreateRequest: Uploading artwork...");
             const result = await uploadToR2(file);
             artworkUrl = result.url;
         } catch (e: any) {
+            console.error("CreateRequest: Artwork upload failed", e);
             error("Artwork upload failed: " + e.message);
             setLoading(false);
             return;
@@ -158,35 +166,38 @@ export function CreateRequest() {
       // Generate Invite Code (Optional, but good for direct links)
       const inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
 
+      const safeISO = (dateStr: string) => {
+          if (!dateStr) return null;
+          try {
+              const d = new Date(dateStr);
+              return isNaN(d.getTime()) ? null : d.toISOString();
+          } catch (e) {
+              return null;
+          }
+      };
+
+      // Generate IDs manually to link them immediately
+      const requestId = doc(collection(db, 'requests')).id;
+      const playlistId = doc(collection(db, 'playlists')).id;
+
       const requestData: any = {
         title,
         description: desc,
-        deadline: deadline ? new Date(deadline).toISOString() : null,
-        playlistLiveDate: playlistLiveDate ? new Date(playlistLiveDate).toISOString() : null,
+        deadline: safeISO(deadline),
+        playlistLiveDate: safeISO(playlistLiveDate),
         accessMode,
         artworkUrl: artworkUrl || null,
-        ownerEmail: user.email, // Use Email as identifier
-        ownerPub: user.uid, // Use ownerPub for Firebase
-        createdAt: Date.now(), // Firestore timestamp is better, but number is used in types
-        accessList: finalEmails, // Store emails directly
+        ownerEmail: user.email, 
+        ownerPub: user.uid, 
+        accessList: finalEmails, 
         inviteCode,
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
-        hostEmail: user.email, // Explicit host email
+        hostEmail: user.email, 
         previewTrackCount: previewTrackCount,
+        playlistId: playlistId, // Link immediately
+        createdAt: serverTimestamp()
       };
-
-      // Create in Firestore
-      const docRef = await addDoc(collection(db, 'requests'), {
-          ...requestData,
-          createdAt: serverTimestamp() // Use server timestamp for sorting
-      });
-      
-      const requestId = docRef.id;
-
-      // Create a linked playlist document
-      let playlistId: string | null = null;
-      let finalPlaylistLink: string | null = null;
 
       const playlistAccessList = separatePlaylistAccess ? finalPlaylistEmails : finalEmails;
       const playlistData = {
@@ -195,30 +206,31 @@ export function CreateRequest() {
           artworkUrl: requestData.artworkUrl,
           ownerEmail: requestData.ownerEmail,
           ownerPub: requestData.ownerPub,
-          requestId: requestId, // Link to the request
-          liveDate: playlistLiveDate ? new Date(playlistLiveDate).toISOString() : (deadline ? new Date(deadline).toISOString() : null), // Use playlistLiveDate if set, else request deadline
+          requestId: requestId, // Link immediately
+          liveDate: safeISO(playlistLiveDate) || safeISO(deadline), 
           accessList: playlistAccessList,
           accessMode: (accessMode === 'direct') ? 'public' : 'private',
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          tracks: []
       };
 
-      const playlistDocRef = await addDoc(collection(db, 'playlists'), playlistData);
-      playlistId = playlistDocRef.id;
-      finalPlaylistLink = `${window.location.origin}/playlist/${playlistId}`;
-
-
-      // Note: We are NOT sending notifications yet (Step 8 might add cloud functions or client-side emails).
-      // Since we don't have a reliable way to map emails to users without a directory search (which we removed from client),
-      // we rely on the Invite Link or manual distribution for now.
-
-      let link = `${window.location.origin}/request/${requestId}`;
-      if (accessMode === 'invite') {
-           // Maybe include invite code if needed?
-      }
+      console.log("CreateRequest: Saving documents...");
+      // Use setDoc with pre-generated IDs
+      await Promise.all([
+          setDoc(doc(db, 'requests', requestId), requestData),
+          setDoc(doc(db, 'playlists', playlistId), playlistData)
+      ]);
       
-      setInviteLink(finalPlaylistLink || link); // Prioritize playlist link if created
+      console.log("CreateRequest: Request and Playlist created.");
+
+      const finalRequestLink = `${window.location.origin}/request/${requestId}`;
+      const finalPlaylistLink = `${window.location.origin}/playlists/${playlistId}`;
+      
+      setInviteLink(accessMode === 'direct' ? finalRequestLink : finalRequestLink); // Keeping request link as default share link for now
       setCreatedRequestId(requestId);
       setShowSuccess(true);
+      success("Request created successfully!");
+      console.log("CreateRequest: Final playlist link (for reference):", finalPlaylistLink);
       
     } catch (err: any) {
       console.error("CreateRequest: Request creation failed.", err);

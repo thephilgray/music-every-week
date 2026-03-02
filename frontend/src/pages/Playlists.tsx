@@ -97,10 +97,10 @@ function PlaylistList() {
       const fetchRequests = async () => {
           setLoadingHosted(true);
           try {
-            // A. Public Requests
+            // A. Public Requests (Only Volunteer mode is truly public without invitation)
             const qPublic = query(
                 collection(db, 'requests'), 
-                where('accessMode', 'in', ['public', 'direct']), 
+                where('accessMode', '==', 'volunteer'), 
                 orderBy('createdAt', 'desc')
             );
 
@@ -164,14 +164,7 @@ function PlaylistList() {
             snapshots.forEach(snap => {
                 snap.forEach(doc => {
                     const data = doc.data();
-                    // Exclude my own requests from "Hosted Playlists" section if desired, 
-                    // but user said "Public playlists that I have access to", which usually implies others'.
-                    // "My Playlists" section covers personal lists.
-                    // If I created a Public Request, it shows in "Hosted Playlists" too? 
-                    // Usually yes, or "My Requests" section (which we don't have here).
-                    // Let's exclude if ownerPub === user.uid to avoid duplication with a potential "My Requests" page?
-                    // Actually, "My Playlists" are specifically the `playlists` collection items created manually.
-                    // Requests are different. Let's show all accessible requests here.
+                    if (data.deleted) return;
                     
                     uniqueRequests.set(doc.id, { 
                         id: doc.id, 

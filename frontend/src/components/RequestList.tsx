@@ -20,14 +20,11 @@ export function RequestList({ requests, loading, filter = 'active' }: RequestLis
       const currentUserEmail = user?.email || participantEmail;
       
       const isOwner = req.hostEmail && currentUserEmail && req.hostEmail === currentUserEmail;
-      const isDirect = req.accessMode === 'direct' || req.accessMode === 'public'; // Assuming 'direct' means public/direct access
+      const isDirect = req.accessMode === 'direct' || req.accessMode === 'public' || req.accessMode === 'volunteer'; 
       const isJoined = currentUserEmail && req.accessList?.includes(currentUserEmail);
 
-      // 1. Privacy Check: Must be Owner, Public, or Joined
-      // If requests are passed via props (e.g. from Home), they are already filtered by the parent?
-      // Home.tsx filters for "Active Requests" using similar logic.
-      // Archive.tsx might use this component too.
-      if (!isAdmin && !isOwner && !isDirect && !isJoined) return false;
+      // 1. Privacy Check: Must be Admin, Owner, in Access List, or Public
+      if (!isAdmin && !isOwner && !isJoined && !isDirect) return false;
       
       if (filter === 'active') {
           return !isExpired; 

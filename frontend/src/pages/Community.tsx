@@ -4,12 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where } from 'firebase/firestore';
 import type { Submission, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function Community() {
-  const { settings } = useAuth();
+  const { settings, user, participantEmail } = useAuth();
   const [feed, setFeed] = useState<FeedItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -28,11 +28,20 @@ export function Community() {
     try {
         if (isInitial) {
             setLoading(true);
-            // 1. Fetch Requests to map Titles (Optimization: Could be cached or denormalized)
-            const reqQuery = query(collection(db, 'requests')); // Fetch all for now (assuming low volume)
-            const reqSnapshot = await getDocs(reqQuery);
-            reqSnapshot.docs.forEach(d => {
-                reqMapRef.current[d.id] = d.data().title;
+            const email = user?.email || participantEmail;
+            const uid = user?.uid;
+
+            // 1. Fetch Requests to map Titles (Refactored for Rules)
+            const reqPromises = [];
+            if (uid) reqPromises.push(getDocs(query(collection(db, 'requests'), where('ownerPub', '==', uid))));
+            if (email) reqPromises.push(getDocs(query(collection(db, 'requests'), where('accessList', 'array-contains', email))));
+            reqPromises.push(getDocs(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer'))));
+
+            const reqSnaps = await Promise.all(reqPromises);
+            reqSnaps.forEach(snap => {
+                snap.docs.forEach(d => {
+                    reqMapRef.current[d.id] = d.data().title;
+                });
             });
         } else {
             setLoadingMore(true);
@@ -49,26 +58,28 @@ export function Community() {
             setSubCursor(subSnapshot.docs[subSnapshot.docs.length - 1] as QueryDocumentSnapshot<DocumentData, DocumentData>);
         }
 
-        const submissionFeedItems: FeedItemData[] = subSnapshot.docs.map(d => {
+        const submissionFeedItems = subSnapshot.docs.map(d => {
             const data = d.data() as Submission;
-            submissionsMapRef.current[d.id] = data; // Cache it
-            const reqTitle = reqMapRef.current[data.requestId] || 'Unknown Request';
+            const reqTitle = reqMapRef.current[data.requestId];
+            if (!reqTitle) return null; 
+            
+            submissionsMapRef.current[d.id] = data;
             
             return {
                 id: d.id,
                 type: 'submission',
                 text: `Submitted a new track: ${data.title}`,
-                authorUid: data.uploaderUid, // Changed from authorPub
+                authorUid: data.uploaderUid, 
                 authorEmail: data.uploaderEmail,
                 authorName: data.byline,
                 submissionId: d.id,
                 requestId: data.requestId,
                 submissionTitle: data.title,
                 requestTitle: reqTitle,
-                createdAt: getTimestampAsNumber(data.createdAt), // Used helper
+                createdAt: getTimestampAsNumber(data.createdAt), 
                 usesAI: data.usesAI
-            };
-        });
+            } as FeedItemData;
+        }).filter(item => item !== null) as FeedItemData[];
 
         // 3. Fetch Recent Comments
         let commQueryArgs: any[] = [collection(db, 'comments'), orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE)];
@@ -84,8 +95,11 @@ export function Community() {
         // Resolve missing submissions for comments
         const commentsWithData = await Promise.all(commSnapshot.docs.map(async (docSnap) => {
             const data = docSnap.data() as Comment;
-            if (!data.submissionId || !data.requestId) return null; // Skip invalid comments
+            if (!data.submissionId || !data.requestId) return null; 
             
+            const reqTitle = reqMapRef.current[data.requestId];
+            if (!reqTitle) return null; // Filter out if request not found (rules blocked it)
+
             let submission = submissionsMapRef.current[data.submissionId];
             
             // If submission not in our recent list, fetch it
@@ -101,10 +115,8 @@ export function Community() {
                 }
             }
 
-            if (!submission) return null; // Can't display comment without submission context
+            if (!submission) return null; 
 
-            const reqTitle = reqMapRef.current[data.requestId] || 'Unknown Request';
-            
             return {
                 id: docSnap.id,
                 type: 'comment',

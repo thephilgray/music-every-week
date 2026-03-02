@@ -419,41 +419,43 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       
       console.log("EditRequest: Starting Firestore metadata updates.");
       const requestDocRef = doc(db, 'requests', request.id);
-      await updateDoc(requestDocRef, updates);
       
-      console.log("EditRequest: Metadata updates complete.");
+      const updatePromises: Promise<any>[] = [];
+      updatePromises.push(updateDoc(requestDocRef, updates));
 
       // Update linked Playlist document if it exists
       if (playlistDocId) {
           console.log("EditRequest: Updating linked playlist document.");
           const playlistDocRef = doc(db, 'playlists', playlistDocId);
           const playlistUpdates: any = {
+              title: updates.title,
+              description: updates.description,
+              artworkUrl: updates.artworkUrl, // Sync artwork to playlist!
               liveDate: separatePlaylistAccess && finalPlaylistLiveDate ? new Date(finalPlaylistLiveDate).toISOString() : (finalDeadline ? new Date(finalDeadline).toISOString() : null),
               accessList: separatePlaylistAccess ? finalPlaylistEmails : finalPendingEmails,
               accessMode: (accessMode === 'direct') ? 'public' : 'private',
               updatedAt: serverTimestamp()
           };
-          await updateDoc(playlistDocRef, playlistUpdates);
-          console.log("EditRequest: Linked playlist document updated.");
+          updatePromises.push(updateDoc(playlistDocRef, playlistUpdates));
       }
 
-      console.log("EditRequest: Starting participants handling.");
       // Handle Participants (Firestore: stored as a map in the request document)
       const oldParticipants = request.participants || {};
-      const newParticipants = { ...selectedParticipants }; // selectedParticipants is already a map of uid to participant data
+      const newParticipants = { ...selectedParticipants }; 
 
-      // Update participants field in the request document
-      await updateDoc(requestDocRef, {
+      updatePromises.push(updateDoc(requestDocRef, {
         participants: newParticipants
-      });
-      console.log("EditRequest: Participant data updates resolved.");
+      }));
+
+      await Promise.all(updatePromises);
+      console.log("EditRequest: All primary document updates complete.");
       
       // Notify New Participants
       const existingKeys = Object.keys(oldParticipants);
-      const addedParticipants = Object.keys(selectedParticipants).filter(uid => !existingKeys.includes(uid)); // Changed pub to uid
+      const addedParticipants = Object.keys(selectedParticipants).filter(uid => !existingKeys.includes(uid)); 
       
       const notificationPromises: Promise<any>[] = [];
-      addedParticipants.forEach(async (partUid: string) => { // Renamed partPub to partUid for clarity
+      addedParticipants.forEach(async (partUid: string) => { 
           if (user?.uid && partUid === user.uid) return; 
           
           const notifId = crypto.randomUUID();
@@ -466,13 +468,12 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
               type: 'invite',
               message,
               link: `/request/${request.id}`,
-              fromUid: user?.uid || 'participant', // Use fromUid or fallback
-              createdAt: Date.now(), // Use client timestamp for notifications for immediate display if needed
+              fromUid: user?.uid || 'participant', 
+              createdAt: Date.now(), 
               read: false,
               requestId: request.id!
           };
           
-          // Add notification to recipient's notifications subcollection or top-level collection
           notificationPromises.push(
               updateDoc(doc(db, 'profiles', partUid), {
                   notifications: arrayUnion(notification)

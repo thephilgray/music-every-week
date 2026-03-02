@@ -4,33 +4,61 @@ import { CreateRequest } from '../components/CreateRequest';
 import { RequestList } from '../components/RequestList';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
 import type { FileRequest } from '../types';
+import { getTimestampAsNumber } from '../lib/utils';
 
 export function Home() {
-  const { user, isHost } = useAuth(); // Destructure isHost
+  const { user, isAdmin, participantEmail } = useAuth(); 
   const [showCreate, setShowCreate] = useState(false);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listen to Requests (Real-time)
-    const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const loadedRequests = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        } as FileRequest));
-        setRequests(loadedRequests);
+    // Only fetch if we have some form of identification
+    if (!user && !participantEmail) {
         setLoading(false);
-    }, (error) => {
-        console.error("Error fetching requests:", error);
-        setLoading(false);
-    });
+        return;
+    }
     
-    return () => unsubscribe();
-  }, []);
+    setLoading(true);
+    const email = user?.email || participantEmail;
+    const uid = user?.uid;
+
+    const unsubs: (() => void)[] = [];
+    const resultsMap = new Map<string, FileRequest>();
+
+    const updateState = () => {
+        const sorted = Array.from(resultsMap.values())
+            .filter(req => !req.deleted)
+            .sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
+        setRequests(sorted);
+        setLoading(false);
+    };
+
+    // 1. Query for Owner
+    if (uid) {
+        const qOwner = query(collection(db, 'requests'), where('ownerPub', '==', uid));
+        unsubs.push(onSnapshot(qOwner, (snap) => {
+            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as FileRequest));
+            updateState();
+        }, (err) => console.error("Owner query error:", err)));
+    }
+
+    // 2. Query for Invited
+    if (email) {
+        const qInvited = query(collection(db, 'requests'), where('accessList', 'array-contains', email));
+        unsubs.push(onSnapshot(qInvited, (snap) => {
+            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as FileRequest));
+            updateState();
+        }, (err) => console.error("Invited query error:", err)));
+    }
+
+    // 3. (REMOVED) Public Volunteer Pools and Direct Links are NOT shown on Home by default
+    // unless you are an owner or invited. They remain accessible via direct link.
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user, participantEmail]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20 p-4">
@@ -41,7 +69,7 @@ export function Home() {
            </div>
            <p className="text-gray-400">Submit tracks, listen, and provide feedback</p>
         </div>
-        {user && isHost && ( // Conditionally render based on user and isHost
+        {user && isAdmin && ( 
         <button 
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-blue-900/20"

@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { EditRequest } from '../components/EditRequest';
 import { SubmitTrack } from '../components/SubmitTrack'; 
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import type { FileRequest, Submission, UserProfile } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 import { db } from '../lib/firebase'; 
@@ -46,6 +47,9 @@ export function CreatorTools() {
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [isEditSubmissionOpen, setIsEditSubmissionOpen] = useState(false);
   const [submissionCommentCount, setSubmissionCommentCount] = useState<number | null>(null);
+
+  const [showDeleteRequestConfirm, setShowDeleteRequestConfirm] = useState(false);
+  const [showDeleteSubmissionConfirm, setShowDeleteSubmissionConfirm] = useState(false);
 
   const [, setLoading] = useState(false);
 
@@ -577,9 +581,44 @@ export function CreatorTools() {
       }
   };
 
+  const handleDeleteRequest = async () => {
+      if (!selectedRequest || !selectedRequest.id) {
+          console.error("Delete request failed: No selected request or ID.");
+          return;
+      }
+      
+      setLoading(true);
+      try {
+          console.log("handleDeleteRequest: Updating Firestore for ID:", selectedRequest.id);
+          const requestDocRef = doc(db, 'requests', selectedRequest.id);
+          await updateDoc(requestDocRef, {
+              deleted: true,
+              updatedAt: serverTimestamp()
+          });
+          
+          // If there's a linked playlist, delete it too
+          if (selectedRequest.playlistId) {
+              console.log("handleDeleteRequest: Deleting linked playlist:", selectedRequest.playlistId);
+              await updateDoc(doc(db, 'playlists', selectedRequest.playlistId), {
+                  deleted: true,
+                  updatedAt: serverTimestamp()
+              });
+          }
+          
+          console.log("handleDeleteRequest: Success.");
+          setSelectedRequest(null);
+          setShowDeleteRequestConfirm(false);
+          success("Request deleted.");
+      } catch (e) {
+          console.error("Delete request failed in catch block", e);
+          error("Failed to delete request: " + (e as Error).message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const handleDeleteSubmission = async () => {
       if (!selectedSubmission || !selectedSubmission.id) return;
-      if (!confirm("Are you sure you want to delete this submission? This cannot be undone.")) return;
       
       setLoading(true);
       try {
@@ -590,6 +629,7 @@ export function CreatorTools() {
           }
           
           setSelectedSubmission(null);
+          setShowDeleteSubmissionConfirm(false);
           success("Submission deleted.");
       } catch (e) {
           console.error("Delete failed", e);
@@ -699,6 +739,13 @@ export function CreatorTools() {
                                     title="Edit Request"
                                 >
                                     <Edit className="w-5 h-5" />
+                                </button>
+                                <button 
+                                    onClick={() => setShowDeleteRequestConfirm(true)}
+                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
+                                    title="Delete Request"
+                                >
+                                    <Trash2 className="w-5 h-5" />
                                 </button>
                                 <button 
                                     onClick={handleGenerateExtensionLink}
@@ -854,7 +901,7 @@ export function CreatorTools() {
                                     <Edit className="w-5 h-5" />
                                 </button>
                                 <button 
-                                    onClick={handleDeleteSubmission}
+                                    onClick={() => setShowDeleteSubmissionConfirm(true)}
                                     className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
                                     title="Delete Submission"
                                 >
@@ -941,6 +988,26 @@ export function CreatorTools() {
                 }}
             />
         )}
+
+        <ConfirmModal 
+            isOpen={showDeleteRequestConfirm}
+            title="Delete Request?"
+            message="Are you sure you want to delete this request? It will be hidden from all participants and cannot be undone."
+            confirmLabel="Delete Forever"
+            isDestructive={true}
+            onConfirm={handleDeleteRequest}
+            onCancel={() => setShowDeleteRequestConfirm(false)}
+        />
+
+        <ConfirmModal 
+            isOpen={showDeleteSubmissionConfirm}
+            title="Delete Submission?"
+            message="Are you sure you want to delete this submission? This cannot be undone."
+            confirmLabel="Delete Forever"
+            isDestructive={true}
+            onConfirm={handleDeleteSubmission}
+            onCancel={() => setShowDeleteSubmissionConfirm(false)}
+        />
     </div>
   );
 }

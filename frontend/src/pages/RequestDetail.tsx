@@ -101,6 +101,11 @@ export function RequestDetail() {
         
         if (docSnap.exists()) {
           const data = docSnap.data() as FileRequest;
+          if (data.deleted) {
+              setRequest(null);
+              setIsLoading(false);
+              return;
+          }
           setRequest({ id: docSnap.id, ...data });
 
           // Fetch Host Name if email available

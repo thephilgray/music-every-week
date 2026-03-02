@@ -1,127 +1,172 @@
-import { useState, useEffect } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageSquare, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, doc, getDoc, where } from 'firebase/firestore';
-import type { Submission, FileRequest, Comment } from '../types';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
+import type { Submission, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function Community() {
   const { settings } = useAuth();
   const [feed, setFeed] = useState<FeedItemData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  useEffect(() => {
-    async function loadFeed() {
-        try {
+  const [subCursor, setSubCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
+  const [commCursor, setCommCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  const reqMapRef = useRef<Record<string, string>>({});
+  const submissionsMapRef = useRef<Record<string, Submission>>({});
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const ITEMS_PER_PAGE = 20;
+
+  const fetchFeedBatch = async (isInitial = false) => {
+    try {
+        if (isInitial) {
+            setLoading(true);
             // 1. Fetch Requests to map Titles (Optimization: Could be cached or denormalized)
             const reqQuery = query(collection(db, 'requests')); // Fetch all for now (assuming low volume)
             const reqSnapshot = await getDocs(reqQuery);
-            const reqMap: Record<string, string> = {};
-            reqSnapshot.docs.forEach(doc => {
-                const data = doc.data() as FileRequest;
-                reqMap[doc.id] = data.title;
+            reqSnapshot.docs.forEach(d => {
+                reqMapRef.current[d.id] = d.data().title;
             });
-
-            const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
-
-            // 2. Fetch Recent Submissions
-            const subQuery = query(
-                collection(db, 'submissions'),
-                where('createdAt', '>=', cutoff),
-                orderBy('createdAt', 'desc'),
-                limit(50)
-            );
-            const subSnapshot = await getDocs(subQuery);
-            const submissionsMap: Record<string, Submission> = {}; // Cache for comment lookup
-            
-            const submissionFeedItems: FeedItemData[] = subSnapshot.docs.map(doc => {
-                const data = doc.data() as Submission;
-                submissionsMap[doc.id] = data; // Cache it
-                const reqTitle = reqMap[data.requestId] || 'Unknown Request';
-                
-                return {
-                    id: doc.id,
-                    type: 'submission',
-                    text: `Submitted a new track: ${data.title}`,
-                    authorUid: data.uploaderUid, // Changed from authorPub
-                    authorEmail: data.uploaderEmail,
-                    authorName: data.byline,
-                    submissionId: doc.id,
-                    requestId: data.requestId,
-                    submissionTitle: data.title,
-                    requestTitle: reqTitle,
-                    createdAt: getTimestampAsNumber(data.createdAt), // Used helper
-                    usesAI: data.usesAI
-                };
-            });
-
-            // 3. Fetch Recent Comments
-            const commQuery = query(
-                collection(db, 'comments'),
-                where('createdAt', '>=', cutoff),
-                orderBy('createdAt', 'desc'),
-                limit(50)
-            );
-            const commSnapshot = await getDocs(commQuery);
-
-            // Resolve missing submissions for comments
-            const commentsWithData = await Promise.all(commSnapshot.docs.map(async (docSnap) => {
-                const data = docSnap.data() as Comment;
-                if (!data.submissionId || !data.requestId) return null; // Skip invalid comments
-                
-                let submission = submissionsMap[data.submissionId];
-                
-                // If submission not in our recent list, fetch it
-                if (!submission) {
-                    try {
-                        const subDoc = await getDoc(doc(db, 'submissions', data.submissionId));
-                        if (subDoc.exists()) {
-                            submission = subDoc.data() as Submission;
-                            submissionsMap[data.submissionId] = submission; // Cache
-                        }
-                    } catch (e) {
-                        console.warn(`Failed to fetch submission ${data.submissionId} for comment ${docSnap.id}`);
-                    }
-                }
-
-                if (!submission) return null; // Can't display comment without submission context
-
-                const reqTitle = reqMap[data.requestId] || 'Unknown Request';
-                
-                return {
-                    id: docSnap.id,
-                    type: 'comment',
-                    text: data.text,
-                    authorUid: data.authorUid,
-                    authorEmail: data.authorEmail,
-                    authorName: data.userProfile?.displayName || (data.authorEmail ? data.authorEmail.split('@')[0] : 'Unknown'),
-                    submissionId: data.submissionId,
-                    requestId: data.requestId,
-                    submissionTitle: submission.title,
-                    requestTitle: reqTitle,
-                    createdAt: getTimestampAsNumber(data.createdAt),
-                    usesAI: submission.usesAI
-                } as FeedItemData;
-            }));
-
-            const validComments = commentsWithData.filter((c): c is FeedItemData => c !== null);
-
-            // 4. Merge and Sort
-            const combinedFeed = [...submissionFeedItems, ...validComments].sort((a, b) => b.createdAt - a.createdAt);
-
-            setFeed(combinedFeed);
-        } catch (err) {
-            console.error("Error loading community feed:", err);
-        } finally {
-            setLoading(false);
+        } else {
+            setLoadingMore(true);
         }
-    }
 
-    loadFeed();
+        // 2. Fetch Recent Submissions
+        let subQueryArgs: any[] = [collection(db, 'submissions'), orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE)];
+        if (!isInitial && subCursor) subQueryArgs.splice(2, 0, startAfter(subCursor));
+        
+        const subQuery = query.apply(null, subQueryArgs as any);
+        const subSnapshot = await getDocs(subQuery);
+        
+        if (!subSnapshot.empty) {
+            setSubCursor(subSnapshot.docs[subSnapshot.docs.length - 1] as QueryDocumentSnapshot<DocumentData, DocumentData>);
+        }
+
+        const submissionFeedItems: FeedItemData[] = subSnapshot.docs.map(d => {
+            const data = d.data() as Submission;
+            submissionsMapRef.current[d.id] = data; // Cache it
+            const reqTitle = reqMapRef.current[data.requestId] || 'Unknown Request';
+            
+            return {
+                id: d.id,
+                type: 'submission',
+                text: `Submitted a new track: ${data.title}`,
+                authorUid: data.uploaderUid, // Changed from authorPub
+                authorEmail: data.uploaderEmail,
+                authorName: data.byline,
+                submissionId: d.id,
+                requestId: data.requestId,
+                submissionTitle: data.title,
+                requestTitle: reqTitle,
+                createdAt: getTimestampAsNumber(data.createdAt), // Used helper
+                usesAI: data.usesAI
+            };
+        });
+
+        // 3. Fetch Recent Comments
+        let commQueryArgs: any[] = [collection(db, 'comments'), orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE)];
+        if (!isInitial && commCursor) commQueryArgs.splice(2, 0, startAfter(commCursor));
+        
+        const commQuery = query.apply(null, commQueryArgs as any);
+        const commSnapshot = await getDocs(commQuery);
+
+        if (!commSnapshot.empty) {
+            setCommCursor(commSnapshot.docs[commSnapshot.docs.length - 1] as QueryDocumentSnapshot<DocumentData, DocumentData>);
+        }
+
+        // Resolve missing submissions for comments
+        const commentsWithData = await Promise.all(commSnapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data() as Comment;
+            if (!data.submissionId || !data.requestId) return null; // Skip invalid comments
+            
+            let submission = submissionsMapRef.current[data.submissionId];
+            
+            // If submission not in our recent list, fetch it
+            if (!submission) {
+                try {
+                    const subDoc = await getDoc(doc(db, 'submissions', data.submissionId));
+                    if (subDoc.exists()) {
+                        submission = subDoc.data() as Submission;
+                        submissionsMapRef.current[data.submissionId] = submission; // Cache
+                    }
+                } catch (e) {
+                    console.warn(`Failed to fetch submission ${data.submissionId} for comment ${docSnap.id}`);
+                }
+            }
+
+            if (!submission) return null; // Can't display comment without submission context
+
+            const reqTitle = reqMapRef.current[data.requestId] || 'Unknown Request';
+            
+            return {
+                id: docSnap.id,
+                type: 'comment',
+                text: data.text,
+                authorUid: data.authorUid,
+                authorEmail: data.authorEmail,
+                authorName: data.userProfile?.displayName || (data.authorEmail ? data.authorEmail.split('@')[0] : 'Unknown'),
+                submissionId: data.submissionId,
+                requestId: data.requestId,
+                submissionTitle: submission.title,
+                requestTitle: reqTitle,
+                createdAt: getTimestampAsNumber(data.createdAt),
+                usesAI: submission.usesAI
+            } as FeedItemData;
+        }));
+
+        const validComments = commentsWithData.filter((c): c is FeedItemData => c !== null);
+
+        if (subSnapshot.empty && commSnapshot.empty) {
+            setHasMore(false);
+        }
+
+        // 4. Merge and Sort
+        const combinedNew = [...submissionFeedItems, ...validComments];
+
+        setFeed(prev => {
+            const merged = isInitial ? combinedNew : [...prev, ...combinedNew];
+            // Remove duplicates
+            const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+            return unique.sort((a, b) => b.createdAt - a.createdAt);
+        });
+
+    } catch (err) {
+        console.error("Error loading community feed:", err);
+    } finally {
+        setLoading(false);
+        setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFeedBatch(true);
   }, []);
+
+  const handleObserver = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+        const target = entries[0];
+        if (target.isIntersecting && hasMore && !loading && !loadingMore) {
+            fetchFeedBatch(false);
+        }
+    },
+    [hasMore, loading, loadingMore] // fetchFeedBatch doesn't need to be dependency as it uses state but we use functional updates. Oh wait, it accesses cursors.
+  );
+
+  // We need a ref to access latest states in observer if we don't want to constantly re-bind
+  // But re-binding the observer is fine.
+  useEffect(() => {
+    const option = { root: null, rootMargin: '200px', threshold: 0 };
+    const observer = new IntersectionObserver(handleObserver, option);
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [handleObserver]);
 
   const filteredFeed = feed.filter(item => {
       if (settings?.content?.filterAI && item.usesAI) return false;
@@ -150,6 +195,18 @@ export function Community() {
                 {filteredFeed.map(item => (
                     <FeedItemRow key={item.id} item={item} />
                 ))}
+                
+                {hasMore && (
+                    <div ref={loadMoreRef} className="py-6 flex justify-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+                    </div>
+                )}
+                
+                {!hasMore && feed.length > 0 && (
+                    <div className="py-8 text-center text-sm text-gray-500">
+                        You've reached the end of the feed.
+                    </div>
+                )}
             </div>
         )}
     </div>

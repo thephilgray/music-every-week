@@ -11,6 +11,7 @@ import { RequestCard } from '../components/RequestCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
 import { FilterPopover } from '../components/ui/FilterPopover';
+import { Skeleton } from '../components/ui/Skeleton';
 import { useListenedTracks } from '../hooks/useListenedTracks';
 import { fixUrl } from '../lib/url';
 
@@ -35,6 +36,8 @@ function PlaylistList() {
   const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
   const [hostedRequests, setHostedRequests] = useState<FileRequest[]>([]); // Merged state for requests
   
+  const [loadingMy, setLoadingMy] = useState(true);
+  const [loadingHosted, setLoadingHosted] = useState(true);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
@@ -45,8 +48,10 @@ function PlaylistList() {
   useEffect(() => {
      if (!user || !user.uid) {
          setMyPlaylists([]);
+         setLoadingMy(false);
          return;
      }
+     setLoadingMy(true);
      
      const playlistsQuery = query(
         collection(db, 'playlists'),
@@ -65,6 +70,7 @@ function PlaylistList() {
             } as Playlist);
         });
         setMyPlaylists(fetchedPlaylists);
+        setLoadingMy(false);
      });
      return () => unsubscribe();
   }, [user]);
@@ -89,96 +95,103 @@ function PlaylistList() {
       const uid = user?.uid;
       
       const fetchRequests = async () => {
-          // A. Public Requests
-          const qPublic = query(
-              collection(db, 'requests'), 
-              where('accessMode', 'in', ['public', 'direct']), 
-              orderBy('createdAt', 'desc')
-          );
+          setLoadingHosted(true);
+          try {
+            // A. Public Requests
+            const qPublic = query(
+                collection(db, 'requests'), 
+                where('accessMode', 'in', ['public', 'direct']), 
+                orderBy('createdAt', 'desc')
+            );
 
-          // B. Shared Requests (Invite/Volunteer where I'm added)
-          let qShared = null;
-          if (email) {
-              qShared = query(
-                  collection(db, 'requests'), 
-                  where('accessList', 'array-contains', email), 
-                  orderBy('createdAt', 'desc')
-              );
+            // B. Shared Requests (Invite/Volunteer where I'm added)
+            let qShared = null;
+            if (email) {
+                qShared = query(
+                    collection(db, 'requests'), 
+                    where('accessList', 'array-contains', email), 
+                    orderBy('createdAt', 'desc')
+                );
+            }
+
+            // C. Contributed Requests (Where I submitted)
+            let contributedIds: string[] = [];
+            
+            if (email || uid) {
+                let migratedPub: string | null = null;
+                if (uid) {
+                    const profileDoc = await getDoc(doc(db, 'profiles', uid));
+                    if (profileDoc.exists()) migratedPub = profileDoc.data().migratedFromGunPub;
+                } else if (email) {
+                    const qP = query(collection(db, 'profiles'), where('email', '==', email));
+                    const pSnap = await getDocs(qP);
+                    if (!pSnap.empty) migratedPub = pSnap.docs[0].data().migratedFromGunPub;
+                }
+
+                const subQueries = [];
+                if (email) subQueries.push(query(collection(db, 'submissions'), where('uploaderEmail', '==', email)));
+                if (migratedPub) subQueries.push(query(collection(db, 'submissions'), where('originalUploaderPub', '==', migratedPub)));
+                
+                if (subQueries.length > 0) {
+                    const subSnaps = await Promise.all(subQueries.map(q => getDocs(q)));
+                    const requestIds = new Set<string>();
+                    subSnaps.forEach(snap => {
+                        snap.forEach(doc => {
+                            const data = doc.data();
+                            if (data.requestId) requestIds.add(data.requestId);
+                        });
+                    });
+                    contributedIds = Array.from(requestIds);
+                }
+            }
+
+            // Execute Queries
+            const promises = [getDocs(qPublic)];
+            if (qShared) promises.push(getDocs(qShared));
+            
+            // Batch fetch contributed requests by ID
+            if (contributedIds.length > 0) {
+                for (let i = 0; i < contributedIds.length; i += 10) {
+                    const batch = contributedIds.slice(i, i + 10);
+                    promises.push(getDocs(query(collection(db, 'requests'), where(documentId(), 'in', batch))));
+                }
+            }
+
+            const snapshots = await Promise.all(promises);
+            
+            // Merge and Deduplicate
+            const uniqueRequests = new Map<string, FileRequest>();
+            snapshots.forEach(snap => {
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    // Exclude my own requests from "Hosted Playlists" section if desired, 
+                    // but user said "Public playlists that I have access to", which usually implies others'.
+                    // "My Playlists" section covers personal lists.
+                    // If I created a Public Request, it shows in "Hosted Playlists" too? 
+                    // Usually yes, or "My Requests" section (which we don't have here).
+                    // Let's exclude if ownerPub === user.uid to avoid duplication with a potential "My Requests" page?
+                    // Actually, "My Playlists" are specifically the `playlists` collection items created manually.
+                    // Requests are different. Let's show all accessible requests here.
+                    
+                    uniqueRequests.set(doc.id, { 
+                        id: doc.id, 
+                        ...data,
+                        createdAt: getTimestampAsNumber(data.createdAt)
+                    } as FileRequest);
+                });
+            });
+
+            // Sort by createdAt desc
+            const sorted = Array.from(uniqueRequests.values()).sort((a, b) => 
+                (b.createdAt as number) - (a.createdAt as number)
+            );
+            
+            setHostedRequests(sorted);
+          } catch(e) {
+              console.error("Error fetching hosted requests:", e);
+          } finally {
+              setLoadingHosted(false);
           }
-
-          // C. Contributed Requests (Where I submitted)
-          let contributedIds: string[] = [];
-          
-          if (email || uid) {
-              let migratedPub: string | null = null;
-              if (uid) {
-                  const profileDoc = await getDoc(doc(db, 'profiles', uid));
-                  if (profileDoc.exists()) migratedPub = profileDoc.data().migratedFromGunPub;
-              } else if (email) {
-                  const qP = query(collection(db, 'profiles'), where('email', '==', email));
-                  const pSnap = await getDocs(qP);
-                  if (!pSnap.empty) migratedPub = pSnap.docs[0].data().migratedFromGunPub;
-              }
-
-              const subQueries = [];
-              if (email) subQueries.push(query(collection(db, 'submissions'), where('uploaderEmail', '==', email)));
-              if (migratedPub) subQueries.push(query(collection(db, 'submissions'), where('originalUploaderPub', '==', migratedPub)));
-              
-              if (subQueries.length > 0) {
-                  const subSnaps = await Promise.all(subQueries.map(q => getDocs(q)));
-                  const requestIds = new Set<string>();
-                  subSnaps.forEach(snap => {
-                      snap.forEach(doc => {
-                          const data = doc.data();
-                          if (data.requestId) requestIds.add(data.requestId);
-                      });
-                  });
-                  contributedIds = Array.from(requestIds);
-              }
-          }
-
-          // Execute Queries
-          const promises = [getDocs(qPublic)];
-          if (qShared) promises.push(getDocs(qShared));
-          
-          // Batch fetch contributed requests by ID
-          if (contributedIds.length > 0) {
-              for (let i = 0; i < contributedIds.length; i += 10) {
-                  const batch = contributedIds.slice(i, i + 10);
-                  promises.push(getDocs(query(collection(db, 'requests'), where(documentId(), 'in', batch))));
-              }
-          }
-
-          const snapshots = await Promise.all(promises);
-          
-          // Merge and Deduplicate
-          const uniqueRequests = new Map<string, FileRequest>();
-          snapshots.forEach(snap => {
-              snap.forEach(doc => {
-                  const data = doc.data();
-                  // Exclude my own requests from "Hosted Playlists" section if desired, 
-                  // but user said "Public playlists that I have access to", which usually implies others'.
-                  // "My Playlists" section covers personal lists.
-                  // If I created a Public Request, it shows in "Hosted Playlists" too? 
-                  // Usually yes, or "My Requests" section (which we don't have here).
-                  // Let's exclude if ownerPub === user.uid to avoid duplication with a potential "My Requests" page?
-                  // Actually, "My Playlists" are specifically the `playlists` collection items created manually.
-                  // Requests are different. Let's show all accessible requests here.
-                  
-                  uniqueRequests.set(doc.id, { 
-                      id: doc.id, 
-                      ...data,
-                      createdAt: getTimestampAsNumber(data.createdAt)
-                  } as FileRequest);
-              });
-          });
-
-          // Sort by createdAt desc
-          const sorted = Array.from(uniqueRequests.values()).sort((a, b) => 
-              (b.createdAt as number) - (a.createdAt as number)
-          );
-          
-          setHostedRequests(sorted);
       };
 
       fetchRequests();
@@ -393,7 +406,13 @@ function PlaylistList() {
                 <ListMusic className="w-8 h-8 text-blue-500" />
                 Hosted Playlists
             </h2>
-            {hostedRequests.length === 0 ? (
+            {loadingHosted ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <Skeleton className="h-80 w-full rounded-xl" />
+                    <Skeleton className="h-80 w-full rounded-xl" />
+                    <Skeleton className="h-80 w-full rounded-xl" />
+                </div>
+            ) : hostedRequests.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
                     <p>No hosted playlists found.</p>
                 </div>
@@ -417,7 +436,13 @@ function PlaylistList() {
                 <h2 className="text-2xl font-bold text-white mb-6 border-t border-gray-800 pt-8">
                     My Playlists
                 </h2>
-                {myPlaylists.length === 0 ? (
+                {loadingMy ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <Skeleton className="h-48 w-full rounded-xl" />
+                        <Skeleton className="h-48 w-full rounded-xl" />
+                        <Skeleton className="h-48 w-full rounded-xl" />
+                    </div>
+                ) : myPlaylists.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
                         <p>No playlists yet.</p>
                         <p className="text-sm mt-2">Create one from a track's menu.</p>

@@ -21,6 +21,9 @@ export interface CommentItemUIProps {
   onEdit?: (id: string, newText: string) => void;
   onAuthorClick?: (email: string) => void;
   profileLinkPub?: string; // New prop for profile linking
+  reactions?: Record<string, 'heart' | '+1'>;
+  onReact?: (id: string, reaction: 'heart' | '+1') => void;
+  currentUserId?: string;
 }
 
 export function CommentItemUI({ 
@@ -34,7 +37,10 @@ export function CommentItemUI({
   isOwnComment, 
   onDelete, 
   onEdit,
-  profileLinkPub
+  profileLinkPub,
+  reactions,
+  onReact,
+  currentUserId
 }: CommentItemUIProps) {
   
   // Edit State
@@ -114,6 +120,10 @@ export function CommentItemUI({
   const finalName = liveProfile?.displayName || liveProfile?.alias || authorName;
   const finalAvatar = liveProfile?.avatarUrl || authorAvatarUrl;
 
+  const heartCount = Object.values(reactions || {}).filter(r => r === 'heart').length;
+  const plusOneCount = Object.values(reactions || {}).filter(r => r === '+1').length;
+  const myReaction = currentUserId ? (reactions?.[currentUserId]) : undefined;
+
   return (
     <div className="flex gap-2 group relative">
          <div className="w-6 h-6 bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden mt-1">
@@ -144,7 +154,7 @@ export function CommentItemUI({
                     <div className="relative">
                         <button 
                             onClick={toggleMenu}
-                            className={`text-gray-500 hover:text-white transition p-1 ${menuPos ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                            className={`text-gray-500 hover:text-white transition p-1 ${menuPos ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}
                         >
                             <MoreVertical className="w-3 h-3" />
                         </button>
@@ -220,6 +230,20 @@ export function CommentItemUI({
                             <MiniPlayer src={audioUrl} />
                         </div>
                     )}
+                    <div className="flex gap-2 mt-1">
+                        <button 
+                            onClick={() => onReact?.(id, 'heart')}
+                            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${myReaction === 'heart' ? 'bg-pink-900/30 text-pink-400 border-pink-800' : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-pink-400 hover:border-pink-800'}`}
+                        >
+                            ❤️ {heartCount > 0 && heartCount}
+                        </button>
+                        <button 
+                            onClick={() => onReact?.(id, '+1')}
+                            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${myReaction === '+1' ? 'bg-blue-900/30 text-blue-400 border-blue-800' : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-blue-400 hover:border-blue-800'}`}
+                        >
+                            👍 {plusOneCount > 0 && plusOneCount}
+                        </button>
+                    </div>
                  </>
              )}
          </div>

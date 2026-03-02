@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon, Lock, Loader2 } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon, Loader2, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
@@ -8,7 +8,7 @@ import { SubmitTrack } from '../components/SubmitTrack';
 import type { FileRequest, Submission, UserProfile } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 import { db } from '../lib/firebase'; 
-import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc } from 'firebase/firestore'; 
+import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc, deleteDoc } from 'firebase/firestore'; 
 
 interface ParticipantRow {
     id: string;
@@ -21,32 +21,9 @@ interface ParticipantRow {
 }
 
 export function CreatorTools() {
-  const { user, participantEmail, loginAdmin, isLoading } = useAuth(); 
+  const { user, participantEmail, isLoading } = useAuth(); 
   const { success, error } = useToast();
 
-  if (isLoading) {
-    return (
-        <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.16))] text-gray-500">
-            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-        </div>
-    );
-  }
-
-  if (!user) {
-    return (
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-theme(spacing.16))] p-4 text-center">
-            <Lock className="w-16 h-16 text-gray-600 mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Host Access Required</h2>
-            <p className="text-gray-400 mb-6">Please log in with your Google account to access Creator Tools.</p>
-            <button 
-                onClick={loginAdmin} 
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition"
-            >
-                Log in with Google
-            </button>
-        </div>
-    );
-  }
   
   // Tabs
   const [activeTab, setActiveTab] = useState<'requests' | 'submissions'>('requests');
@@ -68,8 +45,28 @@ export function CreatorTools() {
 
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [isEditSubmissionOpen, setIsEditSubmissionOpen] = useState(false);
+  const [submissionCommentCount, setSubmissionCommentCount] = useState<number | null>(null);
 
   const [, setLoading] = useState(false);
+
+  // Fetch comments count for selected submission
+  useEffect(() => {
+      if (!selectedSubmission?.id) {
+          setSubmissionCommentCount(null);
+          return;
+      }
+      const fetchComments = async () => {
+          try {
+              const q = query(collection(db, 'comments'), where('submissionId', '==', selectedSubmission.id));
+              const snap = await getDocs(q);
+              setSubmissionCommentCount(snap.size);
+          } catch (e) {
+              console.error("Error fetching comment count:", e);
+              setSubmissionCommentCount(0);
+          }
+      };
+      fetchComments();
+  }, [selectedSubmission?.id]);
 
   // Combine Requests
   useEffect(() => {
@@ -580,40 +577,35 @@ export function CreatorTools() {
       }
   };
 
-  const handleRepublishSubmission = async (subToPublish: Submission | null = selectedSubmission) => {
-      if (!subToPublish || !subToPublish.id || !subToPublish.requestId || !user?.uid) return;
+  const handleDeleteSubmission = async () => {
+      if (!selectedSubmission || !selectedSubmission.id) return;
+      if (!confirm("Are you sure you want to delete this submission? This cannot be undone.")) return;
       
       setLoading(true);
       try {
-          const subData: any = { ...subToPublish };
-          delete subData._;
+          await deleteDoc(doc(db, 'submissions', selectedSubmission.id));
           
-          if (typeof subData.waveform === 'string') subData.waveform = JSON.parse(subData.waveform);
-          if (typeof subData.feedbackFocus === 'string') subData.feedbackFocus = JSON.parse(subData.feedbackFocus);
-          if (typeof subData.collaborators === 'string') subData.collaborators = JSON.parse(subData.collaborators);
+          if (selectedSubmission.requestId) {
+              await deleteDoc(doc(db, 'requests', selectedSubmission.requestId, 'submissions', selectedSubmission.id));
+          }
           
-          const updates = {
-              ...subData,
-              uploaderUid: user.uid, 
-              deleted: false,
-              updatedAt: serverTimestamp()
-          };
-
-          const requestSubmissionsDocRef = doc(db, 'requests', subToPublish.requestId, 'submissions', subToPublish.id);
-          await updateDoc(requestSubmissionsDocRef, updates);
-          
-          const globalSubmissionsDocRef = doc(db, 'submissions', subToPublish.id);
-          await updateDoc(globalSubmissionsDocRef, updates);
-          
-          success("Submission republished!");
+          setSelectedSubmission(null);
+          success("Submission deleted.");
       } catch (e) {
-          console.error("Republish submission failed", e);
-          error("Failed to republish submission: " + (e as Error).message);
+          console.error("Delete failed", e);
+          error("Failed to delete submission: " + (e as Error).message);
       } finally {
           setLoading(false);
       }
   };
 
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.16))] text-gray-500">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+        </div>
+    );
+  }
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-theme(spacing.16))]">
@@ -862,11 +854,11 @@ export function CreatorTools() {
                                     <Edit className="w-5 h-5" />
                                 </button>
                                 <button 
-                                    onClick={() => handleRepublishSubmission(selectedSubmission)}
-                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Republish Submission (Fix Missing)"
+                                    onClick={handleDeleteSubmission}
+                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
+                                    title="Delete Submission"
                                 >
-                                    <RotateCw className="w-5 h-5" />
+                                    <Trash2 className="w-5 h-5" />
                                 </button>
                             </div>
                             <p className="text-gray-400 text-sm">
@@ -885,9 +877,17 @@ export function CreatorTools() {
                                 )}
                             </div>
                             <div className="space-y-4 flex-1 w-full">
-                                <div>
-                                    <label className="text-xs text-gray-500 uppercase font-bold">Artist Name</label>
-                                    <p className="text-white">{selectedSubmission.byline || 'Unknown'}</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold">Artist Name</label>
+                                        <p className="text-white">{selectedSubmission.byline || 'Unknown'}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold">Comments</label>
+                                        <p className="text-white">
+                                            {submissionCommentCount !== null ? submissionCommentCount : 'Loading...'}
+                                        </p>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase font-bold">Request</label>

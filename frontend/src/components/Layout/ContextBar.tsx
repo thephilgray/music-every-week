@@ -89,16 +89,16 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
             })}
         </div>
       </div>
+{/* Right Side: Points + User Dropdown */}
+<div className="flex items-center gap-4 relative">
 
-      {/* Right Side: Points + User Dropdown */}
-      <div className="relative flex items-center gap-3 md:gap-4">
-        
-        {/* Mew Points */}
-        <div className="flex items-center gap-1.5 bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-800/50 px-3 py-1 rounded-full text-xs font-bold text-purple-200 shadow-sm" title="Mew Points">
-            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-            <span>{points.toLocaleString()}</span>
-        </div>
+  {/* Mew Points (Hidden on mobile) */}
+  <div className="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-800/50 px-3 py-1 rounded-full text-xs font-bold text-purple-200 shadow-sm" title="Mew Points">
+      <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-500" />
+      <span>{points.toLocaleString()}</span>
+  </div>
 
+  {/* User Button */}
         {/* Status Indicator (Firebase/Network) */}
         <div className="group relative flex items-center justify-center">
             <div 
@@ -132,11 +132,14 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                 <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1">
                     <div className="px-4 py-3 border-b border-gray-700 md:hidden">
                         <p className="text-sm text-white font-bold truncate">{displayName}</p>
-                        <p className="text-xs text-gray-500 truncate">{user?.email || participantEmail}</p>
+                        <p className="text-xs text-gray-500 truncate mb-2">{user?.email || participantEmail}</p>
+                        <div className="flex items-center gap-1.5 bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-800/50 px-2 py-1 rounded text-xs font-bold text-purple-200 w-fit">
+                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-500" />
+                            <span>{points.toLocaleString()} Points</span>
+                        </div>
                     </div>
-                    
-                    <button 
-                        onClick={() => { navigate('/profile'); setDropdownOpen(false); }}
+
+                    <button                        onClick={() => { navigate('/profile'); setDropdownOpen(false); }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
                     >
                         <UserIcon className="w-4 h-4" />

@@ -260,6 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await updateDoc(profileRef, {
               points: increment(amount)
           });
+          // Dispatch event for UI animation
+          window.dispatchEvent(new CustomEvent('pointsAdded', { detail: { amount } }));
       } catch (e) {
           console.error("Failed to add points:", e);
       }

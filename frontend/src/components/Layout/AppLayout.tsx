@@ -3,43 +3,15 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ContextBar } from './ContextBar';
 import { Player } from './Player';
-// import { useGun } from '../../contexts/GunContext'; // Removed useGun import
+import { PointsAnimation } from '../PointsAnimation';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Removed useGun related state/variables:
-  // const { gun, user, pubKey, userProfile, isConnected, isInternetOnline } = useGun();
-  // const { success, error } = useToast();
-
-  // Removed useEffect block that handles pendingJoinRequest and GunDB auto-join
-  // useEffect(() => {
-  //     const pendingReqId = sessionStorage.getItem('pendingJoinRequest');
-  //     if (pendingReqId && pubKey) {
-  //         sessionStorage.removeItem('pendingJoinRequest');
-          
-  //         const partData = {
-  //             alias: userProfile?.alias || 'Unknown',
-  //             status: 'accepted',
-  //             email: userProfile?.email || '',
-  //             joinedAt: Date.now()
-  //         };
-
-  //         gun.get('request_participants').get(pendingReqId).get(pubKey).put(partData, (ack: any) => {
-  //             if (ack.err) {
-  //                 console.error("Auto-join failed:", ack.err);
-  //                 error("Failed to join request automatically. Please try manually.");
-  //             } else {
-  //                 success("You have successfully joined the request!");
-                  
-  //                 // Local marker (Scoped)
-  //                 user.get('participation').get(pendingReqId).put('accepted');
-  //             }
-  //         });
-  //     }
-  // }, [pubKey, gun, user, userProfile]);
 
   return (
     <div className="flex h-[100dvh] bg-black overflow-hidden relative">
+      <PointsAnimation />
+      
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 

@@ -2,6 +2,7 @@
 
 @theme {
   --animate-pulse-slow: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-float-up: float-up 1.5s ease-out forwards;
 
   @keyframes pulse-slow {
     0%, 100% {
@@ -9,6 +10,25 @@
     }
     50% {
       opacity: 0.6;
+    }
+  }
+
+  @keyframes float-up {
+    0% {
+      opacity: 0;
+      transform: translateY(20px) scale(0.8);
+    }
+    20% {
+      opacity: 1;
+      transform: translateY(0px) scale(1.2);
+    }
+    80% {
+      opacity: 1;
+      transform: translateY(-40px) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-60px) scale(1);
     }
   }
 }

@@ -280,7 +280,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             });
             
             if (addPoints) {
-                addPoints(50);
+                addPoints(5);
             }
             
             onSuccess({ id: docRef.id, ...submissionData });

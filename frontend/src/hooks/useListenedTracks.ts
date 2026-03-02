@@ -35,7 +35,7 @@ export function useListenedTracks() {
             
             // Award points for listening!
             if (addPoints) {
-                addPoints(10);
+                addPoints(1);
             }
             
             return next;

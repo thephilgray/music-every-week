@@ -504,6 +504,10 @@ export function Profile() {
                             <span className="text-white font-bold text-lg">{visibleRequests.length}</span>
                             <span>Requests</span>
                         </div>
+                        <div className="flex flex-col items-center md:items-start ml-4 pl-4 border-l border-gray-800">
+                            <span className="text-blue-400 font-bold text-lg">{profile.points || 0}</span>
+                            <span>Participation</span>
+                        </div>
                         {profile.joinedAt && (
                             <div className="flex flex-col items-center md:items-start ml-4 pl-4 border-l border-gray-800">
                                 <span className="text-gray-300">{new Date(profile.joinedAt).getFullYear()}</span>

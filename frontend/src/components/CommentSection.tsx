@@ -353,7 +353,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
         
         // Award points for leaving a comment
         if (addPoints) {
-            addPoints(15);
+            addPoints(3);
         }
         
         // Notify Submission Owner (if not self)
@@ -475,6 +475,38 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
       }
   };
 
+  const handleReact = async (commentId: string, reaction: 'heart' | '+1') => {
+      if (!user?.uid && !participantEmail) {
+          alert("You must be logged in to react.");
+          return;
+      }
+      
+      const currentUserId = user?.uid || participantEmail;
+      if (!currentUserId) return;
+
+      try {
+          const comment = comments.find(c => c.id === commentId);
+          if (!comment) return;
+
+          const currentReactions = comment.reactions || {};
+          const existingReaction = currentReactions[currentUserId];
+          
+          let newReactions = { ...currentReactions };
+          
+          if (existingReaction === reaction) {
+              // Toggle off
+              delete newReactions[currentUserId];
+          } else {
+              // Set or change reaction
+              newReactions[currentUserId] = reaction;
+          }
+          
+          await updateDoc(doc(db, 'comments', commentId), { reactions: newReactions });
+      } catch (e) {
+          console.error("Failed to react to comment:", e);
+      }
+  };
+
   return (
     <div className="mt-4 md:bg-gray-950/50 md:rounded md:p-4 md:border md:border-gray-800">
        <h5 className="text-sm font-semibold text-gray-400 mb-3">Comments</h5>
@@ -494,6 +526,9 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
                     onDelete={c.authorEmail === (participantEmail || user?.email) ? handleDeleteComment : undefined}
                     onEdit={c.authorEmail === (participantEmail || user?.email) ? handleEditComment : undefined}
                     profileLinkPub={c.authorUid} // Added prop
+                    reactions={c.reactions}
+                    onReact={handleReact}
+                    currentUserId={user?.uid || participantEmail || undefined}
                 />
              </div>
           ))}

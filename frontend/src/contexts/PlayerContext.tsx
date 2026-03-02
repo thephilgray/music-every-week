@@ -72,9 +72,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // Persist state
   useEffect(() => {
-    localStorage.setItem('player_currentTrack', JSON.stringify(currentTrack));
-    localStorage.setItem('player_queue', JSON.stringify(queue));
-    localStorage.setItem('player_context', JSON.stringify(context));
+    const stripLargeFields = (track: Submission | null): Submission | null => {
+        if (!track) return null;
+        const { waveform, ...rest } = track;
+        return rest as Submission;
+    };
+    
+    const stripLargeFieldsFromQueue = (q: Submission[]): Submission[] => {
+        return q.map(t => {
+            const { waveform, ...rest } = t;
+            return rest as Submission;
+        });
+    };
+
+    try {
+        localStorage.setItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
+        localStorage.setItem('player_queue', JSON.stringify(stripLargeFieldsFromQueue(queue)));
+        localStorage.setItem('player_context', JSON.stringify(context));
+    } catch (e) {
+        console.error("Failed to save player state to localStorage:", e);
+        // If it still fails, we might need to clear or further reduce
+    }
   }, [currentTrack, queue, context]);
 
   // Initialize Audio Element

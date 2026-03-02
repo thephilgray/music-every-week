@@ -845,7 +845,7 @@ export function CreatorTools() {
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <div className="flex items-center gap-3">
-                                <h1 className="text-2xl font-bold text-white">{selectedSubmission.title}</h1>
+                                <h1 className="text-2xl font-bold text-white">{selectedSubmission.byline || 'Anonymous'}</h1>
                                 <button 
                                     onClick={() => setIsEditSubmissionOpen(true)}
                                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
@@ -861,7 +861,10 @@ export function CreatorTools() {
                                     <Trash2 className="w-5 h-5" />
                                 </button>
                             </div>
-                            <p className="text-gray-400 text-sm">
+                            <p className="text-gray-400 text-sm font-medium">
+                                {selectedSubmission.title}
+                            </p>
+                            <p className="text-gray-500 text-xs">
                                 Submitted on {new Date(getTimestampAsNumber(selectedSubmission.createdAt)).toLocaleDateString()}
                             </p>
                         </div>
@@ -879,8 +882,8 @@ export function CreatorTools() {
                             <div className="space-y-4 flex-1 w-full">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold">Artist Name</label>
-                                        <p className="text-white">{selectedSubmission.byline || 'Unknown'}</p>
+                                        <label className="text-xs text-gray-500 uppercase font-bold">Track Title</label>
+                                        <p className="text-white">{selectedSubmission.title}</p>
                                     </div>
                                     <div>
                                         <label className="text-xs text-gray-500 uppercase font-bold">Comments</label>

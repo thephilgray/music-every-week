@@ -920,8 +920,8 @@ function PlaylistDetail({ id }: { id: string }) {
                                      <ArtworkDisplay src={fixUrl(sub.artworkUrl)} alt="Art" className="w-full h-full object-cover" FallbackIcon={FileAudio} />
                                  </div>
                                  <div className="flex-1 min-w-0">
-                                     <h4 className="text-white font-medium truncate">{sub.title}</h4>
-                                     <p className="text-gray-400 text-sm truncate">{sub.byline || 'Anonymous'}</p>
+                                     <h4 className="text-white font-bold truncate">{sub.byline || 'Anonymous'}</h4>
+                                     <p className="text-gray-400 text-sm truncate">{sub.title}</p>
                                  </div>
                                  <div className="flex items-center gap-2">
                                      {sub.lyrics && (

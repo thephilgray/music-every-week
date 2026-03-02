@@ -93,21 +93,23 @@ export function SubmissionCard({
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                        <h4 className={`text-white font-medium truncate flex items-center gap-2 ${locked ? 'blur-sm select-none' : ''}`}>
-                            {locked ? 'Hidden Track' : submission.title}
-                            {isListened && !locked && <span title="Listened"><CheckCircle2 className="w-4 h-4 text-green-500/70" /></span>}
-                        </h4>
-                        <div className="flex items-center gap-2">
+                        <div className={`flex items-center gap-2 ${locked ? 'blur-sm select-none' : ''}`}>
                             <CollaboratorList 
                                 uploaderPub={submission.uploaderUid || submission.originalUploaderPub} 
                                 uploaderEmail={submission.uploaderEmail} 
                                 byline={submission.byline} 
                                 collaborators={submission.collaborators} 
-                                linkProfile={submission.linkProfile}
+                                linkProfile={locked ? false : submission.linkProfile}
                                 proxyFor={submission.proxyFor}
-                                className="text-sm text-gray-400 truncate"
+                                className="text-white font-bold truncate"
                             />
-                            {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800">You</span>}
+                            {isListened && !locked && <span title="Listened" className="flex-shrink-0"><CheckCircle2 className="w-4 h-4 text-green-500/70" /></span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={`text-sm text-gray-400 truncate ${locked ? 'blur-sm select-none' : ''}`}>
+                                {locked ? 'Hidden Track' : submission.title}
+                            </span>
+                            {isMySubmission && <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-800 flex-shrink-0">You</span>}
                         </div>
 
                          {/* Tags Section - Restored from Gun App */}

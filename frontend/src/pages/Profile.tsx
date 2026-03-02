@@ -577,14 +577,14 @@ export function Profile() {
                                 </div>
                              </div>
                              <div className="min-w-0">
-                                 <h3 className="text-white font-medium truncate">{sub.title}</h3>
                                  <CollaboratorList 
                                     uploaderPub={sub.uploaderUid || sub.originalUploaderPub} 
                                     uploaderEmail={sub.uploaderEmail}
                                     byline={sub.byline} 
                                     collaborators={sub.collaborators} 
-                                    className="text-gray-500 text-xs truncate"
+                                    className="text-white font-bold truncate"
                                  />
+                                 <p className="text-gray-500 text-xs truncate">{sub.title}</p>
                              </div>
                         </div>
                     </div>

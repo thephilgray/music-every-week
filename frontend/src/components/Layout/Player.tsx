@@ -120,16 +120,16 @@ export function Player() { // Removed props
             </div>
 
             <div className={`min-w-0 flex-1 ${!isMinimized ? 'text-center md:text-left w-full' : ''}`}>
-                <div className={`text-white font-medium truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}>
-                    {currentTrack?.title || 'No Track Selected'}
+                <div className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}>
+                    {currentTrack?.byline || (currentTrack?.uploaderUid ? `${currentTrack.uploaderUid.substring(0, 8)}...` : 'No Artist Selected')}
+                </div>
+                <div className={`text-gray-500 text-xs truncate ${!isMinimized ? 'text-lg md:text-xs mt-1 md:mt-0' : ''} flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start' : ''}`}>
+                    {currentTrack?.title || 'Select a track to play'}
                     {currentTrack?.lyrics && !isMinimized && (
                         <button onClick={(e) => { e.stopPropagation(); setShowLyrics(true); }} className="text-gray-500 hover:text-blue-400 block md:hidden" title="View Notes">
                             <FileText className="w-4 h-4" />
                         </button>
                     )}
-                </div>
-                <div className={`text-gray-500 text-xs truncate ${!isMinimized ? 'text-lg md:text-xs mt-1 md:mt-0' : ''}`}>
-                    {currentTrack?.byline || (currentTrack?.uploaderUid ? `${currentTrack.uploaderUid.substring(0, 8)}...` : 'Select a track to play')}
                 </div>
             </div>
             

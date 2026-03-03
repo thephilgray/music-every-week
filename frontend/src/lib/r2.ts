@@ -8,7 +8,7 @@ interface UploadResult {
 /**
  * Normalizes an image file, converting HEIC/HEIF to JPEG and compressing large images.
  */
-async function processImage(file: File): Promise<Blob | File> {
+async function processImage(file: File): Promise<{ blob: Blob | File, isProcessed: boolean }> {
     let currentBlob: Blob | File = file;
     let isHeic = false;
 
@@ -40,16 +40,11 @@ async function processImage(file: File): Promise<Blob | File> {
     }
 
     // 2. Compression for large images (> 500KB)
-    // If it's HEIC, we've already "compressed" it via heic2any quality setting
-    // If it's not an image or it's small, skip
     const type = isHeic ? 'image/jpeg' : (currentBlob.type || '');
     if (!isHeic && (!type.startsWith('image/') || currentBlob.size < 500 * 1024)) {
-        return currentBlob;
+        return { blob: currentBlob, isProcessed: isHeic };
     }
 
-    // If it was HEIC, we don't need further canvas-based compression unless we want to resize
-    // For now, let's keep the logic simple: HEIC -> JPEG (done), then if still too big or needs resize:
-    
     return new Promise((resolve) => {
         const reader = new FileReader();
         reader.readAsDataURL(currentBlob);
@@ -83,15 +78,15 @@ async function processImage(file: File): Promise<Blob | File> {
                 canvas.toBlob((blob) => {
                     if (blob) {
                         console.log(`Image processed: ${(currentBlob.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB`);
-                        resolve(blob);
+                        resolve({ blob, isProcessed: true });
                     } else {
-                        resolve(currentBlob);
+                        resolve({ blob: currentBlob, isProcessed: isHeic });
                     }
                 }, 'image/jpeg', 0.85);
             };
-            img.onerror = () => resolve(currentBlob);
+            img.onerror = () => resolve({ blob: currentBlob, isProcessed: isHeic });
         };
-        reader.onerror = () => resolve(currentBlob);
+        reader.onerror = () => resolve({ blob: currentBlob, isProcessed: isHeic });
     });
 }
 
@@ -100,15 +95,28 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
   console.log(`Starting upload for ${file.name} (${sizeMB}MB). Type: ${file.type || 'unknown'}`);
   
   // 0. Optional Processing (Images only: HEIC conversion + Compression)
-  const blobToUpload = await processImage(file);
+  const { blob: blobToUpload, isProcessed } = await processImage(file);
   
-  // Determine final content type
+  // Determine final content type & filename
   let contentType = blobToUpload.type;
+  let filename = file.name;
+
+  if (isProcessed) {
+      contentType = 'image/jpeg';
+      // Change extension to .jpg for HEIC/HEIF files or processed images
+      if (filename.toLowerCase().match(/\.(heic|heif)$/)) {
+          filename = filename.replace(/\.(heic|heif)$/i, '.jpg');
+      } else if (!filename.toLowerCase().endsWith('.jpg') && !filename.toLowerCase().endsWith('.jpeg')) {
+          // If we forced it to jpeg via canvas, ensure extension matches
+          const parts = filename.split('.');
+          if (parts.length > 1) parts.pop();
+          filename = parts.join('.') + '.jpg';
+      }
+  }
+
+  // Fallback logic for types if still unknown
   if (!contentType || contentType === 'application/octet-stream') {
-      // Fallback logic for types
-      if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
-          contentType = 'image/jpeg'; // Since we processed it
-      } else if (file.type.startsWith('image/') || (blobToUpload instanceof Blob && !(blobToUpload instanceof File))) {
+      if (filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg')) {
           contentType = 'image/jpeg';
       } else {
           contentType = file.type || 'application/octet-stream';
@@ -123,7 +131,7 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      filename: file.name,
+      filename: filename, // Use possibly modified filename
       contentType: contentType,
     }),
   });

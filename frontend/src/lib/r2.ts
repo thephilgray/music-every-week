@@ -10,7 +10,7 @@ interface UploadResult {
  */
 async function processImage(file: File): Promise<{ blob: Blob | File, isProcessed: boolean }> {
     let currentBlob: Blob | File = file;
-    let isHeic = false;
+    let isProcessed = false;
 
     // 1. Handle HEIC/HEIF Conversion
     const isHeicFile = 
@@ -20,52 +20,73 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
         file.name.toLowerCase().endsWith('.heif');
 
     if (isHeicFile) {
+        console.log(`[processImage] HEIC/HEIF detected: ${file.name} (${file.type})`);
+        
+        // Strategy A: heic2any (WASM-based conversion for Chrome/Firefox)
         try {
-            console.log("Converting HEIC to JPEG (Lazy loading converter)...");
-            // Dynamic import for large package
-            const heicModule = await import('heic2any') as unknown;
-            // Support both ES module and CommonJS
-            const heic2any = (heicModule as any)?.default || heicModule;
+            console.log("[processImage] Attempting heic2any conversion...");
+            const heicModule = await import('heic2any') as any;
+            const heic2any = heicModule.default || heicModule;
             
-            // heic2any is a function, ensure it exists
             if (typeof heic2any === 'function') {
-                const converted = await (heic2any as any)({
+                const converted = await heic2any({
                     blob: file,
                     toType: 'image/jpeg',
-                    quality: 0.85
+                    quality: 0.8,
+                    multiple: true // Handle containers with multiple images
                 });
-                currentBlob = Array.isArray(converted) ? converted[0] : converted;
-                isHeic = true;
-                console.log(`HEIC Conversion successful: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
-            } else {
-                console.warn("heic2any is not a function", heic2any);
+                const result = Array.isArray(converted) ? converted[0] : converted;
+                if (result && result.size > 0) {
+                    currentBlob = result;
+                    isProcessed = true;
+                    console.log(`[processImage] heic2any success: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+                }
             }
         } catch (err) {
-            console.warn("HEIC conversion failed, attempting normal compression", err);
+            console.warn("[processImage] heic2any failed:", err);
+        }
+
+        // Strategy B: createImageBitmap (Native fallback for Safari)
+        if (!isProcessed && typeof createImageBitmap === 'function') {
+            try {
+                console.log("[processImage] Attempting native createImageBitmap fallback...");
+                const bitmap = await createImageBitmap(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const ctx = canvas.width > 0 ? canvas.getContext('2d') : null;
+                if (ctx) {
+                    ctx.drawImage(bitmap, 0, 0);
+                    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+                    if (blob) {
+                        currentBlob = blob;
+                        isProcessed = true;
+                        console.log(`[processImage] Native conversion success: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+                    }
+                }
+                bitmap.close();
+            } catch (err) {
+                console.warn("[processImage] Native conversion fallback failed:", err);
+            }
         }
     }
 
-    // 2. Compression for large images (> 500KB)
-    // Even if it's HEIC and failed conversion, the browser (Safari) MIGHT still be able to 
-    // decode it natively via <img> or canvas. Let's try.
-    const type = isHeic ? 'image/jpeg' : (currentBlob.type || '');
+    // 2. Standard Compression/Resize for large images (> 500KB)
+    // If it's already processed HEIC, it's already compressed.
+    // Otherwise, if it's a common renderable format and large, resize it.
+    const type = isProcessed ? 'image/jpeg' : (currentBlob.type || '');
+    const isRenderable = type.startsWith('image/') && !type.includes('heic') && !type.includes('heif');
     
-    // If it's not a common renderable format or it's a large image, process it via canvas
-    const isCommonFormat = type.startsWith('image/') && !type.includes('heic') && !type.includes('heif');
-    if (!isHeic && isCommonFormat && currentBlob.size < 500 * 1024) {
-        return { blob: currentBlob, isProcessed: false };
-    }
-
-    return new Promise((resolve) => {
-        const objectUrl = URL.createObjectURL(currentBlob);
-        const img = new Image();
-        
-        img.onload = () => {
+    if (!isProcessed && isRenderable && currentBlob.size > 500 * 1024) {
+        try {
+            console.log(`[processImage] Compressing large image: ${currentBlob.size / 1024}KB`);
+            const bitmap = await createImageBitmap(currentBlob);
             const canvas = document.createElement('canvas');
+            
             const MAX_WIDTH = 1200;
             const MAX_HEIGHT = 1200;
-            let width = img.width;
-            let height = img.height;
+            let width = bitmap.width;
+            let height = bitmap.height;
 
             if (width > height) {
                 if (width > MAX_WIDTH) {
@@ -82,27 +103,22 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
-            ctx?.drawImage(img, 0, 0, width, height);
-
-            canvas.toBlob((blob) => {
-                URL.revokeObjectURL(objectUrl);
+            if (ctx) {
+                ctx.drawImage(bitmap, 0, 0, width, height);
+                const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.85));
                 if (blob) {
-                    console.log(`Image processed via canvas: ${(currentBlob.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB. Type: ${blob.type}`);
-                    resolve({ blob, isProcessed: true });
-                } else {
-                    resolve({ blob: currentBlob, isProcessed: isHeic });
+                    currentBlob = blob;
+                    isProcessed = true;
+                    console.log(`[processImage] Compression success: ${width}x${height}, ${(blob.size / 1024).toFixed(1)}KB`);
                 }
-            }, 'image/jpeg', 0.85);
-        };
+            }
+            bitmap.close();
+        } catch (err) {
+            console.warn("[processImage] Compression failed:", err);
+        }
+    }
 
-        img.onerror = (e) => {
-            URL.revokeObjectURL(objectUrl);
-            console.warn("Image decoding failed in fallback canvas processing", e);
-            resolve({ blob: currentBlob, isProcessed: isHeic });
-        };
-
-        img.src = objectUrl;
-    });
+    return { blob: currentBlob, isProcessed };
 }
 
 export async function uploadToR2(file: File): Promise<UploadResult> {
@@ -122,7 +138,6 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
       if (filename.toLowerCase().match(/\.(heic|heif)$/)) {
           filename = filename.replace(/\.(heic|heif)$/i, '.jpg');
       } else if (!filename.toLowerCase().endsWith('.jpg') && !filename.toLowerCase().endsWith('.jpeg')) {
-          // If we forced it to jpeg via canvas, ensure extension matches
           const parts = filename.split('.');
           if (parts.length > 1) parts.pop();
           filename = parts.join('.') + '.jpg';
@@ -133,6 +148,8 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
   if (!contentType || contentType === 'application/octet-stream') {
       if (filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg')) {
           contentType = 'image/jpeg';
+      } else if (filename.toLowerCase().endsWith('.png')) {
+          contentType = 'image/png';
       } else {
           contentType = file.type || 'application/octet-stream';
       }
@@ -141,12 +158,12 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
   const isAudio = contentType.startsWith('audio/');
 
   // 1. Get Presigned URL
-  console.log("Fetching presigned URL from API...");
+  console.log(`[uploadToR2] Requesting presigned URL for ${filename} (${contentType})`);
   const response = await fetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      filename: filename, // Use possibly modified filename
+      filename: filename,
       contentType: contentType,
     }),
   });
@@ -157,7 +174,7 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
   }
 
   const { url: signedUrl, key } = await response.json();
-  console.log("Presigned URL received. Starting R2 PUT request...");
+  console.log("[uploadToR2] Presigned URL received. Starting R2 PUT request...");
 
   // 2. Upload to R2
   const controller = new AbortController();
@@ -180,13 +197,13 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
     if (!uploadResponse.ok) {
       throw new Error(`R2 Server Error: ${uploadResponse.status} ${uploadResponse.statusText}`);
     }
-    console.log("Upload to R2 successful.");
+    console.log("[uploadToR2] Upload successful.");
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
         const timeStr = isAudio ? "5 minutes" : "2 minutes";
         throw new Error(`Upload timed out after ${timeStr}. This usually happens on slow connections with large files.`);
     }
-    console.error("Fetch Error during R2 upload:", err);
+    console.error("[uploadToR2] Fetch Error:", err);
     throw err;
   }
 

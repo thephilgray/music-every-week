@@ -57,14 +57,16 @@ async function compressImage(file: File): Promise<Blob | File> {
 }
 
 export async function uploadToR2(file: File): Promise<UploadResult> {
-  console.log(`Starting upload for ${file.name} (${(file.size / 1024).toFixed(1)}KB)`);
+  const isAudio = file.type.startsWith('audio/');
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+  console.log(`Starting upload for ${file.name} (${sizeMB}MB). Type: ${file.type}`);
   
-  // 0. Optional Compression
+  // 0. Optional Compression (Images only)
   const blobToUpload = await compressImage(file);
-  const contentType = blobToUpload instanceof File ? blobToUpload.type : 'image/jpeg';
+  const contentType = blobToUpload instanceof File ? blobToUpload.type : (file.type.startsWith('image/') ? 'image/jpeg' : file.type);
 
   // 1. Get Presigned URL
-  console.log("Fetching presigned URL...");
+  console.log("Fetching presigned URL from API...");
   const response = await fetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -80,11 +82,13 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
   }
 
   const { url: signedUrl, key } = await response.json();
-  console.log("Presigned URL received. Uploading to R2...");
+  console.log("Presigned URL received. Starting R2 PUT request...");
 
   // 2. Upload to R2
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+  // Audio files get 5 minutes, others 2 minutes
+  const timeoutMs = isAudio ? 300000 : 120000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const uploadResponse = await fetch(signedUrl, {
@@ -99,13 +103,15 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
     clearTimeout(timeoutId);
 
     if (!uploadResponse.ok) {
-      throw new Error(`Failed to upload file to R2: ${uploadResponse.statusText}`);
+      throw new Error(`R2 Server Error: ${uploadResponse.status} ${uploadResponse.statusText}`);
     }
     console.log("Upload to R2 successful.");
   } catch (err: any) {
     if (err.name === 'AbortError') {
-        throw new Error("Upload timed out after 60 seconds. Please check your internet connection.");
+        const timeStr = isAudio ? "5 minutes" : "2 minutes";
+        throw new Error(`Upload timed out after ${timeStr}. This usually happens on slow connections with large files.`);
     }
+    console.error("Fetch Error during R2 upload:", err);
     throw err;
   }
 

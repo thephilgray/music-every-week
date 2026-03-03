@@ -29,6 +29,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [artFile, setArtFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStep, setUploadStep] = useState<string>(''); // Added for better feedback
   const [error, setError] = useState<string | null>(null);
   
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -205,14 +206,21 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         // 1. Handle Audio (New Upload or Keep Existing)
         if (audioFile) {
             // Generate Waveform
+            setUploadStep('Processing audio...');
             try {
-                waveformData = await generateWaveform(audioFile);
+                // Defensive timeout for waveform generation
+                const waveformPromise = generateWaveform(audioFile);
+                const timeoutPromise = new Promise<number[]>((_, reject) => 
+                    setTimeout(() => reject(new Error("Waveform timeout")), 15000)
+                );
+                waveformData = await Promise.race([waveformPromise, timeoutPromise]) as number[];
             } catch (e) {
-                console.warn("Waveform generation failed", e);
+                console.warn("Waveform generation failed or timed out", e);
                 waveformData = [];
             }
 
             // Upload to R2
+            setUploadStep(`Uploading audio (${(audioFile.size / (1024 * 1024)).toFixed(1)}MB)...`);
             const { url } = await uploadToR2(audioFile);
             audioUrlStr = url;
         }
@@ -220,11 +228,13 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         // 2. Handle Art (New Upload or Keep Existing)
         let artworkUrlStr = existingSubmission?.artworkUrl || '';
         if (artFile) {
+            setUploadStep('Uploading artwork...');
             const { url } = await uploadToR2(artFile);
             artworkUrlStr = url;
         }
 
         // 3. Prepare Data for Firestore
+        setUploadStep('Saving details...');
         const collaboratorsMap: Record<string, boolean> = {};
         collaborators.forEach(c => collaboratorsMap[c] = true);
 
@@ -686,7 +696,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         {isUploading ? (
                             <>
                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                {existingSubmission ? 'Updating...' : 'Uploading...'}
+                                {uploadStep || (existingSubmission ? 'Updating...' : 'Uploading...')}
                             </>
                         ) : (
                             <>

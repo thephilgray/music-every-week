@@ -9,7 +9,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import type { FileRequest, Submission, UserProfile } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 import { db } from '../lib/firebase'; 
-import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc, deleteDoc } from 'firebase/firestore'; 
+import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc, deleteDoc, orderBy } from 'firebase/firestore'; 
 
 interface ParticipantRow {
     id: string;
@@ -22,7 +22,7 @@ interface ParticipantRow {
 }
 
 export function CreatorTools() {
-  const { user, participantEmail, isLoading } = useAuth(); 
+  const { user, participantEmail, isLoading, isAdmin } = useAuth(); 
   const { success, error } = useToast();
 
   
@@ -32,6 +32,7 @@ export function CreatorTools() {
   // Requests Data
   const [requestsByUid, setRequestsByUid] = useState<FileRequest[]>([]);
   const [requestsByEmail, setRequestsByEmail] = useState<FileRequest[]>([]);
+  const [requestsAll, setRequestsAll] = useState<FileRequest[]>([]); // New state for admins
   const [myRequests, setMyRequests] = useState<FileRequest[]>([]);
 
   const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
@@ -77,12 +78,13 @@ export function CreatorTools() {
       const combined = new Map<string, FileRequest>();
       requestsByUid.forEach(r => combined.set(r.id!, r));
       requestsByEmail.forEach(r => combined.set(r.id!, r));
+      requestsAll.forEach(r => combined.set(r.id!, r)); // Admins see everything
       
       const sorted = Array.from(combined.values()).sort((a, b) => 
           getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt)
       );
       setMyRequests(sorted);
-  }, [requestsByUid, requestsByEmail]);
+  }, [requestsByUid, requestsByEmail, requestsAll]);
 
   // Combine Submissions
   useEffect(() => {
@@ -141,8 +143,26 @@ export function CreatorTools() {
         }));
     }
 
+    // 3. Query for ALL requests (Admin only)
+    if (isAdmin) {
+        const qAll = query(
+            collection(db, 'requests'),
+            orderBy('createdAt', 'desc')
+        );
+        unsubs.push(onSnapshot(qAll, (snapshot) => {
+            const res: FileRequest[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.deleted) return;
+                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
+            });
+            console.log("CreatorTools: All Requests (Admin):", res.length);
+            setRequestsAll(res);
+        }));
+    }
+
     return () => unsubs.forEach(u => u());
-  }, [user, participantEmail]);
+  }, [user, participantEmail, isAdmin]);
 
   // Fetch Submissions (Dual Query)
   useEffect(() => {

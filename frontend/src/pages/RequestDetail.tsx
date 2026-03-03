@@ -224,10 +224,9 @@ export function RequestDetail() {
 
   // Determine Access & Roles
   const isOwner = useMemo(() => {
-      if (!request || !participantEmail) return false;
-      return request.hostEmail?.toLowerCase() === participantEmail.toLowerCase();
-  }, [request, participantEmail]);
-
+     if (!request || !participantEmail) return false;
+     return isAdmin || request.hostEmail?.toLowerCase() === participantEmail.toLowerCase();
+  }, [request, participantEmail, isAdmin]);
   const isParticipant = useMemo(() => {
       if (!request || !participantEmail) return false;
       if (isOwner) return true;

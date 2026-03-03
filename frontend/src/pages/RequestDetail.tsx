@@ -5,6 +5,7 @@ import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
 import { EditRequest } from '../components/EditRequest'; // Added import
 import { SubmissionCard } from '../components/SubmissionCard';
@@ -19,6 +20,7 @@ export function RequestDetail() {
   const location = useLocation(); // Added useLocation
   const { participantEmail, isAdmin, settings } = useAuth();
   const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
+  const { toast } = useToast();
   
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [hostName, setHostName] = useState<string>('');
@@ -32,6 +34,7 @@ export function RequestDetail() {
   
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isEditRequestOpen, setIsEditRequestOpen] = useState(false); // Added state
+  const [isFilterModalForced, setIsFilterModalForced] = useState(false); // Added state
 
   // Filter/Sort States
   const [showFilterPopover, setShowFilterPopover] = useState(false);
@@ -57,6 +60,39 @@ export function RequestDetail() {
       filterByFeedbackFocus.length > 0
     );
   }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus]);
+
+  const handleClearAllFilters = useCallback(() => {
+    setSearchTerm('');
+    setSortBy('newest');
+    setFilterByAI(false);
+    setFilterByFragile(false);
+    setFilterByUnlistened(false);
+    setFilterByFeedbackFocus([]);
+  }, []);
+
+  const handleEditFiltersFromToast = useCallback(() => {
+    setIsFilterModalForced(true);
+    setShowFilterPopover(true);
+  }, []);
+
+  // Show filter notification toast on land
+  useEffect(() => {
+    if (areFiltersActive) {
+        toast("Filters are active from a previous session.", {
+            duration: 15000,
+            actions: [
+                {
+                    label: "Clear All",
+                    onClick: handleClearAllFilters
+                },
+                {
+                    label: "Edit Filters",
+                    onClick: handleEditFiltersFromToast
+                }
+            ]
+        });
+    }
+  }, []); // Only on mount
 
   // Debounce search term
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
@@ -369,15 +405,6 @@ export function RequestDetail() {
       }
   }, [visibleSubmissions, currentTrack]);
 
-  const handleClearAllFilters = useCallback(() => {
-    setSearchTerm('');
-    setSortBy('newest');
-    setFilterByAI(false);
-    setFilterByFragile(false);
-    setFilterByUnlistened(false);
-    setFilterByFeedbackFocus([]);
-  }, []);
-
   const handlePlayAll = () => {
       if (!request) return;
       
@@ -609,7 +636,11 @@ export function RequestDetail() {
                                 setFilterByUnlistened={setFilterByUnlistened}
                                 filterByFeedbackFocus={filterByFeedbackFocus}
                                 setFilterByFeedbackFocus={setFilterByFeedbackFocus}
-                                onClose={() => setShowFilterPopover(false)}
+                                onClose={() => {
+                                    setShowFilterPopover(false);
+                                    setIsFilterModalForced(false);
+                                }}
+                                forceModal={isFilterModalForced}
                             />
                         )}
                     </div>

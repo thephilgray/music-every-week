@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useToast } from '../contexts/ToastContext';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy, documentId } from 'firebase/firestore';
 import type { Playlist, Submission, FileRequest } from '../types';
@@ -29,7 +30,7 @@ export function Playlists() {
 // EXISTING GunDB LIST VIEW -> Refactored for Firestore & Migration
 // ==========================================
 function PlaylistList() {
-  const { user, participantEmail, isAdmin } = useAuth(); // Added isAdmin
+  const { user, participantEmail } = useAuth(); // Added participantEmail
   const { play } = usePlayer();
   
   // State for different playlist sources
@@ -171,11 +172,14 @@ function PlaylistList() {
                     if (data.deleted) return;
 
                     // Filter based on live date or deadline
-                    const liveDate = data.playlistLiveDate ? new Date(data.playlistLiveDate).getTime() : (data.deadline ? new Date(data.deadline).getTime() : 0);
-                    const isOwner = uid && data.ownerPub === uid;
+                    const playlistLiveTime = getTimestampAsNumber(data.playlistLiveDate);
+                    const deadlineTime = getTimestampAsNumber(data.deadline);
+                    const liveDate = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
                     
-                    // Only hide if NOT owner AND NOT admin AND now < liveDate
-                    if (!isOwner && !isAdmin && now < liveDate) return;
+                    // Hide if a date is set AND now < liveDate
+                    // We remove the !isOwner and !isAdmin check here because even admins 
+                    // prefer to keep the results list clean until the live date.
+                    if (liveDate > 0 && now < liveDate) return;
                     
                     uniqueRequests.set(doc.id, { 
                         id: doc.id, 
@@ -570,6 +574,7 @@ function PlaylistList() {
 function PlaylistDetail({ id }: { id: string }) {
     const { participantEmail, isAdmin } = useAuth();
     const { play, currentTrack, isPlaying, pause } = usePlayer(); // removed unused 'resume'
+    const { toast } = useToast();
     
     const [loading, setLoading] = useState(true);
     const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -584,6 +589,7 @@ function PlaylistDetail({ id }: { id: string }) {
     
     // Filters State
     const [showFilterPopover, setShowFilterPopover] = useState(false);
+    const [isFilterModalForced, setIsFilterModalForced] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>('newest');
     const [filterByAI, setFilterByAI] = useState(false);
@@ -649,6 +655,30 @@ function PlaylistDetail({ id }: { id: string }) {
         setFilterByFeedbackFocus([]);
     }, []);
 
+    const handleEditFiltersFromToast = useCallback(() => {
+        setIsFilterModalForced(true);
+        setShowFilterPopover(true);
+    }, []);
+
+    // Show filter notification toast on land
+    useEffect(() => {
+        if (areFiltersActive) {
+            toast("Filters are active from a previous session.", {
+                duration: 15000,
+                actions: [
+                    {
+                        label: "Clear All",
+                        onClick: handleClearAllFilters
+                    },
+                    {
+                        label: "Edit Filters",
+                        onClick: handleEditFiltersFromToast
+                    }
+                ]
+            });
+        }
+    }, []); // Only on mount
+
     const scrolledRef = useRef(false);
 
     // Filter Logic
@@ -692,9 +722,12 @@ function PlaylistDetail({ id }: { id: string }) {
         const isHost = request?.hostEmail?.toLowerCase() === participantEmail?.toLowerCase() || isAdmin;
         const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
         
-        if (!isHost && request?.playlistLiveDate) {
-            const liveDate = new Date(request.playlistLiveDate).getTime();
-            if (Date.now() < liveDate) {
+        const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
+        const deadlineTime = getTimestampAsNumber(request?.deadline);
+        const effectiveLiveDate = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
+
+        if (!isHost && effectiveLiveDate > 0) {
+            if (Date.now() < effectiveLiveDate) {
                 if (hasSubmitted) {
                     // Preview Mode: Show own track + random others
                     const seed = `${id}-${participantEmail}`;
@@ -800,10 +833,12 @@ function PlaylistDetail({ id }: { id: string }) {
     }
 
     // 3. Existing Preview/Live Logic (Refined)
-    const effectiveLiveDate = request?.playlistLiveDate ? new Date(request.playlistLiveDate).getTime() : (request?.deadline ? new Date(request.deadline).getTime() : 0);
+    const playlistLiveTime_check = getTimestampAsNumber(request?.playlistLiveDate);
+    const deadlineTime_check = getTimestampAsNumber(request?.deadline);
+    const effectiveLiveDate_check = playlistLiveTime_check > 0 ? playlistLiveTime_check : deadlineTime_check;
     
-    if (!isHost && effectiveLiveDate > 0) {
-        if (Date.now() < effectiveLiveDate) {
+    if (!isHost && effectiveLiveDate_check > 0) {
+        if (Date.now() < effectiveLiveDate_check) {
             if (hasSubmitted) {
                 // Preview Mode: Handled in computedVisibleSubmissions or here? 
                 // computedVisibleSubmissions handles the filtering/shuffling.
@@ -899,7 +934,11 @@ function PlaylistDetail({ id }: { id: string }) {
                              setFilterByUnlistened={setFilterByUnlistened}
                              filterByFeedbackFocus={filterByFeedbackFocus}
                              setFilterByFeedbackFocus={setFilterByFeedbackFocus}
-                             onClose={() => setShowFilterPopover(false)}
+                             onClose={() => {
+                                 setShowFilterPopover(false);
+                                 setIsFilterModalForced(false);
+                             }}
+                             forceModal={isFilterModalForced}
                          />
                      )}
                  </div>

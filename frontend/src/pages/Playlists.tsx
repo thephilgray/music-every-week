@@ -29,7 +29,7 @@ export function Playlists() {
 // EXISTING GunDB LIST VIEW -> Refactored for Firestore & Migration
 // ==========================================
 function PlaylistList() {
-  const { user, participantEmail } = useAuth(); // Added participantEmail
+  const { user, participantEmail, isAdmin } = useAuth(); // Added isAdmin
   const { play } = usePlayer();
   
   // State for different playlist sources
@@ -97,14 +97,10 @@ function PlaylistList() {
       const fetchRequests = async () => {
           setLoadingHosted(true);
           try {
-            // A. Public Requests (Only Volunteer mode is truly public without invitation)
-            const qPublic = query(
-                collection(db, 'requests'), 
-                where('accessMode', '==', 'volunteer'), 
-                orderBy('createdAt', 'desc')
-            );
+            // 1. (REMOVED) Public browsing query. 
+            // Requests are now only shown if you are an owner, invited, or have contributed.
 
-            // B. Shared Requests (Invite/Volunteer where I'm added)
+            // A. Shared Requests (Invite/Volunteer/Direct where I'm added)
             let qShared = null;
             if (email) {
                 qShared = query(
@@ -114,7 +110,7 @@ function PlaylistList() {
                 );
             }
 
-            // C. Contributed Requests (Where I submitted)
+            // B. Contributed Requests (Where I submitted)
             let contributedIds: string[] = [];
             
             if (email || uid) {
@@ -145,9 +141,16 @@ function PlaylistList() {
                 }
             }
 
+            // C. Owned Requests (Add these to Hosted section too)
+            let qOwned = null;
+            if (uid) {
+                qOwned = query(collection(db, 'requests'), where('ownerPub', '==', uid));
+            }
+
             // Execute Queries
-            const promises = [getDocs(qPublic)];
+            const promises = [];
             if (qShared) promises.push(getDocs(qShared));
+            if (qOwned) promises.push(getDocs(qOwned));
             
             // Batch fetch contributed requests by ID
             if (contributedIds.length > 0) {
@@ -160,11 +163,19 @@ function PlaylistList() {
             const snapshots = await Promise.all(promises);
             
             // Merge and Deduplicate
+            const now = Date.now();
             const uniqueRequests = new Map<string, FileRequest>();
             snapshots.forEach(snap => {
                 snap.forEach(doc => {
-                    const data = doc.data();
+                    const data = doc.data() as FileRequest;
                     if (data.deleted) return;
+
+                    // Filter based on live date or deadline
+                    const liveDate = data.playlistLiveDate ? new Date(data.playlistLiveDate).getTime() : (data.deadline ? new Date(data.deadline).getTime() : 0);
+                    const isOwner = uid && data.ownerPub === uid;
+                    
+                    // Only hide if NOT owner AND NOT admin AND now < liveDate
+                    if (!isOwner && !isAdmin && now < liveDate) return;
                     
                     uniqueRequests.set(doc.id, { 
                         id: doc.id, 
@@ -176,7 +187,7 @@ function PlaylistList() {
 
             // Sort by createdAt desc
             const sorted = Array.from(uniqueRequests.values()).sort((a, b) => 
-                (b.createdAt as number) - (a.createdAt as number)
+                (getTimestampAsNumber(b.createdAt)) - (getTimestampAsNumber(a.createdAt))
             );
             
             setHostedRequests(sorted);
@@ -789,9 +800,10 @@ function PlaylistDetail({ id }: { id: string }) {
     }
 
     // 3. Existing Preview/Live Logic (Refined)
-    if (!isHost && request?.playlistLiveDate) {
-        const liveDate = new Date(request.playlistLiveDate).getTime();
-        if (Date.now() < liveDate) {
+    const effectiveLiveDate = request?.playlistLiveDate ? new Date(request.playlistLiveDate).getTime() : (request?.deadline ? new Date(request.deadline).getTime() : 0);
+    
+    if (!isHost && effectiveLiveDate > 0) {
+        if (Date.now() < effectiveLiveDate) {
             if (hasSubmitted) {
                 // Preview Mode: Handled in computedVisibleSubmissions or here? 
                 // computedVisibleSubmissions handles the filtering/shuffling.

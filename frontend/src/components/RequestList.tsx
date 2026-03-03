@@ -20,11 +20,11 @@ export function RequestList({ requests, loading, filter = 'active' }: RequestLis
       const currentUserEmail = user?.email || participantEmail;
       
       const isOwner = req.hostEmail && currentUserEmail && req.hostEmail === currentUserEmail;
-      const isDirect = req.accessMode === 'direct' || req.accessMode === 'public' || req.accessMode === 'volunteer'; 
+      const isPublicVolunteerPool = req.accessMode === 'volunteer'; 
       const isJoined = currentUserEmail && req.accessList?.includes(currentUserEmail);
 
-      // 1. Privacy Check: Must be Admin, Owner, in Access List, or Public
-      if (!isAdmin && !isOwner && !isJoined && !isDirect) return false;
+      // 1. Privacy Check: Must be Admin, Owner, in Access List, or a Public Volunteer Pool
+      if (!isAdmin && !isOwner && !isJoined && !isPublicVolunteerPool) return false;
       
       if (filter === 'active') {
           return !isExpired; 

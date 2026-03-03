@@ -23,70 +23,85 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
         try {
             console.log("Converting HEIC to JPEG (Lazy loading converter)...");
             // Dynamic import for large package
-            const heicModule = await import('heic2any');
-            const heic2any = heicModule.default;
+            const heicModule = await import('heic2any') as unknown;
+            // Support both ES module and CommonJS
+            const heic2any = (heicModule as any)?.default || heicModule;
             
-            const converted = await heic2any({
-                blob: file,
-                toType: 'image/jpeg',
-                quality: 0.85
-            });
-            currentBlob = Array.isArray(converted) ? converted[0] : converted;
-            isHeic = true;
-            console.log(`HEIC Conversion successful: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+            // heic2any is a function, ensure it exists
+            if (typeof heic2any === 'function') {
+                const converted = await (heic2any as any)({
+                    blob: file,
+                    toType: 'image/jpeg',
+                    quality: 0.85
+                });
+                currentBlob = Array.isArray(converted) ? converted[0] : converted;
+                isHeic = true;
+                console.log(`HEIC Conversion successful: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+            } else {
+                console.warn("heic2any is not a function", heic2any);
+            }
         } catch (err) {
             console.warn("HEIC conversion failed, attempting normal compression", err);
         }
     }
 
     // 2. Compression for large images (> 500KB)
+    // Even if it's HEIC and failed conversion, the browser (Safari) MIGHT still be able to 
+    // decode it natively via <img> or canvas. Let's try.
     const type = isHeic ? 'image/jpeg' : (currentBlob.type || '');
-    if (!isHeic && (!type.startsWith('image/') || currentBlob.size < 500 * 1024)) {
-        return { blob: currentBlob, isProcessed: isHeic };
+    
+    // If it's not a common renderable format or it's a large image, process it via canvas
+    const isCommonFormat = type.startsWith('image/') && !type.includes('heic') && !type.includes('heif');
+    if (!isHeic && isCommonFormat && currentBlob.size < 500 * 1024) {
+        return { blob: currentBlob, isProcessed: false };
     }
 
     return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(currentBlob);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 1200;
-                const MAX_HEIGHT = 1200;
-                let width = img.width;
-                let height = img.height;
+        const objectUrl = URL.createObjectURL(currentBlob);
+        const img = new Image();
+        
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 1200;
+            const MAX_HEIGHT = 1200;
+            let width = img.width;
+            let height = img.height;
 
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
+            if (width > height) {
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
                 }
+            } else {
+                if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                }
+            }
 
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
 
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        console.log(`Image processed: ${(currentBlob.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB`);
-                        resolve({ blob, isProcessed: true });
-                    } else {
-                        resolve({ blob: currentBlob, isProcessed: isHeic });
-                    }
-                }, 'image/jpeg', 0.85);
-            };
-            img.onerror = () => resolve({ blob: currentBlob, isProcessed: isHeic });
+            canvas.toBlob((blob) => {
+                URL.revokeObjectURL(objectUrl);
+                if (blob) {
+                    console.log(`Image processed via canvas: ${(currentBlob.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB. Type: ${blob.type}`);
+                    resolve({ blob, isProcessed: true });
+                } else {
+                    resolve({ blob: currentBlob, isProcessed: isHeic });
+                }
+            }, 'image/jpeg', 0.85);
         };
-        reader.onerror = () => resolve({ blob: currentBlob, isProcessed: isHeic });
+
+        img.onerror = (e) => {
+            URL.revokeObjectURL(objectUrl);
+            console.warn("Image decoding failed in fallback canvas processing", e);
+            resolve({ blob: currentBlob, isProcessed: isHeic });
+        };
+
+        img.src = objectUrl;
     });
 }
 

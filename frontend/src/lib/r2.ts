@@ -24,26 +24,37 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
         
         // Strategy A: heic2any (WASM-based conversion for Chrome/Firefox)
         try {
-            console.log("[processImage] Attempting heic2any conversion...");
+            console.log("[processImage] Attempting heic2any conversion (latest)...");
             const heicModule = await import('heic2any') as any;
             const heic2any = heicModule.default || heicModule;
             
             if (typeof heic2any === 'function') {
-                const converted = await heic2any({
+                const options = {
                     blob: file,
                     toType: 'image/jpeg',
                     quality: 0.8,
                     multiple: true // Handle containers with multiple images
-                });
+                };
+                console.log("[processImage] Calling heic2any with options:", { ...options, blob: 'Blob' });
+                const converted = await heic2any(options);
+                
+                // If multiple: true, it's an array, otherwise a single blob
                 const result = Array.isArray(converted) ? converted[0] : converted;
+                
                 if (result && result.size > 0) {
                     currentBlob = result;
                     isProcessed = true;
-                    console.log(`[processImage] heic2any success: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+                    console.log(`[processImage] heic2any success: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB. Type: ${currentBlob.type}`);
+                } else {
+                    console.warn("[processImage] heic2any returned empty result", converted);
                 }
+            } else {
+                console.error("[processImage] heic2any is not a function after import", heic2any);
             }
-        } catch (err) {
-            console.warn("[processImage] heic2any failed:", err);
+        } catch (err: any) {
+            console.error("[processImage] heic2any failed:", err);
+            if (err.message) console.error("[processImage] Error message:", err.message);
+            if (err.code) console.error("[processImage] Error code:", err.code);
         }
 
         // Strategy B: createImageBitmap (Native fallback for Safari)

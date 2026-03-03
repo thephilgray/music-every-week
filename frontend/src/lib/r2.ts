@@ -5,15 +5,54 @@ interface UploadResult {
   key: string;
 }
 
-async function compressImage(file: File): Promise<Blob | File> {
-    // Only compress images that are large (> 500KB)
-    if (!file.type.startsWith('image/') || file.size < 500 * 1024) {
-        return file;
+/**
+ * Normalizes an image file, converting HEIC/HEIF to JPEG and compressing large images.
+ */
+async function processImage(file: File): Promise<Blob | File> {
+    let currentBlob: Blob | File = file;
+    let isHeic = false;
+
+    // 1. Handle HEIC/HEIF Conversion
+    const isHeicFile = 
+        file.type === 'image/heic' || 
+        file.type === 'image/heif' || 
+        file.name.toLowerCase().endsWith('.heic') || 
+        file.name.toLowerCase().endsWith('.heif');
+
+    if (isHeicFile) {
+        try {
+            console.log("Converting HEIC to JPEG (Lazy loading converter)...");
+            // Dynamic import for large package
+            const heicModule = await import('heic2any');
+            const heic2any = heicModule.default;
+            
+            const converted = await heic2any({
+                blob: file,
+                toType: 'image/jpeg',
+                quality: 0.85
+            });
+            currentBlob = Array.isArray(converted) ? converted[0] : converted;
+            isHeic = true;
+            console.log(`HEIC Conversion successful: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+        } catch (err) {
+            console.warn("HEIC conversion failed, attempting normal compression", err);
+        }
     }
 
+    // 2. Compression for large images (> 500KB)
+    // If it's HEIC, we've already "compressed" it via heic2any quality setting
+    // If it's not an image or it's small, skip
+    const type = isHeic ? 'image/jpeg' : (currentBlob.type || '');
+    if (!isHeic && (!type.startsWith('image/') || currentBlob.size < 500 * 1024)) {
+        return currentBlob;
+    }
+
+    // If it was HEIC, we don't need further canvas-based compression unless we want to resize
+    // For now, let's keep the logic simple: HEIC -> JPEG (done), then if still too big or needs resize:
+    
     return new Promise((resolve) => {
         const reader = new FileReader();
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(currentBlob);
         reader.onload = (event) => {
             const img = new Image();
             img.src = event.target?.result as string;
@@ -43,27 +82,40 @@ async function compressImage(file: File): Promise<Blob | File> {
 
                 canvas.toBlob((blob) => {
                     if (blob) {
-                        console.log(`Image compressed: ${(file.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB`);
+                        console.log(`Image processed: ${(currentBlob.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB`);
                         resolve(blob);
                     } else {
-                        resolve(file);
+                        resolve(currentBlob);
                     }
-                }, 'image/jpeg', 0.85); // Compress to JPEG for better size
+                }, 'image/jpeg', 0.85);
             };
-            img.onerror = () => resolve(file);
+            img.onerror = () => resolve(currentBlob);
         };
-        reader.onerror = () => resolve(file);
+        reader.onerror = () => resolve(currentBlob);
     });
 }
 
 export async function uploadToR2(file: File): Promise<UploadResult> {
-  const isAudio = file.type.startsWith('audio/');
   const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-  console.log(`Starting upload for ${file.name} (${sizeMB}MB). Type: ${file.type}`);
+  console.log(`Starting upload for ${file.name} (${sizeMB}MB). Type: ${file.type || 'unknown'}`);
   
-  // 0. Optional Compression (Images only)
-  const blobToUpload = await compressImage(file);
-  const contentType = blobToUpload instanceof File ? blobToUpload.type : (file.type.startsWith('image/') ? 'image/jpeg' : file.type);
+  // 0. Optional Processing (Images only: HEIC conversion + Compression)
+  const blobToUpload = await processImage(file);
+  
+  // Determine final content type
+  let contentType = blobToUpload.type;
+  if (!contentType || contentType === 'application/octet-stream') {
+      // Fallback logic for types
+      if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+          contentType = 'image/jpeg'; // Since we processed it
+      } else if (file.type.startsWith('image/') || (blobToUpload instanceof Blob && !(blobToUpload instanceof File))) {
+          contentType = 'image/jpeg';
+      } else {
+          contentType = file.type || 'application/octet-stream';
+      }
+  }
+
+  const isAudio = contentType.startsWith('audio/');
 
   // 1. Get Presigned URL
   console.log("Fetching presigned URL from API...");
@@ -106,8 +158,8 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
       throw new Error(`R2 Server Error: ${uploadResponse.status} ${uploadResponse.statusText}`);
     }
     console.log("Upload to R2 successful.");
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
         const timeStr = isAudio ? "5 minutes" : "2 minutes";
         throw new Error(`Upload timed out after ${timeStr}. This usually happens on slow connections with large files.`);
     }

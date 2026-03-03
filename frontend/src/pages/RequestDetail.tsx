@@ -634,7 +634,7 @@ export function RequestDetail() {
                 <div className="flex flex-wrap items-center justify-between gap-y-4 mb-4 relative"> {/* Made this parent div relative */}
                     <h3 className="text-xl font-bold text-gray-200 whitespace-nowrap pr-4">Submissions ({visibleSubmissions.length})</h3>
                     <div className="flex gap-2 items-center flex-shrink-0"> {/* Flex container for play/shuffle/filter buttons */}
-                        {visibleSubmissions.length > 0 && (
+                        {canSeeFilters && visibleSubmissions.length > 0 && (
                             <button
                                 onClick={handlePlayAll}
                                 className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition border border-gray-700 hover:border-gray-600 whitespace-nowrap"
@@ -650,7 +650,7 @@ export function RequestDetail() {
                                 )}
                             </button>
                         )}
-                        {visibleSubmissions.length > 0 && (
+                        {canSeeFilters && visibleSubmissions.length > 0 && (
                             <button
                                 onClick={handleShufflePlay}
                                 className="p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition flex-shrink-0" title="Shuffle"

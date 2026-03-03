@@ -17,18 +17,34 @@ const S3 = new S3Client({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const startTime = Date.now();
+  console.log(`[Upload API] START - Method: ${req.method}`);
+  
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
 
   try {
-    const { filename, contentType } = req.body;
+    // Robust body parsing for Vercel Node runtime
+    let body = req.body;
+    if (typeof body === 'string') {
+        try {
+            body = JSON.parse(body);
+        } catch (e) {
+            console.error('[Upload API] Failed to parse body string', e);
+        }
+    }
+
+    const { filename, contentType } = body || {};
+    console.log(`[Upload API] Received: filename="${filename}", contentType="${contentType}"`);
 
     if (!filename || !contentType) {
+        console.error('[Upload API] Error: Missing filename or contentType', { body });
         return res.status(400).send('Missing filename or contentType');
     }
 
     const key = `authless/${Date.now()}_${filename.replace(/\s+/g, '_')}`;
+    console.log(`[Upload API] Generated Key: "${key}"`);
     
     const command = new PutObjectCommand({
       Bucket: R2_BUCKET_NAME,
@@ -36,11 +52,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ContentType: contentType,
     });
 
+    console.log('[Upload API] Requesting Presigned URL from S3/R2...');
     const url = await getSignedUrl(S3, command, { expiresIn: 3600 });
+    
+    const duration = Date.now() - startTime;
+    console.log(`[Upload API] SUCCESS - Presigned URL generated in ${duration}ms`);
 
     return res.status(200).json({ url, key });
   } catch (error: unknown) {
-    console.error("Upload Error", error);
+    const duration = Date.now() - startTime;
+    console.error(`[Upload API] ERROR after ${duration}ms:`, error);
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: message });
   }

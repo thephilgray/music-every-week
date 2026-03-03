@@ -914,7 +914,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
                     type="file" 
                     onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
                     className="w-full text-gray-400 text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                 />
             </div>
 

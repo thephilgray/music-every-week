@@ -242,7 +242,7 @@ export function SubmissionFormUI({
             }`}>
                 <input 
                     type="file" 
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     onChange={(e) => setArtFile(e.target.files?.[0] || null)}
                     className="hidden"
                     id="art-upload-ui"

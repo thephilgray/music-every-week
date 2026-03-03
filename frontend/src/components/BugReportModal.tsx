@@ -176,7 +176,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
                         {screenshot ? 'Change Screenshot' : 'Attach Screenshot'}
                         <input 
                             type="file" 
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
                             onChange={e => setScreenshot(e.target.files?.[0] || null)}
                             className="hidden"
                         />

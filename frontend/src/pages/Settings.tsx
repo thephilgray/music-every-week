@@ -270,7 +270,7 @@ export function Settings() {
                 <div className="relative w-24 h-24 rounded-full bg-gray-800 border-2 border-dashed border-gray-600 flex items-center justify-center overflow-hidden hover:border-white transition cursor-pointer group">
                     <input 
                     type="file" 
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
                     onChange={e => { setAvatar(e.target.files?.[0] || null); isDirty.current = true; }}
                     />

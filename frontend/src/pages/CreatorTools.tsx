@@ -350,19 +350,19 @@ export function CreatorTools() {
           if (selectedRequest.id) {
               const submissionsQuery = query(
                   collection(db, 'submissions'), // Query global submissions collection
-                  where('requestId', '==', selectedRequest.id),
-                  where('deleted', '!=', true)
+                  where('requestId', '==', selectedRequest.id)
               );
               const submissionSnapshot = await getDocs(submissionsQuery);
               submissionSnapshot.forEach(subDoc => {
                   const subData = subDoc.data();
+                  if (subData.deleted) return; // Filter deleted submissions manually
+
                   const uploaderUid = subData.uploaderUid; 
                   const uploaderEmail = subData.uploaderEmail?.toLowerCase();
 
                   let participantToUpdate: ParticipantRow | undefined;
                   let effectiveParticipantKey: string | undefined;
                   let keyToDeleteIfReplaced: string | undefined; 
-                  let currentKeyInRows: string | undefined; // Declare currentKeyInRows here
 
                   // --- Lookup priority: 1. Uploader UID, 2. Email resolved to UID, 3. Direct Email ---
 
@@ -397,7 +397,7 @@ export function CreatorTools() {
                            // If we found the participant by an old key (e.g., email or GunPub)
                            // but now have a definitive Firebase UID from the submission (uploaderUid)
                            // and the current key in rows is *not* the uploaderUid, re-key the entry.
-                          if (uploaderUid && currentKeyInRows !== uploaderUid && keyToDeleteIfReplaced) { 
+                          if (uploaderUid && keyToDeleteIfReplaced) { 
                               rows.delete(keyToDeleteIfReplaced); // Remove old entry
                               rows.set(uploaderUid, { ...participantToUpdate, id: uploaderUid, type: 'user', status: 'submitted' });
                           } else {
@@ -408,16 +408,19 @@ export function CreatorTools() {
                   } 
                   // Fallback: If no existing row found, but a submission exists, create a new 'submitted' entry.
                   // This handles cases where a submitter was never in accessList or request.participants initially.
-                  else if (effectiveParticipantKey) {
-                      rows.set(effectiveParticipantKey, {
-                          id: effectiveParticipantKey,
-                          name: userProfileLookup.get(effectiveParticipantKey)?.displayName || uploaderEmail || 'Unknown User', 
-                          contact: uploaderEmail || effectiveParticipantKey,
-                          status: 'submitted',
-                          type: uploaderUid ? 'user' : 'email',
-                          extensionHours: 0,
-                          hasPass: false
-                      });
+                  else if (effectiveParticipantKey || uploaderUid || uploaderEmail) {
+                      const finalId = uploaderUid || uploaderEmail || 'unknown';
+                      if (!rows.has(finalId)) {
+                          rows.set(finalId, {
+                              id: finalId,
+                              name: userProfileLookup.get(finalId)?.displayName || uploaderEmail || 'Unknown User', 
+                              contact: uploaderEmail || finalId,
+                              status: 'submitted',
+                              type: uploaderUid ? 'user' : 'email',
+                              extensionHours: 0,
+                              hasPass: false
+                          });
+                      }
                   }
               });
           }

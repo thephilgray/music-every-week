@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, RotateCw, Link as LinkIcon, Loader2, Trash2 } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, Link as LinkIcon, Loader2, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
@@ -573,34 +573,6 @@ export function CreatorTools() {
       }
   };
 
-  const handleRepublish = async () => {
-      if (!selectedRequest || !selectedRequest.id || !user?.uid) return;
-      
-      setLoading(true);
-      try {
-          const requestDocRef = doc(db, 'requests', selectedRequest.id);
-          
-          const updates: Partial<FileRequest> = {
-              ownerPub: user.uid,
-              deleted: false, 
-              updatedAt: serverTimestamp()
-          };
-
-          if (!Array.isArray(selectedRequest.accessList)) {
-              updates.accessList = [];
-          }
-
-          await updateDoc(requestDocRef, updates);
-          
-          success("Request republished!");
-      } catch (e) {
-          console.error("Republish failed", e);
-          error("Failed to republish request: " + (e as Error).message);
-      } finally {
-          setLoading(false);
-      }
-  };
-
   const handleDeleteRequest = async () => {
       if (!selectedRequest || !selectedRequest.id) {
           console.error("Delete request failed: No selected request or ID.");
@@ -773,13 +745,6 @@ export function CreatorTools() {
                                     title="Generate Extension Link"
                                 >
                                     <LinkIcon className="w-5 h-5" />
-                                </button>
-                                <button 
-                                    onClick={handleRepublish}
-                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Republish to Global Feed (Fix Missing)"
-                                >
-                                    <RotateCw className="w-5 h-5" />
                                 </button>
                             </div>
                             <p className="text-gray-400">Manage participants and exports</p>

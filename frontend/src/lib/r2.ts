@@ -22,39 +22,66 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
     if (isHeicFile) {
         console.log(`[processImage] HEIC/HEIF detected: ${file.name} (${file.type})`);
         
+        // Debug: Check file header (ftyp)
+        try {
+            const headerBuffer = await file.slice(0, 16).arrayBuffer();
+            const headerView = new Uint8Array(headerBuffer);
+            const headerHex = Array.from(headerView).map(b => b.toString(16).padStart(2, '0')).join(' ');
+            const headerAscii = Array.from(headerView).map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join('');
+            console.log(`[processImage] File header (hex): ${headerHex}`);
+            console.log(`[processImage] File header (ascii): ${headerAscii}`);
+        } catch (e) {
+            console.warn("[processImage] Failed to read file header", e);
+        }
+
         // Strategy A: heic2any (WASM-based conversion for Chrome/Firefox)
         try {
-            console.log("[processImage] Attempting heic2any conversion (latest)...");
-            const heicModule = await import('heic2any') as any;
-            const heic2any = heicModule.default || heicModule;
+            console.log("[processImage] Attempting heic2any conversion...");
+            const heicModule = await import('heic2any') as unknown;
+            const heic2any = (heicModule as any)?.default || heicModule;
             
             if (typeof heic2any === 'function') {
-                const options = {
+                // Try simplest possible call first
+                console.log("[processImage] Calling heic2any (minimal options)...");
+                const converted = await (heic2any as any)({
                     blob: file,
                     toType: 'image/jpeg',
-                    quality: 0.8,
-                    multiple: true // Handle containers with multiple images
-                };
-                console.log("[processImage] Calling heic2any with options:", { ...options, blob: 'Blob' });
-                const converted = await heic2any(options);
+                    quality: 0.7
+                });
                 
-                // If multiple: true, it's an array, otherwise a single blob
                 const result = Array.isArray(converted) ? converted[0] : converted;
                 
                 if (result && result.size > 0) {
                     currentBlob = result;
                     isProcessed = true;
                     console.log(`[processImage] heic2any success: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB. Type: ${currentBlob.type}`);
-                } else {
-                    console.warn("[processImage] heic2any returned empty result", converted);
                 }
-            } else {
-                console.error("[processImage] heic2any is not a function after import", heic2any);
             }
         } catch (err: any) {
             console.error("[processImage] heic2any failed:", err);
-            if (err.message) console.error("[processImage] Error message:", err.message);
-            if (err.code) console.error("[processImage] Error code:", err.code);
+            // If it failed with format error, maybe try again WITH multiple: true? 
+            // Some HEICs are actually sequences.
+            if (err.message?.includes('format not supported')) {
+                try {
+                    console.log("[processImage] Retrying with multiple: true...");
+                    const heicModule = await import('heic2any') as any;
+                    const heic2any = heicModule.default || heicModule;
+                    const converted = await heic2any({
+                        blob: file,
+                        toType: 'image/jpeg',
+                        quality: 0.7,
+                        multiple: true
+                    });
+                    const result = Array.isArray(converted) ? converted[0] : converted;
+                    if (result && result.size > 0) {
+                        currentBlob = result;
+                        isProcessed = true;
+                        console.log(`[processImage] heic2any retry success: ${(file.size / 1024).toFixed(1)}KB -> ${(currentBlob.size / 1024).toFixed(1)}KB`);
+                    }
+                } catch (retryErr) {
+                    console.warn("[processImage] heic2any retry also failed", retryErr);
+                }
+            }
         }
 
         // Strategy B: createImageBitmap (Native fallback for Safari)
@@ -65,10 +92,10 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
                 const canvas = document.createElement('canvas');
                 canvas.width = bitmap.width;
                 canvas.height = bitmap.height;
-                const ctx = canvas.width > 0 ? canvas.getContext('2d') : null;
+                const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.drawImage(bitmap, 0, 0);
-                    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+                    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.8));
                     if (blob) {
                         currentBlob = blob;
                         isProcessed = true;
@@ -77,14 +104,12 @@ async function processImage(file: File): Promise<{ blob: Blob | File, isProcesse
                 }
                 bitmap.close();
             } catch (err) {
-                console.warn("[processImage] Native conversion fallback failed:", err);
+                console.warn("[processImage] Native conversion fallback failed (expected in Chrome):", err);
             }
         }
     }
 
     // 2. Standard Compression/Resize for large images (> 500KB)
-    // If it's already processed HEIC, it's already compressed.
-    // Otherwise, if it's a common renderable format and large, resize it.
     const type = isProcessed ? 'image/jpeg' : (currentBlob.type || '');
     const isRenderable = type.startsWith('image/') && !type.includes('heic') && !type.includes('heif');
     
@@ -163,6 +188,17 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
           contentType = 'image/png';
       } else {
           contentType = file.type || 'application/octet-stream';
+      }
+  }
+
+  // Final Safety Check: If it's STILL HEIC and we're in a browser that can't render it (Chrome), 
+  // warn the user or fail the upload.
+  const isStillHeic = contentType.includes('heic') || contentType.includes('heif') || filename.toLowerCase().endsWith('.heic') || filename.toLowerCase().endsWith('.heif');
+  if (isStillHeic && !isProcessed) {
+      // Check if browser is likely Safari
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (!isSafari) {
+          throw new Error("Your browser was unable to convert this HEIC file to JPEG. Please upload a JPG or PNG instead.");
       }
   }
 

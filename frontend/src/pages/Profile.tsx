@@ -103,6 +103,7 @@ export function Profile() {
 
       const [submissionsByUid, setSubmissionsByUid] = useState<Submission[]>([]);
       const [submissionsByEmail, setSubmissionsByEmail] = useState<Submission[]>([]);
+      const [submissionsAsCollaborator, setSubmissionsAsCollaborator] = useState<Submission[]>([]);
       
       const [requestsByUid, setRequestsByUid] = useState<FileRequest[]>([]);
       const [requestsByOwnerEmail, setRequestsByOwnerEmail] = useState<FileRequest[]>([]);
@@ -159,10 +160,11 @@ export function Profile() {
           const combined = new Map<string, Submission>();
           submissionsByUid.forEach(s => combined.set(s.id!, s));
           submissionsByEmail.forEach(s => combined.set(s.id!, s));
+          submissionsAsCollaborator.forEach(s => combined.set(s.id!, s));
           
           setSubmissions(Array.from(combined.values())
               .sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0)));
-      }, [submissionsByUid, submissionsByEmail]);
+      }, [submissionsByUid, submissionsByEmail, submissionsAsCollaborator]);
   
       // Combine Requests
       useEffect(() => {
@@ -214,6 +216,23 @@ export function Profile() {
                           setSubmissionsByEmail(res);
                       }));
                   }  
+
+                  // 3. As Collaborator (By UID)
+                  if (resolvedProfileUid) {
+                      const qCollab = query(
+                          collection(db, 'submissions'),
+                          where(`collaborators.${resolvedProfileUid}`, '==', true)
+                      );
+                      unsubs.push(onSnapshot(qCollab, (snapshot) => {
+                          const res: Submission[] = [];
+                          snapshot.forEach(doc => {
+                              const data = doc.data();
+                              if (data.deleted) return;
+                              res.push({ id: doc.id, ...data, createdAt: getTimestampAsNumber(data.createdAt) } as Submission);
+                          });
+                          setSubmissionsAsCollaborator(res);
+                      }));
+                  }
           return () => unsubs.forEach(u => u());
       }, [resolvedProfileUid, profile?.email]);
   

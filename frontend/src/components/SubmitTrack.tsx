@@ -7,9 +7,9 @@ import { generateWaveform } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { Tooltip } from './ui/Tooltip';
-import type { Submission } from '../types';
+import type { Submission, UserProfile } from '../types';
 import { db } from '../lib/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDoc, query, where, getDocs, increment } from 'firebase/firestore';
 
 interface SubmitTrackProps {
   requestId: string;
@@ -38,8 +38,81 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const [proxyAlias, setProxyAlias] = useState('');
   
   const [collaborators, setCollaborators] = useState<string[]>([]);
-  
-  // Feedback Metadata
+  const [collabNames, setCollabNames] = useState<Record<string, string>>({}); // New state for names
+  const [collabSearch, setCollabSearch] = useState('');
+  const [collabResults, setCollabResults] = useState<UserProfile[]>([]);
+  const [requestAccessList, setRequestAccessList] = useState<string[]>([]);
+
+  // Load Request Access List
+  useEffect(() => {
+      const fetchAccessList = async () => {
+          try {
+              const reqDoc = await getDoc(doc(db, 'requests', requestId));
+              if (reqDoc.exists()) {
+                  const data = reqDoc.data();
+                  setRequestAccessList(data.accessList || []);
+              }
+          } catch (e) {
+              console.error("Error fetching request access list:", e);
+          }
+      };
+      fetchAccessList();
+  }, [requestId]);
+
+  // Search for collaborators
+  useEffect(() => {
+      if (collabSearch.length < 2) {
+          setCollabResults([]);
+          return;
+      }
+
+      const search = async () => {
+          try {
+              // Search by both alias and displayName
+              const qAlias = query(
+                  collection(db, 'profiles'), 
+                  where('alias', '>=', collabSearch), 
+                  where('alias', '<=', collabSearch + '\uf8ff')
+              );
+              const qDisplay = query(
+                  collection(db, 'profiles'), 
+                  where('displayName', '>=', collabSearch), 
+                  where('displayName', '<=', collabSearch + '\uf8ff')
+              );
+
+              const [snapAlias, snapDisplay] = await Promise.all([getDocs(qAlias), getDocs(qDisplay)]);
+              
+              const resultsMap = new Map<string, UserProfile>();
+              
+              const processSnap = (snap: any) => {
+                  snap.forEach((d: any) => {
+                      const profile = { uid: d.id, ...d.data() } as UserProfile;
+                      const isSelf = profile.uid === user?.uid || (profile.email && profile.email === participantEmail);
+                      if (isSelf) return;
+
+                      const hasJoined = participants && !!participants[profile.uid];
+                      const isInvited = profile.email && requestAccessList.includes(profile.email);
+                      
+                      if (hasJoined || isInvited || isAdmin) {
+                          resultsMap.set(profile.uid, profile);
+                      }
+                  });
+              };
+
+              processSnap(snapAlias);
+              processSnap(snapDisplay);
+              
+              setCollabResults(Array.from(resultsMap.values()));
+          } catch (e) {
+              console.error("Collab search failed", e);
+          }
+      };
+
+      const timer = setTimeout(search, 300);
+      return () => clearTimeout(timer);
+  }, [collabSearch, requestAccessList, participants, user?.uid, participantEmail, isAdmin]);
+
+  // Load data (Edit Mode or Defaults)
   const [stage, setStage] = useState('First Draft / Demo');
   const [feedbackFocus, setFeedbackFocus] = useState<string[]>([]);
   const [doesNotUseAI, setDoesNotUseAI] = useState(true);
@@ -95,6 +168,18 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         
         if (directKeys.length > 0) {
             setCollaborators(directKeys);
+            // Fetch names for existing collaborators
+            directKeys.forEach(async (uid) => {
+                try {
+                    const pDoc = await getDoc(doc(db, 'profiles', uid));
+                    if (pDoc.exists()) {
+                        const pData = pDoc.data();
+                        setCollabNames(prev => ({ ...prev, [uid]: pData.displayName || pData.alias || uid }));
+                    }
+                } catch (e) {
+                    console.error("Error fetching collab name:", e);
+                }
+            });
         }
         
         let parsedFocus: string[] = [];
@@ -114,12 +199,19 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     };
   }, [existingSubmission]);
 
-  const toggleCollaborator = (userOrPub: string) => {
+  const toggleCollaborator = (userOrPub: string, name?: string) => {
     if (collaborators.includes(userOrPub)) {
       setCollaborators(collaborators.filter(p => p !== userOrPub));
     } else {
       setCollaborators([...collaborators, userOrPub]);
+      if (name) {
+          setCollabNames(prev => ({ ...prev, [userOrPub]: name }));
+      }
     }
+  };
+
+  const removeCollaborator = (uid: string) => {
+      setCollaborators(prev => prev.filter(c => c !== uid));
   };
 
   const getSupportedMimeType = () => {
@@ -289,8 +381,19 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 createdAt: serverTimestamp()
             });
             
+            // Award points to uploader
             if (addPoints) {
                 addPoints(5);
+            }
+
+            // Award points to collaborators
+            if (collaborators.length > 0) {
+                const collabPromises = collaborators.map(uid => 
+                    updateDoc(doc(db, 'profiles', uid), {
+                        points: increment(5)
+                    }).catch(err => console.warn(`Failed to award points to collaborator ${uid}:`, err))
+                );
+                await Promise.all(collabPromises);
             }
             
             onSuccess({ id: docRef.id, ...submissionData });
@@ -539,31 +642,85 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2 justify-between">
                     <span className="flex items-center gap-2">
                         <Users className="w-4 h-4" /> Collaborators
-                        <Tooltip content="Add others who worked on this track. They will be notified." icon />
+                        <Tooltip content="Add others who worked on this track. They will see this submission on their profile and get participation points." icon />
                     </span>
-                    {/* Search button removed for migration simplification */}
                 </label>
                 
-                <div className="flex flex-wrap gap-2">
-                    {/* Participants from Request */}
-                    {participants && Object.entries(participants).map(([key, data]) => {
-                         // Filter out self if possible, but we don't have easy way to check self key vs participant key
-                         // unless we compare emails.
-                         if (data.email && (data.email === user?.email || data.email === participantEmail)) return null;
+                {/* Search Bar */}
+                <div className="relative mb-3">
+                    <input 
+                        type="text"
+                        value={collabSearch}
+                        onChange={(e) => setCollabSearch(e.target.value)}
+                        placeholder="Search by name..."
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-blue-500 outline-none"
+                    />
+                    {collabResults.length > 0 && (
+                        <div className="absolute z-[10000] w-full bg-gray-800 border border-gray-700 rounded-lg mt-1 shadow-2xl max-h-48 overflow-y-auto">
+                            {collabResults.map(res => (
+                                <button
+                                    key={res.uid}
+                                    type="button"
+                                    onClick={() => {
+                                        const name = res.displayName || res.alias;
+                                        if (!collaborators.includes(res.uid)) {
+                                            setCollaborators([...collaborators, res.uid]);
+                                            setCollabNames(prev => ({ ...prev, [res.uid]: name }));
+                                        }
+                                        setCollabSearch('');
+                                        setCollabResults([]);
+                                    }}
+                                    className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center justify-between group"
+                                >
+                                    <div>
+                                        <div className="text-sm font-bold text-white">{res.displayName || res.alias}</div>
+                                    </div>
+                                    <span className="text-xs text-blue-400 opacity-0 group-hover:opacity-100">Add</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
 
-                         const isSelected = collaborators.includes(key);
+                {/* Selected & Suggested */}
+                <div className="flex flex-wrap gap-2">
+                    {/* Selected List */}
+                    {collaborators.map(uid => {
+                        // Find profile name if possible
+                        const joinedPart = participants?.[uid];
+                        const label = joinedPart?.alias || collabNames[uid] || uid.substring(0, 8);
+
+                        return (
+                            <button
+                                key={uid}
+                                type="button"
+                                onClick={() => removeCollaborator(uid)}
+                                className="px-3 py-1 rounded-full text-xs font-medium bg-blue-600 border border-blue-500 text-white flex items-center gap-2"
+                            >
+                                {label}
+                                <span className="opacity-70">×</span>
+                            </button>
+                        );
+                    })}
+
+                    {/* Participants from Request (Suggestions) */}
+                    {participants && Object.entries(participants).map(([key, data]) => {
+                         if (data.email && (data.email === user?.email || data.email === participantEmail)) return null;
+                         if (collaborators.includes(key)) return null; // Already selected
+                         
+                         // Only suggest participants who have an alias/name set
+                         if (!data.alias) return null;
+
+                         const name = data.alias;
+
                          return (
                              <button
                                 key={key}
                                 type="button"
-                                onClick={() => toggleCollaborator(key)} 
-                                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                                    isSelected  
-                                    ? 'bg-blue-600 border-blue-500 text-white' 
-                                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                                }`}
+                                onClick={() => toggleCollaborator(key, name)} 
+                                className="px-3 py-1 rounded-full text-xs font-medium bg-gray-800 border border-gray-700 text-gray-400 hover:border-gray-600"
                              >
-                                 {data.alias || (data.email ? data.email.split('@')[0] : key.substring(0, 6))}
+                                 {name}
                              </button>
                          );
                     })}

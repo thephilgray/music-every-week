@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
@@ -15,16 +16,16 @@ const S3 = new S3Client({
   },
 });
 
-export default async function handler(request: Request) {
-  if (request.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).send('Method Not Allowed');
   }
 
   try {
-    const { filename, contentType } = await request.json();
+    const { filename, contentType } = req.body;
 
     if (!filename || !contentType) {
-        return new Response('Missing filename or contentType', { status: 400 });
+        return res.status(400).send('Missing filename or contentType');
     }
 
     const key = `authless/${Date.now()}_${filename.replace(/\s+/g, '_')}`;
@@ -37,11 +38,10 @@ export default async function handler(request: Request) {
 
     const url = await getSignedUrl(S3, command, { expiresIn: 3600 });
 
-    return new Response(JSON.stringify({ url, key }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (error: any) {
+    return res.status(200).json({ url, key });
+  } catch (error: unknown) {
     console.error("Upload Error", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return res.status(500).json({ error: message });
   }
 }

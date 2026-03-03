@@ -62,6 +62,25 @@ export function Home() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20 p-4">
+      {/* Tertiary Nav */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-800/50 pb-4">
+          <a href="https://discord.com/invite/MJRRwBddKV" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors flex items-center gap-1.5">
+              Discord
+          </a>
+          <span className="text-gray-800 hidden sm:inline">•</span>
+          <a href="https://www.patreon.com/MusicEveryWeek" target="_blank" rel="noopener noreferrer" className="hover:text-orange-400 transition-colors">
+              Patreon
+          </a>
+          <span className="text-gray-800 hidden sm:inline">•</span>
+          <a href="https://docs.google.com/document/d/192JE_HXcs_cSJubnf1BEYyjbNr9V5YXeedK-MIJbvlo/edit?tab=t.0#heading=h.45at7kfvym83" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+              FAQ
+          </a>
+          <span className="text-gray-800 hidden sm:inline">•</span>
+          <a href="https://forms.gle/27w4CoSfb6EpssR6A" target="_blank" rel="noopener noreferrer" className="hover:text-purple-400 transition-colors">
+              Ideas & Comments Box
+          </a>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
            <div className="flex items-center gap-3">

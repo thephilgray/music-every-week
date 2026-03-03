@@ -35,6 +35,8 @@ export function RequestDetail() {
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isEditRequestOpen, setIsEditRequestOpen] = useState(false); // Added state
   const [isFilterModalForced, setIsFilterModalForced] = useState(false); // Added state
+  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [timerColor, setTimerColor] = useState<string>('text-blue-400');
 
   // Filter/Sort States
   const [showFilterPopover, setShowFilterPopover] = useState(false);
@@ -74,25 +76,6 @@ export function RequestDetail() {
     setIsFilterModalForced(true);
     setShowFilterPopover(true);
   }, []);
-
-  // Show filter notification toast on land
-  useEffect(() => {
-    if (areFiltersActive) {
-        toast("Filters are active from a previous session.", {
-            duration: 15000,
-            actions: [
-                {
-                    label: "Clear All",
-                    onClick: handleClearAllFilters
-                },
-                {
-                    label: "Edit Filters",
-                    onClick: handleEditFiltersFromToast
-                }
-            ]
-        });
-    }
-  }, []); // Only on mount
 
   // Debounce search term
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
@@ -279,21 +262,74 @@ export function RequestDetail() {
 
   // Deadline Logic
   const now = Date.now();
-  let deadlineTime = 0;
-  let isPastDeadline = false;
+  const deadlineTime = getTimestampAsNumber(request?.deadline);
+  const isPastDeadline = deadlineTime > 0 && now > deadlineTime;
 
-  if (request && request.deadline) {
-      const deadlineDate = new Date(request.deadline);
-      deadlineTime = deadlineDate.getTime();
-      isPastDeadline = now > deadlineTime;
-  }
+  // Countdown Timer
+  useEffect(() => {
+    if (!request?.deadline || isPastDeadline) {
+        setTimeLeft('');
+        return;
+    }
+
+    const updateTimer = () => {
+        const remaining = deadlineTime - Date.now();
+        if (remaining <= 0) {
+            setTimeLeft('CLOSED');
+            setTimerColor('text-red-500');
+            return;
+        }
+
+        const hoursTotal = remaining / (1000 * 60 * 60);
+        if (hoursTotal < 24) {
+            setTimerColor('text-red-500');
+        } else if (hoursTotal < 48) {
+            setTimerColor('text-orange-500');
+        } else {
+            setTimerColor('text-blue-400');
+        }
+
+        const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+
+        let str = '';
+        if (days > 0) str += `${days}d `;
+        str += `${hours}h ${minutes}m ${seconds}s`;
+        setTimeLeft(str);
+    };
+
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [request?.deadline, deadlineTime, isPastDeadline]);
 
   // Playlist Live Logic
-  let playlistUnlockTime = deadlineTime;
-  if (request?.playlistLiveDate) {
-      playlistUnlockTime = new Date(request.playlistLiveDate).getTime();
-  }
-  const isPlaylistLive = now > playlistUnlockTime;
+  const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
+  const playlistUnlockTime = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
+  const isPlaylistLive = playlistUnlockTime > 0 && now > playlistUnlockTime;
+
+  const canSeeFilters = isPlaylistLive;
+
+  // Show filter notification toast on land
+  useEffect(() => {
+    if (areFiltersActive && canSeeFilters) {
+        toast("Filters are active from a previous session.", {
+            duration: 15000,
+            actions: [
+                {
+                    label: "Clear All",
+                    onClick: handleClearAllFilters
+                },
+                {
+                    label: "Edit Filters",
+                    onClick: handleEditFiltersFromToast
+                }
+            ]
+        });
+    }
+  }, [canSeeFilters, areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]); 
 
   // Determine which tracks this user is allowed to preview if they have submitted
   const previewTrackIds = useMemo(() => {
@@ -561,12 +597,19 @@ export function RequestDetail() {
                     
                     <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6 text-sm text-gray-400 mb-6 justify-center md:justify-start">
                         {request.deadline && (
-                            <div className="flex items-center gap-2">
-                                <Clock className={`w-4 h-4 ${isPastDeadline ? 'text-red-500' : 'text-gray-400'}`} />
-                                <span className={isPastDeadline ? 'text-red-500' : ''}>
-                                    Due: {new Date(request.deadline).toLocaleDateString()} {new Date(request.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}
-                                    {isPastDeadline && <span className="text-red-500 ml-2 font-bold">CLOSED</span>}
-                                </span>
+                            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Clock className={`w-4 h-4 ${isPastDeadline ? 'text-red-500' : 'text-gray-400'}`} />
+                                    <span className={isPastDeadline ? 'text-red-500' : ''}>
+                                        Due: {new Date(request.deadline).toLocaleDateString()} {new Date(request.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}
+                                        {isPastDeadline && <span className="text-red-500 ml-2 font-bold">CLOSED</span>}
+                                    </span>
+                                </div>
+                                {timeLeft && !isPastDeadline && (
+                                    <div className={`${timerColor} font-mono font-bold`}>
+                                        ({timeLeft} remaining)
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div>ID: {id?.substring(0, 8)}...</div>
@@ -615,33 +658,37 @@ export function RequestDetail() {
                                 <Shuffle className="w-5 h-5" />
                             </button>
                         )}                        {/* Filter Button and Popover, now directly within the wider flex container */}
-                        <button 
-                            onClick={() => setShowFilterPopover(!showFilterPopover)} 
-                            className={`p-2 rounded-full transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-                            title="Filter & Sort"
-                        >
-                            <Filter className="w-5 h-5" />
-                        </button>
-                        {showFilterPopover && (
-                            <FilterPopover
-                                searchTerm={searchTerm}
-                                setSearchTerm={setSearchTerm}
-                                sortBy={sortBy}
-                                setSortBy={setSortBy}
-                                filterByAI={filterByAI}
-                                setFilterByAI={setFilterByAI}
-                                filterByFragile={filterByFragile}
-                                setFilterByFragile={setFilterByFragile}
-                                filterByUnlistened={filterByUnlistened}
-                                setFilterByUnlistened={setFilterByUnlistened}
-                                filterByFeedbackFocus={filterByFeedbackFocus}
-                                setFilterByFeedbackFocus={setFilterByFeedbackFocus}
-                                onClose={() => {
-                                    setShowFilterPopover(false);
-                                    setIsFilterModalForced(false);
-                                }}
-                                forceModal={isFilterModalForced}
-                            />
+                        {canSeeFilters && (
+                        <>
+                            <button 
+                                onClick={() => setShowFilterPopover(!showFilterPopover)} 
+                                className={`p-2 rounded-full transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                                title="Filter & Sort"
+                            >
+                                <Filter className="w-5 h-5" />
+                            </button>
+                            {showFilterPopover && (
+                                <FilterPopover
+                                    searchTerm={searchTerm}
+                                    setSearchTerm={setSearchTerm}
+                                    sortBy={sortBy}
+                                    setSortBy={setSortBy}
+                                    filterByAI={filterByAI}
+                                    setFilterByAI={setFilterByAI}
+                                    filterByFragile={filterByFragile}
+                                    setFilterByFragile={setFilterByFragile}
+                                    filterByUnlistened={filterByUnlistened}
+                                    setFilterByUnlistened={setFilterByUnlistened}
+                                    filterByFeedbackFocus={filterByFeedbackFocus}
+                                    setFilterByFeedbackFocus={setFilterByFeedbackFocus}
+                                    onClose={() => {
+                                        setShowFilterPopover(false);
+                                        setIsFilterModalForced(false);
+                                    }}
+                                    forceModal={isFilterModalForced}
+                                />
+                            )}
+                        </>
                         )}
                     </div>
                 </div>                

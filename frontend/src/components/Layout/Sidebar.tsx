@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, LogOut, Globe } from 'lucide-react';
+import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, Globe } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
@@ -13,7 +13,7 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user, participantEmail } = useAuth(); // Destructure user and participantEmail from useAuth
+  const { user, participantEmail } = useAuth(); // Destructure user and participantEmail from useAuth
   const [unreadCount, setUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
 
@@ -71,13 +71,6 @@ export function Sidebar({ onClose }: SidebarProps) {
       setTimeout(() => navigate(path), 50);
   };
 
-  const handleLogout = async () => {
-    if (window.confirm("Log out?")) {
-        await logout();
-        navigate('/login');
-    }
-  };
-
   return (
     <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
       <div className="p-6 flex justify-between items-center">
@@ -122,20 +115,13 @@ export function Sidebar({ onClose }: SidebarProps) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-800 mb-24">
+      <div className="pt-6 pb-4 px-4 border-t border-gray-800 mb-20">
         <button 
             onClick={() => setShowBugReport(true)}
             className="w-full text-left px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition mb-1 text-sm font-medium flex items-center gap-3"
         >
             <Bug className="w-5 h-5" />
             Report Bug
-        </button>
-        <button 
-            onClick={handleLogout}
-            className="w-full text-left px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-900/10 rounded transition mb-2 text-sm font-medium flex items-center gap-3"
-        >
-            <LogOut className="w-5 h-5" />
-            Log Out
         </button>
       </div>
       

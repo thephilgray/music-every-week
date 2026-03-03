@@ -30,7 +30,7 @@ export function Playlists() {
 // EXISTING GunDB LIST VIEW -> Refactored for Firestore & Migration
 // ==========================================
 function PlaylistList() {
-  const { user, participantEmail } = useAuth(); // Added participantEmail
+  const { user, participantEmail } = useAuth();
   const { play } = usePlayer();
   
   // State for different playlist sources
@@ -81,8 +81,6 @@ function PlaylistList() {
       if (selectedPlaylist) {
           const updatedPlaylist = myPlaylists.find(pl => pl.id === selectedPlaylist.id);
           if (updatedPlaylist && JSON.stringify(updatedPlaylist.tracks) !== JSON.stringify(selectedPlaylist.tracks)) {
-              // Only sync if tracks actually changed from the DB to avoid interfering with active dragging
-              // If we are currently dragging, DON'T sync from DB until drag is done
               if (draggedIndex === null) {
                   setSelectedPlaylist(updatedPlaylist);
               }
@@ -98,10 +96,6 @@ function PlaylistList() {
       const fetchRequests = async () => {
           setLoadingHosted(true);
           try {
-            // 1. (REMOVED) Public browsing query. 
-            // Requests are now only shown if you are an owner, invited, or have contributed.
-
-            // A. Shared Requests (Invite/Volunteer/Direct where I'm added)
             let qShared = null;
             if (email) {
                 qShared = query(
@@ -111,7 +105,6 @@ function PlaylistList() {
                 );
             }
 
-            // B. Contributed Requests (Where I submitted)
             let contributedIds: string[] = [];
             
             if (email || uid) {
@@ -142,18 +135,15 @@ function PlaylistList() {
                 }
             }
 
-            // C. Owned Requests (Add these to Hosted section too)
             let qOwned = null;
             if (uid) {
                 qOwned = query(collection(db, 'requests'), where('ownerPub', '==', uid));
             }
 
-            // Execute Queries
             const promises = [];
             if (qShared) promises.push(getDocs(qShared));
             if (qOwned) promises.push(getDocs(qOwned));
             
-            // Batch fetch contributed requests by ID
             if (contributedIds.length > 0) {
                 for (let i = 0; i < contributedIds.length; i += 10) {
                     const batch = contributedIds.slice(i, i + 10);
@@ -163,7 +153,6 @@ function PlaylistList() {
 
             const snapshots = await Promise.all(promises);
             
-            // Merge and Deduplicate
             const now = Date.now();
             const uniqueRequests = new Map<string, FileRequest>();
             snapshots.forEach(snap => {
@@ -171,14 +160,10 @@ function PlaylistList() {
                     const data = doc.data() as FileRequest;
                     if (data.deleted) return;
 
-                    // Filter based on live date or deadline
                     const playlistLiveTime = getTimestampAsNumber(data.playlistLiveDate);
                     const deadlineTime = getTimestampAsNumber(data.deadline);
                     const liveDate = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
                     
-                    // Hide if a date is set AND now < liveDate
-                    // We remove the !isOwner and !isAdmin check here because even admins 
-                    // prefer to keep the results list clean until the live date.
                     if (liveDate > 0 && now < liveDate) return;
                     
                     uniqueRequests.set(doc.id, { 
@@ -189,7 +174,6 @@ function PlaylistList() {
                 });
             });
 
-            // Sort by createdAt desc
             const sorted = Array.from(uniqueRequests.values()).sort((a, b) => 
                 (getTimestampAsNumber(b.createdAt)) - (getTimestampAsNumber(a.createdAt))
             );
@@ -207,24 +191,21 @@ function PlaylistList() {
 
 
   const handlePlay = async (playlist: Playlist, startIndex = 0) => {
-      // ... (Existing handlePlay logic) ...
-      console.log("handlePlay initiated for playlist:", playlist.id);
       if (!playlist.tracks || playlist.tracks.length === 0) return;
       setLoadingId(playlist.id);
       
-      // Fetch audioUrl for each track with timeout
       const promises = playlist.tracks.map(track => {
           return Promise.race([
-              new Promise<Submission | null>(async (resolve) => { // Added async
+              new Promise<Submission | null>(async (resolve) => {
                   try {
-                      const subDoc = await getDoc(doc(db, 'submissions', track.submissionId)); // Firebase getDoc
+                      const subDoc = await getDoc(doc(db, 'submissions', track.submissionId));
                       if (subDoc.exists()) {
                           const data = subDoc.data();
                           let parsedWaveform = data.waveform;
                           if (typeof data.waveform === 'string') {
                               try { parsedWaveform = JSON.parse(data.waveform); } catch (e) { parsedWaveform = []; }
                           }
-                          resolve({ ...data, id: track.submissionId, waveform: parsedWaveform } as Submission); // Cast to Submission
+                          resolve({ ...data, id: track.submissionId, waveform: parsedWaveform } as Submission);
                       } else {
                           resolve(null);
                       }
@@ -239,7 +220,6 @@ function PlaylistList() {
       
       const results = await Promise.all(promises);
       const validTracks = results.filter(t => t !== null) as Submission[];
-      console.log(`Loaded ${validTracks.length} valid tracks out of ${playlist.tracks.length}`);
       
       if (validTracks.length > 0) {
           play(validTracks[startIndex < validTracks.length ? startIndex : 0], validTracks, {
@@ -256,10 +236,10 @@ function PlaylistList() {
       setLoadingId(null);
   };
 
-  const deletePlaylist = async (id: string) => { // Added async
+  const deletePlaylist = async (id: string) => {
       if(confirm('Delete this playlist?')) {
           try {
-              await deleteDoc(doc(db, 'playlists', id)); // Firebase deleteDoc
+              await deleteDoc(doc(db, 'playlists', id));
           } catch (e) {
               console.error("Error deleting playlist:", e);
               alert("Failed to delete playlist.");
@@ -267,7 +247,7 @@ function PlaylistList() {
       }
   };
 
-  const removeTrack = async (e: React.MouseEvent, index: number) => { // Added async
+  const removeTrack = async (e: React.MouseEvent, index: number) => {
       e.stopPropagation();
       if (!selectedPlaylist || !selectedPlaylist.id) return;
       
@@ -275,11 +255,10 @@ function PlaylistList() {
       newTracks.splice(index, 1);
       
       try {
-          await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { // Firebase updateDoc
+          await updateDoc(doc(db, 'playlists', selectedPlaylist.id), {
               tracks: newTracks,
-              updatedAt: serverTimestamp() // Add updatedAt
+              updatedAt: serverTimestamp()
           });
-          // Update local state for immediate UI feedback if selectedPlaylist is still open
           setSelectedPlaylist(prev => prev ? { ...prev, tracks: newTracks } : null);
       } catch (e) {
           console.error("Error removing track from playlist:", e);
@@ -331,7 +310,6 @@ function PlaylistList() {
       dragItem.current = null;
       dragOverItem.current = null;
       
-      // Optimistically update UI
       setSelectedPlaylist({ ...selectedPlaylist, tracks: newTracks });
       
       try {
@@ -386,7 +364,7 @@ function PlaylistList() {
                   
                   <div 
                       className="mt-4 space-y-1 cursor-pointer hover:bg-gray-800/50 p-2 rounded -mx-2 transition"
-                      onClick={() => handlePlay(pl)} // Play on click anywhere on track list preview
+                      onClick={() => handlePlay(pl)}
                   >
                       {pl.tracks?.slice(0, 3).map((t, i) => (
                           <div key={i} className="text-xs text-gray-400 truncate flex justify-between">
@@ -408,7 +386,6 @@ function PlaylistList() {
 
   return (
     <div className="max-w-6xl mx-auto p-2 pb-4 sm:p-8 sm:pb-32 space-y-12">
-        {/* Hosted Playlists Section (Now displaying Requests) */}
         <section>
             <h2 className="text-3xl font-bold text-white mb-6 flex items-center gap-3">
                 <ListMusic className="w-8 h-8 text-blue-500" />
@@ -431,14 +408,13 @@ function PlaylistList() {
                             key={req.id} 
                             request={req} 
                             isClosed={false} 
-                            hideStatus={true} // New prop to hide CLOSED tag
+                            hideStatus={true}
                         />
                     ))}
                 </div>
             )}
         </section>
 
-        {/* My Playlists Section */}
         {user && (
             <section>
                 <h2 className="text-2xl font-bold text-white mb-6 border-t border-gray-800 pt-8">
@@ -461,7 +437,6 @@ function PlaylistList() {
             </section>
         )}
 
-        {/* Edit Modal (Existing GunDB Implementation) */}
         {selectedPlaylist && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                 <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[80vh] flex flex-col">
@@ -562,8 +537,6 @@ function PlaylistList() {
                 </div>
             </div>
         )}
-
-
     </div>
   );
 }
@@ -573,7 +546,7 @@ function PlaylistList() {
 // ==========================================
 function PlaylistDetail({ id }: { id: string }) {
     const { participantEmail, isAdmin } = useAuth();
-    const { play, currentTrack, isPlaying, pause } = usePlayer(); // removed unused 'resume'
+    const { play, currentTrack, isPlaying, pause } = usePlayer();
     const { toast } = useToast();
     
     const [loading, setLoading] = useState(true);
@@ -584,7 +557,6 @@ function PlaylistDetail({ id }: { id: string }) {
     const [hostName, setHostName] = useState<string>('');
     
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-    // removed unused expandedSubmissionId/setExpandedSubmissionId
     const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});
     
     // Filters State
@@ -607,7 +579,6 @@ function PlaylistDetail({ id }: { id: string }) {
         async function loadData() {
             setLoading(true);
             try {
-                // Fetch Playlist
                 const plDoc = await getDoc(doc(db, 'playlists', id));
                 if (!plDoc.exists()) {
                     setError('Playlist not found');
@@ -617,7 +588,6 @@ function PlaylistDetail({ id }: { id: string }) {
                 const plData = { id: plDoc.id, ...plDoc.data() } as Playlist;
                 setPlaylist(plData);
                 
-                // Fetch Related Request (for locking logic, host name, etc.)
                 const qReq = query(collection(db, 'requests'), where('playlistId', '==', id));
                 const reqSnap = await getDocs(qReq);
                 if (!reqSnap.empty) {
@@ -625,11 +595,10 @@ function PlaylistDetail({ id }: { id: string }) {
                     setRequest({ id: reqSnap.docs[0].id, ...r });
                     
                     if (r.hostEmail) {
-                        setHostName(r.hostEmail.split('@')[0]); // Fallback
+                        setHostName(r.hostEmail.split('@')[0]);
                     }
                 }
                 
-                // Fetch Submissions
                 const qSub = query(collection(db, 'submissions'), where('playlistId', '==', id));
                 const subSnap = await getDocs(qSub);
                 const loadedSubs: Submission[] = [];
@@ -660,6 +629,10 @@ function PlaylistDetail({ id }: { id: string }) {
         setShowFilterPopover(true);
     }, []);
 
+    const isHost = useMemo(() => {
+        return request?.hostEmail?.toLowerCase() === participantEmail?.toLowerCase() || isAdmin;
+    }, [request, participantEmail, isAdmin]);
+
     // Show filter notification toast on land
     useEffect(() => {
         if (areFiltersActive) {
@@ -677,7 +650,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 ]
             });
         }
-    }, []); // Only on mount
+    }, [areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]);
 
     const scrolledRef = useRef(false);
 
@@ -685,7 +658,6 @@ function PlaylistDetail({ id }: { id: string }) {
     const computedVisibleSubmissions = useMemo(() => {
         let filtered = submissions;
         
-        // Search
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(s => 
@@ -702,7 +674,6 @@ function PlaylistDetail({ id }: { id: string }) {
             filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
         }
 
-        // Sort
         filtered.sort((a, b) => {
             if (sortBy === 'newest') return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
             if (sortBy === 'oldest') return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
@@ -713,23 +684,19 @@ function PlaylistDetail({ id }: { id: string }) {
                 if (aListened !== bListened) return aListened - bListened;
                 return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
             }
-            // Comment sort is mocked as 0 diff for now since we don't have comments loaded here easily without extra fetch
             return 0; 
         });
 
-        // Lock Logic (Preview)
         let lockMessage = "";
-        const isHost = request?.hostEmail?.toLowerCase() === participantEmail?.toLowerCase() || isAdmin;
         const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
         
         const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
         const deadlineTime = getTimestampAsNumber(request?.deadline);
-        const effectiveLiveDate = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
+        const effectiveLiveTime = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
 
-        if (!isHost && effectiveLiveDate > 0) {
-            if (Date.now() < effectiveLiveDate) {
+        if (!isHost && effectiveLiveTime > 0) {
+            if (Date.now() < effectiveLiveTime) {
                 if (hasSubmitted) {
-                    // Preview Mode: Show own track + random others
                     const seed = `${id}-${participantEmail}`;
                     const random = seededRandom(seed);
                     const myTrack = filtered.find(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
@@ -746,11 +713,10 @@ function PlaylistDetail({ id }: { id: string }) {
         }
 
         return { filtered, lockMessage, isHost };
-    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isAdmin]);
+    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isAdmin, isHost, listenedTracks]);
 
-    const { filtered: visibleSubmissions, lockMessage, isHost } = computedVisibleSubmissions;
+    const { filtered: visibleSubmissions } = computedVisibleSubmissions;
 
-    // Scroll to current track on load
     useEffect(() => {
         if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0) {
             const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
@@ -800,12 +766,8 @@ function PlaylistDetail({ id }: { id: string }) {
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500" /></div>;
     if (error || !playlist) return <div className="text-center p-20 text-red-500">{error || "Not Found"}</div>;
 
-    // Access Check using isAllowed properly
-    // isHost is already destructured from computedVisibleSubmissions
     const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
     
-    // 1. Strict Playlist Access List Check
-    // If playlist has an explicit access list, user MUST be on it (or be Host/Admin)
     const hasPlaylistAccessList = playlist.accessList && playlist.accessList.length > 0;
     const isOnPlaylistAccessList = playlist.accessList?.some(e => e.toLowerCase() === participantEmail?.toLowerCase());
     
@@ -819,10 +781,9 @@ function PlaylistDetail({ id }: { id: string }) {
         );
     }
 
-    // 2. Request-based Logic (Submission & Deadline enforcement)
-    // If on Request Access List + No Submission + Past Due -> Content Locked (but page visible)
     const isOnRequestAccessList = request?.accessList?.some(e => e.toLowerCase() === participantEmail?.toLowerCase());
-    const isPastDeadline = request?.deadline && Date.now() > new Date(request.deadline).getTime();
+    const deadlineTime = getTimestampAsNumber(request?.deadline);
+    const isPastDeadline = deadlineTime > 0 && Date.now() > deadlineTime;
     
     let contentLocked = false;
     let lockReason = "";
@@ -832,17 +793,12 @@ function PlaylistDetail({ id }: { id: string }) {
         lockReason = "You did not submit a track in time. Content is locked.";
     }
 
-    // 3. Existing Preview/Live Logic (Refined)
-    const playlistLiveTime_check = getTimestampAsNumber(request?.playlistLiveDate);
-    const deadlineTime_check = getTimestampAsNumber(request?.deadline);
-    const effectiveLiveDate_check = playlistLiveTime_check > 0 ? playlistLiveTime_check : deadlineTime_check;
-    
-    if (!isHost && effectiveLiveDate_check > 0) {
-        if (Date.now() < effectiveLiveDate_check) {
+    const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
+    const effectiveLiveTime = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
+
+    if (!isHost && effectiveLiveTime > 0) {
+        if (Date.now() < effectiveLiveTime) {
             if (hasSubmitted) {
-                // Preview Mode: Handled in computedVisibleSubmissions or here? 
-                // computedVisibleSubmissions handles the filtering/shuffling.
-                // We just need to ensure we don't override it with a full lock unless necessary.
                 lockReason = `Playlist is not live yet. Preview mode active.`;
             } else {
                 contentLocked = true;
@@ -851,11 +807,9 @@ function PlaylistDetail({ id }: { id: string }) {
         }
     }
 
-    // Basic Public/Fallback Check if not caught above
-    // If no specific blocking, we check generic visibility
     const isAllowed = isHost || isOnPlaylistAccessList || playlist.accessMode === 'public' || isOnRequestAccessList;
     
-    if (!isAllowed && !contentLocked) { // If contentLocked is true, we allow view (metadata) but lock tracks
+    if (!isAllowed && !contentLocked) {
         return (
             <div className="flex flex-col items-center justify-center p-20 text-center">
                  <Lock className="w-12 h-12 text-red-500 mb-4" />
@@ -869,7 +823,7 @@ function PlaylistDetail({ id }: { id: string }) {
         <div className="max-w-5xl mx-auto p-4 md:p-8">
             <div className="bg-gradient-to-b from-purple-900/20 to-black p-8 rounded-xl mb-8 border border-gray-800">
                 <div className="flex flex-col md:flex-row gap-8 items-start">
-                    <div className="w-48 h-48 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700 mx-auto">
+                    <div className="w-48 h-48 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700 mx-auto md:mx-0">
                         <ArtworkDisplay src={fixUrl(playlist.artworkUrl)} alt="Art" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 w-full">
@@ -884,9 +838,9 @@ function PlaylistDetail({ id }: { id: string }) {
                             </button>
                         )}
                         
-                        {(lockReason || lockMessage) && (
+                        {(lockReason) && (
                             <div className="mt-4 inline-flex items-center gap-2 bg-yellow-900/30 text-yellow-200 px-3 py-1 rounded-full text-xs font-bold border border-yellow-700/50">
-                                <Lock className="w-3 h-3" /> {lockReason || lockMessage}
+                                <Lock className="w-3 h-3" /> {lockReason}
                             </div>
                         )}
                     </div>
@@ -901,7 +855,6 @@ function PlaylistDetail({ id }: { id: string }) {
                 </div>
             ) : (
                 <>
-                    {/* Controls */}
                     <div className="flex flex-wrap justify-between items-center gap-y-4 mb-6 relative">
                     <div className="flex gap-2 flex-shrink-0">
                      <button onClick={handlePlayAll} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap">
@@ -914,33 +867,33 @@ function PlaylistDetail({ id }: { id: string }) {
                     </div>
 
                     <div className="flex gap-2 relative flex-shrink-0">
-                     <button
-                         onClick={() => setShowFilterPopover(!showFilterPopover)}                         className={`p-2 rounded-lg transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-                     >
-                         <Filter className="w-5 h-5" />
-                     </button>
-                     
-                     {showFilterPopover && (
-                         <FilterPopover
-                             searchTerm={searchTerm}
-                             setSearchTerm={setSearchTerm}
-                             sortBy={sortBy}
-                             setSortBy={setSortBy}
-                             filterByAI={filterByAI}
-                             setFilterByAI={setFilterByAI}
-                             filterByFragile={filterByFragile}
-                             setFilterByFragile={setFilterByFragile}
-                             filterByUnlistened={filterByUnlistened}
-                             setFilterByUnlistened={setFilterByUnlistened}
-                             filterByFeedbackFocus={filterByFeedbackFocus}
-                             setFilterByFeedbackFocus={setFilterByFeedbackFocus}
-                             onClose={() => {
-                                 setShowFilterPopover(false);
-                                 setIsFilterModalForced(false);
-                             }}
-                             forceModal={isFilterModalForced}
-                         />
-                     )}
+                        <button
+                            onClick={() => setShowFilterPopover(!showFilterPopover)}                         className={`p-2 rounded-lg transition ${areFiltersActive ? 'bg-blue-900/50 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                        >
+                            <Filter className="w-5 h-5" />
+                        </button>
+                        
+                        {showFilterPopover && (
+                            <FilterPopover
+                                searchTerm={searchTerm}
+                                setSearchTerm={setSearchTerm}
+                                sortBy={sortBy}
+                                setSortBy={setSortBy}
+                                filterByAI={filterByAI}
+                                setFilterByAI={setFilterByAI}
+                                filterByFragile={filterByFragile}
+                                setFilterByFragile={setFilterByFragile}
+                                filterByUnlistened={filterByUnlistened}
+                                setFilterByUnlistened={setFilterByUnlistened}
+                                filterByFeedbackFocus={filterByFeedbackFocus}
+                                setFilterByFeedbackFocus={setFilterByFeedbackFocus}
+                                onClose={() => {
+                                    setShowFilterPopover(false);
+                                    setIsFilterModalForced(false);
+                                }}
+                                forceModal={isFilterModalForced}
+                            />
+                        )}
                  </div>
             </div>
             
@@ -952,7 +905,7 @@ function PlaylistDetail({ id }: { id: string }) {
                             <button onClick={handleClearAllFilters} className="text-blue-400 mt-2 hover:underline">Clear Filters</button>
                         </>
                     ) : (
-                        <p>{lockMessage || "No tracks yet."}</p>
+                        <p>No tracks yet.</p>
                     )}
                 </div>
             ) : (
@@ -1003,4 +956,3 @@ function PlaylistDetail({ id }: { id: string }) {
         </div>
     );
 }
-

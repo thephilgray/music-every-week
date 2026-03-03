@@ -17,6 +17,7 @@
     "buffer": "^6.0.3",
     "firebase": "^12.9.0",
     "gun": "^0.2020.1241",
+    "heic-converter": "^1.0.0",
     "heic2any": "^0.0.4",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",

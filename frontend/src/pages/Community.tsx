@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Loader2 } from 'lucide-react';
+import { MessageSquare, Loader2, Check, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
@@ -210,10 +210,41 @@ export function Community() {
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
-        <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
-            <p className="text-gray-400">See what's happening across all requests.</p>
-            {/* AI Filter Toggle could go here */}
+        <div className="flex items-center justify-between mb-8">
+            <div>
+                <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                    <Bell className="w-8 h-8 text-blue-500" />
+                    Community Feed
+                </h1>
+                <p className="text-gray-400">See what's happening across all requests.</p>
+            </div>
+            
+            {filteredFeed.some(item => !profile?.readCommunityItems?.[item.id]) && (
+                <button 
+                    onClick={async () => {
+                        if (!user?.uid) return;
+                        const unreadIds = filteredFeed
+                            .filter(item => !profile?.readCommunityItems?.[item.id])
+                            .map(item => item.id);
+                        
+                        if (unreadIds.length > 0) {
+                            const updates: Record<string, boolean> = {};
+                            unreadIds.forEach(id => {
+                                updates[`readCommunityItems.${id}`] = true;
+                            });
+                            try {
+                                await updateDoc(doc(db, 'profiles', user.uid), updates);
+                            } catch (e) {
+                                console.error("Error marking all read:", e);
+                            }
+                        }
+                    }}
+                    className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1 bg-blue-900/20 px-3 py-1.5 rounded-lg border border-blue-800/50 transition-colors"
+                >
+                    <Check className="w-4 h-4" />
+                    Mark page read
+                </button>
+            )}
         </div>
 
         {loading ? (

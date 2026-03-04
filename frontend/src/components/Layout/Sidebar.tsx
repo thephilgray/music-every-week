@@ -75,13 +75,18 @@ export function Sidebar({ onClose }: SidebarProps) {
         const uid = user?.uid;
 
         // 1. Fetch Accessible Request IDs first to filter feed
-        const accessibleRequestIds = new Set<string>();
+        const requestIdsByQuery: Record<number, Set<string>> = {};
         const reqQueries = [];
         if (uid) reqQueries.push(query(collection(db, 'requests'), where('ownerPub', '==', uid)));
         if (email) reqQueries.push(query(collection(db, 'requests'), where('accessList', 'array-contains', email)));
         reqQueries.push(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer')));
 
         const updateCommCount = () => {
+            const accessibleRequestIds = new Set<string>();
+            Object.values(requestIdsByQuery).forEach(set => {
+                set.forEach(id => accessibleRequestIds.add(id));
+            });
+
             // Count items that are NOT in the readItems map AND belong to an accessible request
             // AND respect the AI filter setting (for submissions)
             const filterAI = !!settings?.content?.filterAI;
@@ -103,15 +108,13 @@ export function Sidebar({ onClose }: SidebarProps) {
         let commDocs: any[] = [];
 
         // Listen to requests to keep accessible list updated
-        reqQueries.forEach(q => {
+        reqQueries.forEach((q, index) => {
             unsubs.push(onSnapshot(q, (snap) => {
+                const ids = new Set<string>();
                 snap.forEach(doc => {
-                    if (!doc.data().deleted) {
-                        accessibleRequestIds.add(doc.id);
-                    } else {
-                        accessibleRequestIds.delete(doc.id);
-                    }
+                    if (!doc.data().deleted) ids.add(doc.id);
                 });
+                requestIdsByQuery[index] = ids;
                 updateCommCount();
             }));
         });

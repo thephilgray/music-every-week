@@ -44,6 +44,13 @@ export function SubmissionCard({
 }: SubmissionCardProps) {
     const [showLyrics, setShowLyrics] = useState(false);
     const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+    const [prevIsExpanded, setPrevIsExpanded] = useState(isExpanded);
+
+    // Sync lyrics visibility with card expansion during render
+    if (isExpanded !== prevIsExpanded) {
+        setPrevIsExpanded(isExpanded);
+        setShowLyrics(isExpanded);
+    }
 
     const handlePlayClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -206,7 +213,7 @@ export function SubmissionCard({
                 </div>
             )}
             
-            {(showLyrics && !locked) && (
+            {(showLyrics && !locked && submission.lyrics) && (
                 <div className="mt-4 px-2 md:px-4 pb-2">
                     <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Lyrics / Notes</h5>
                     <div className="bg-gray-950 p-2 md:p-3 rounded border border-gray-800 text-sm text-gray-300 whitespace-pre-wrap break-words font-mono">

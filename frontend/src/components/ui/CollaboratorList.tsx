@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, UserCheck } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'; // Added query imports
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { useAuth } from '../../contexts/AuthContext';
 import type { UserProfile } from '../../types';
 
 interface CollaboratorListProps {
@@ -12,7 +13,7 @@ interface CollaboratorListProps {
   collaborators?: Record<string, boolean> | string;
   className?: string;
   linkProfile?: boolean; // Pass directly from submission
-  proxyFor?: { alias: string, pub?: string }; // Pass directly
+  proxyFor?: { alias: string, pub?: string, uid?: string }; // Pass directly
 }
 
 export function CollaboratorList({ 
@@ -25,6 +26,7 @@ export function CollaboratorList({
     proxyFor
 }: CollaboratorListProps) {
   
+  const { isAdmin } = useAuth();
   const [names, setNames] = useState<Record<string, string>>({});
   const [isExpanded, setIsExpanded] = useState(false);
   const [loadedCollaborators, setLoadedCollaborators] = useState<string[]>([]);
@@ -102,40 +104,34 @@ export function CollaboratorList({
     loadedCollaborators.forEach(uid => fetchName(uid));
 
     return () => { isMounted = false; };
-  }, [uploaderPub, uploaderEmail, loadedCollaborators]);
+  }, [uploaderPub, uploaderEmail, loadedCollaborators, names]);
 
   
   // Render Uploader Name (Link or Text based on linkProfile)
   const renderUploader = () => {
-      if (proxyFor) {
-          return (
-              <span 
-                className="text-white relative z-10 cursor-help border-b border-dotted border-gray-500" 
-                title={`Uploaded by Admin on behalf of ${proxyFor.alias}`}
-              >
-                  {proxyFor.alias} <span className="text-[10px] text-gray-500 uppercase tracking-wider">(Proxy)</span>
-              </span>
-          );
-      }
-
       // Determine display name
-      // 1. If resolvedUid exists, check names[resolvedUid]
-      // 2. If not, check names['email_fallback']
-      // 3. Fallback to uploaderPub substring or 'Unknown'
-      
       const uidToUse = resolvedUid || uploaderPub;
       const name = names[uidToUse] || names['email_fallback'] || (uidToUse ? uidToUse.substring(0, 8) : (uploaderEmail ? uploaderEmail.split('@')[0] : 'Unknown'));
       
-      if (!uidToUse && !uploaderEmail) return <span className="text-gray-400">Unknown</span>;
+      const displayName = proxyFor?.alias || byline || name;
+
+      const content = (
+          <span className="flex items-center gap-1">
+              {displayName}
+              {proxyFor && isAdmin && (
+                  <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+              )}
+          </span>
+      );
 
       if (linkProfile && uidToUse) {
           return (
               <Link to={`/profile/${uidToUse}`} className="hover:text-white hover:underline relative z-10" onClick={e => e.stopPropagation()}>
-                  {byline || name}
+                  {content}
               </Link>
           );
       } else {
-          return <span className="text-gray-400 relative z-10">{byline || name}</span>;
+          return <span className="text-gray-400 relative z-10">{content}</span>;
       }
   };
 
@@ -160,7 +156,12 @@ export function CollaboratorList({
                     className="hover:text-white hover:underline relative z-10 font-medium flex items-center gap-1 inline-flex"
                     title="Click to see connected profiles"
                 >
-                    {byline}
+                    <span className="flex items-center gap-1">
+                        {byline}
+                        {proxyFor && isAdmin && (
+                            <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                        )}
+                    </span>
                     <ChevronDown className="w-3 h-3 text-blue-400 opacity-70" />
                 </button>
             </div>
@@ -168,7 +169,12 @@ export function CollaboratorList({
       } else {
           return (
               <div className={className}>
-                  <span className="text-gray-400">{byline}</span>
+                  <span className="text-gray-400 flex items-center gap-1">
+                      {byline}
+                      {proxyFor && isAdmin && (
+                          <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                      )}
+                  </span>
               </div>
           );
       }
@@ -183,10 +189,20 @@ export function CollaboratorList({
           <span className="flex items-center gap-1 flex-wrap">
               {linkProfile && uidToUse ? (
                   <Link to={`/profile/${uidToUse}`} className="hover:text-white hover:underline ml-1 relative z-10" onClick={e => e.stopPropagation()}>
-                      {uploaderName}
+                      <span className="flex items-center gap-1">
+                        {uploaderName}
+                        {proxyFor && isAdmin && (
+                            <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                        )}
+                      </span>
                   </Link>
               ) : (
-                  <span className="text-gray-400 ml-1">{uploaderName}</span>
+                  <span className="text-gray-400 ml-1 flex items-center gap-1">
+                    {uploaderName}
+                    {proxyFor && isAdmin && (
+                        <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                    )}
+                  </span>
               )}
               
               {loadedCollaborators.map((pub) => (

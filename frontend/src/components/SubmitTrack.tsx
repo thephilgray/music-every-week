@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Mic, Square, Trash2 } from 'lucide-react';
+import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Mic, Square, Trash2, Search, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadToR2 } from '../lib/r2';
 import { generateWaveform } from '../lib/audio';
@@ -35,7 +35,10 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   
   // Admin Proxy
-  const [proxyAlias, setProxyAlias] = useState('');
+  const [proxyUser, setProxyUser] = useState<UserProfile | null>(null);
+  const [proxySearch, setProxySearch] = useState('');
+  const [proxyResults, setProxyResults] = useState<UserProfile[]>([]);
+  const [proxyAlias, setProxyAlias] = useState(''); // Fallback for legacy/non-existent users
   
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [collabNames, setCollabNames] = useState<Record<string, string>>({}); // New state for names
@@ -58,6 +61,58 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
       };
       fetchAccessList();
   }, [requestId]);
+
+  // Search for proxy user
+  useEffect(() => {
+    if (!isAdmin || proxySearch.length < 2) {
+        setProxyResults([]);
+        return;
+    }
+
+    const search = async () => {
+        try {
+            const qAlias = query(
+                collection(db, 'profiles'), 
+                where('alias', '>=', proxySearch), 
+                where('alias', '<=', proxySearch + '\uf8ff')
+            );
+            const qDisplay = query(
+                collection(db, 'profiles'), 
+                where('displayName', '>=', proxySearch), 
+                where('displayName', '<=', proxySearch + '\uf8ff')
+            );
+            const qEmail = query(
+                collection(db, 'profiles'), 
+                where('email', '>=', proxySearch), 
+                where('email', '<=', proxySearch + '\uf8ff')
+            );
+
+            const [snapAlias, snapDisplay, snapEmail] = await Promise.all([
+                getDocs(qAlias), 
+                getDocs(qDisplay),
+                getDocs(qEmail)
+            ]);
+            
+            const resultsMap = new Map<string, UserProfile>();
+            const processSnap = (snap: any) => {
+                snap.forEach((d: any) => {
+                    resultsMap.set(d.id, { uid: d.id, ...d.data() } as UserProfile);
+                });
+            };
+
+            processSnap(snapAlias);
+            processSnap(snapDisplay);
+            processSnap(snapEmail);
+            
+            setProxyResults(Array.from(resultsMap.values()).slice(0, 5));
+        } catch (e) {
+            console.error("Proxy search failed", e);
+        }
+    };
+
+    const timer = setTimeout(search, 300);
+    return () => clearTimeout(timer);
+  }, [proxySearch, isAdmin]);
 
   // Search for collaborators
   useEffect(() => {
@@ -149,8 +204,26 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         setStage(existingSubmission.stage || 'First Draft / Demo');
         if (existingSubmission.usesAI) setDoesNotUseAI(false);
         if (existingSubmission.fragile) setIsFragile(true);
-        if (existingSubmission.proxyFor && existingSubmission.proxyFor.alias) setProxyAlias(existingSubmission.proxyFor.alias);
         
+        if (existingSubmission.proxyFor) {
+            if (typeof existingSubmission.proxyFor === 'string') {
+                setProxyAlias(existingSubmission.proxyFor);
+            } else if (existingSubmission.proxyFor.alias) {
+                setProxyAlias(existingSubmission.proxyFor.alias);
+            }
+        }
+        
+        // If it was a proxy submission, try to resolve the original uploader as the proxy user
+        if (isAdmin && existingSubmission.uploaderUid && existingSubmission.uploaderUid !== user?.uid) {
+            const fetchProxyUser = async () => {
+                const pDoc = await getDoc(doc(db, 'profiles', existingSubmission.uploaderUid!));
+                if (pDoc.exists()) {
+                    setProxyUser({ uid: pDoc.id, ...pDoc.data() } as UserProfile);
+                }
+            };
+            fetchProxyUser();
+        }
+
         // Load Collaborators
         let rawCollabs = existingSubmission.collaborators || {};
         
@@ -197,7 +270,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         document.body.style.overflow = 'unset';
         if (root) root.style.visibility = 'visible';
     };
-  }, [existingSubmission]);
+  }, [existingSubmission, isAdmin, user?.uid]);
 
   const toggleCollaborator = (userOrPub: string, name?: string) => {
     if (collaborators.includes(userOrPub)) {
@@ -335,14 +408,27 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         if (isAnonymous) {
             if (!finalByline) finalByline = 'Anonymous';
         } else {
-             // If no byline and linked, we might want to default to something, 
-             // but user.displayName might not be available here easily if it's participant.
-             // We'll leave it empty if not provided, UI usually handles fallback display.
              if (!finalByline) finalByline = ''; 
         }
 
         const linkProfile = !isAnonymous;
-        const uploaderIdentifier = user ? user.email : participantEmail; // Use email as identifier
+
+        // uploaderIdentifier and uploaderUid logic
+        let uploaderEmailToStore = user ? user.email : participantEmail;
+        let uploaderUidToStore = user?.uid;
+        let isProxy = false;
+
+        if (isAdmin && (proxyUser || proxyAlias)) {
+            isProxy = true;
+            if (proxyUser) {
+                uploaderUidToStore = proxyUser.uid;
+                uploaderEmailToStore = proxyUser.email;
+            } else {
+                // Legacy behavior: keep admin as uploader, but mark as proxy for name
+                uploaderUidToStore = user?.uid;
+                uploaderEmailToStore = user?.email;
+            }
+        }
 
         const submissionData: any = { 
             requestId,
@@ -352,20 +438,16 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             lyrics: String(lyrics || ''),
             audioUrl: audioUrlStr,
             artworkUrl: artworkUrlStr,
-            uploaderEmail: uploaderIdentifier, // New field for Firestore
-            // uploaderUid is handled conditionally below
+            uploaderEmail: uploaderEmailToStore,
+            uploaderUid: uploaderUidToStore,
             collaborators: collaboratorsMap, 
             waveform: waveformData,
             stage,
             feedbackFocus: feedbackFocus,
             usesAI: !doesNotUseAI,
             fragile: isFragile,
-            proxyFor: proxyAlias ? { alias: proxyAlias } : null
+            proxyFor: isProxy ? (proxyUser ? { alias: proxyUser.displayName || proxyUser.alias, uid: proxyUser.uid } : { alias: proxyAlias }) : null
         };
-
-        if (user?.uid) {
-            submissionData.uploaderUid = user.uid;
-        }
 
         if (existingSubmission && existingSubmission.id) {
             // Update
@@ -381,9 +463,16 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 createdAt: serverTimestamp()
             });
             
-            // Award points to uploader
-            if (addPoints) {
-                addPoints(5);
+            // Award points (Only if NOT proxy or if we want to award to original artist)
+            const pointsToUid = isProxy && proxyUser ? proxyUser.uid : user?.uid;
+            if (pointsToUid && addPoints) {
+                if (pointsToUid === user?.uid) {
+                    addPoints(5);
+                } else {
+                     await updateDoc(doc(db, 'profiles', pointsToUid), {
+                        points: increment(5)
+                    }).catch(err => console.warn(`Failed to award points to proxy user ${pointsToUid}:`, err));
+                }
             }
 
             // Award points to collaborators
@@ -450,6 +539,78 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             {error && (
                 <div className="bg-red-900/50 border border-red-800 text-red-200 p-3 rounded text-sm">
                     {error}
+                </div>
+            )}
+
+            {/* Admin Proxy Upload Section */}
+            {isAdmin && (
+                <div className="bg-purple-900/20 border border-purple-500/30 p-3 rounded-lg mb-4">
+                    <label className="block text-sm font-bold text-purple-300 mb-2 flex items-center gap-2">
+                        <UserCheck className="w-4 h-4" /> Admin: Act as User
+                        <Tooltip content="Submit this track on behalf of another artist. If the artist has an account, search and select them. Otherwise, enter their name below." icon />
+                    </label>
+                    
+                    {proxyUser ? (
+                        <div className="flex items-center justify-between bg-purple-900/40 p-2 rounded border border-purple-500/50">
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold text-white">{proxyUser.displayName || proxyUser.alias}</span>
+                                <span className="text-xs text-purple-300">{proxyUser.email}</span>
+                            </div>
+                            <button 
+                                type="button" 
+                                onClick={() => setProxyUser(null)}
+                                className="text-purple-300 hover:text-white text-xs px-2 py-1 rounded bg-purple-800/50"
+                            >
+                                Change
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="relative">
+                                <Search className="absolute left-2 top-2.5 w-4 h-4 text-purple-400" />
+                                <input 
+                                    type="text" 
+                                    value={proxySearch}
+                                    onChange={(e) => setProxySearch(e.target.value)}
+                                    className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 pl-8 text-white focus:border-purple-500 outline-none text-sm"
+                                    placeholder="Search user by name or email..."
+                                />
+                                {proxyResults.length > 0 && (
+                                    <div className="absolute z-[10001] w-full bg-gray-800 border border-purple-500/50 rounded mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                                        {proxyResults.map(res => (
+                                            <button
+                                                key={res.uid}
+                                                type="button"
+                                                onClick={() => {
+                                                    setProxyUser(res);
+                                                    setProxySearch('');
+                                                    setProxyResults([]);
+                                                }}
+                                                className="w-full text-left px-3 py-2 hover:bg-purple-900/30 border-b border-purple-500/10 last:border-0"
+                                            >
+                                                <div className="text-sm font-bold text-white">{res.displayName || res.alias}</div>
+                                                <div className="text-xs text-gray-400">{res.email}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                                <div className="h-px bg-purple-500/20 flex-1" />
+                                <span className="text-[10px] text-purple-400 uppercase font-bold">OR (Non-User)</span>
+                                <div className="h-px bg-purple-500/20 flex-1" />
+                            </div>
+
+                            <input 
+                                type="text" 
+                                value={proxyAlias}
+                                onChange={(e) => setProxyAlias(e.target.value)}
+                                className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm"
+                                placeholder="Artist name for non-account holder..."
+                            />
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -618,25 +779,6 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 </div>
             </div>
             
-            {/* Admin Proxy Upload */}
-            {isAdmin && (
-                <div className="bg-purple-900/20 border border-purple-500/30 p-3 rounded">
-                    <label className="block text-sm font-bold text-purple-300 mb-1 flex items-center gap-2">
-                        <Users className="w-4 h-4" /> Admin Proxy Upload
-                    </label>
-                    <input 
-                        type="text" 
-                        value={proxyAlias}
-                        onChange={(e) => setProxyAlias(e.target.value)}
-                        className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm"
-                        placeholder="Enter original artist name (e.g. from email)"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                        If set, this track will appear as uploaded by "Admin (on behalf of [Name])".
-                    </p>
-                </div>
-            )}
-
             {/* Collaborators */}
             <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2 justify-between">

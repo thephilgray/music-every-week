@@ -186,6 +186,7 @@ export function RequestDetail() {
                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 // Also expand it
                 setExpandedSubmissionId(submissionId);
+                scrolledRef.current = true;
             }
         }, 100);
     }
@@ -427,7 +428,10 @@ export function RequestDetail() {
 
   // Scroll to current track on load
   useEffect(() => {
-      if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0) {
+      const params = new URLSearchParams(location.search);
+      const hasDeepLink = params.has('submission') || params.has('comment');
+
+      if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0 && !hasDeepLink) {
           const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
           if (trackIsVisible) {
               setTimeout(() => {
@@ -439,7 +443,7 @@ export function RequestDetail() {
               }, 500);
           }
       }
-  }, [visibleSubmissions, currentTrack]);
+  }, [visibleSubmissions, currentTrack, location.search]);
 
   const handlePlayAll = () => {
       if (!request) return;

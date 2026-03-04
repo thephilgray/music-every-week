@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -548,6 +548,7 @@ function PlaylistDetail({ id }: { id: string }) {
     const { participantEmail, isAdmin } = useAuth();
     const { play, currentTrack, isPlaying, pause } = usePlayer();
     const { toast } = useToast();
+    const location = useLocation();
     
     const [loading, setLoading] = useState(true);
     const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -718,7 +719,10 @@ function PlaylistDetail({ id }: { id: string }) {
     const { filtered: visibleSubmissions } = computedVisibleSubmissions;
 
     useEffect(() => {
-        if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0) {
+        const params = new URLSearchParams(location.search);
+        const hasDeepLink = params.has('submission') || params.has('comment');
+
+        if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0 && !hasDeepLink) {
             const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
             if (trackIsVisible) {
                 setTimeout(() => {
@@ -730,7 +734,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 }, 500);
             }
         }
-    }, [visibleSubmissions, currentTrack]);
+    }, [visibleSubmissions, currentTrack, location.search]);
 
     const handlePlayAll = () => {
         if (visibleSubmissions.length > 0) {

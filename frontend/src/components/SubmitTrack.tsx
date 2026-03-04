@@ -414,19 +414,19 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         const linkProfile = !isAnonymous;
 
         // uploaderIdentifier and uploaderUid logic
-        let uploaderEmailToStore = user ? user.email : participantEmail;
-        let uploaderUidToStore = user?.uid;
+        let uploaderEmailToStore = (user ? user.email : participantEmail) || null;
+        let uploaderUidToStore = user?.uid || null;
         let isProxy = false;
 
         if (isAdmin && (proxyUser || proxyAlias)) {
             isProxy = true;
             if (proxyUser) {
                 uploaderUidToStore = proxyUser.uid;
-                uploaderEmailToStore = proxyUser.email;
+                uploaderEmailToStore = proxyUser.email || null;
             } else {
                 // Legacy behavior: keep admin as uploader, but mark as proxy for name
-                uploaderUidToStore = user?.uid;
-                uploaderEmailToStore = user?.email;
+                uploaderUidToStore = user?.uid || null;
+                uploaderEmailToStore = user?.email || null;
             }
         }
 

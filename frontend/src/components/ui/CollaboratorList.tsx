@@ -119,7 +119,9 @@ export function CollaboratorList({
           <span className="flex items-center gap-1">
               {displayName}
               {proxyFor && isAdmin && (
-                  <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                  <span title="Admin Proxy Submission">
+                    <UserCheck className="w-3 h-3 text-purple-400" />
+                  </span>
               )}
           </span>
       );
@@ -159,7 +161,9 @@ export function CollaboratorList({
                     <span className="flex items-center gap-1">
                         {byline}
                         {proxyFor && isAdmin && (
-                            <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                            <span title="Admin Proxy Submission">
+                                <UserCheck className="w-3 h-3 text-purple-400" />
+                            </span>
                         )}
                     </span>
                     <ChevronDown className="w-3 h-3 text-blue-400 opacity-70" />
@@ -172,7 +176,9 @@ export function CollaboratorList({
                   <span className="text-gray-400 flex items-center gap-1">
                       {byline}
                       {proxyFor && isAdmin && (
-                          <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                          <span title="Admin Proxy Submission">
+                            <UserCheck className="w-3 h-3 text-purple-400" />
+                          </span>
                       )}
                   </span>
               </div>
@@ -192,7 +198,9 @@ export function CollaboratorList({
                       <span className="flex items-center gap-1">
                         {uploaderName}
                         {proxyFor && isAdmin && (
-                            <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                            <span title="Admin Proxy Submission">
+                                <UserCheck className="w-3 h-3 text-purple-400" />
+                            </span>
                         )}
                       </span>
                   </Link>
@@ -200,7 +208,9 @@ export function CollaboratorList({
                   <span className="text-gray-400 ml-1 flex items-center gap-1">
                     {uploaderName}
                     {proxyFor && isAdmin && (
-                        <UserCheck className="w-3 h-3 text-purple-400" title="Admin Proxy Submission" />
+                        <span title="Admin Proxy Submission">
+                            <UserCheck className="w-3 h-3 text-purple-400" />
+                        </span>
                     )}
                   </span>
               )}

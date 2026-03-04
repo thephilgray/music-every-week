@@ -17,7 +17,7 @@ export interface UserProfile {
   invites?: Record<string, boolean>; // List of invited pub keys
   joinedAt?: number;
   updatedAt?: FieldValue;
-  lastCommunityVisit?: number | FieldValue;
+  readCommunityItems?: Record<string, boolean>; // Map of item IDs the user has scrolled past in community feed
   deleted?: boolean;
   points?: number; // Gamification points
   settings?: {

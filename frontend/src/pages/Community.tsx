@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where, updateDoc } from 'firebase/firestore';
 import type { Submission, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function Community() {
-  const { settings, user, participantEmail } = useAuth();
+  const { settings, user, profile, participantEmail } = useAuth();
   const [feed, setFeed] = useState<FeedItemData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const [subCursor, setSubCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
   const [commCursor, setCommCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
@@ -44,7 +44,7 @@ export function Community() {
                 });
             });
         } else {
-            setLoadingMore(true);
+            setIsLoadingMore(true);
         }
 
         // 2. Fetch Recent Submissions
@@ -153,44 +153,60 @@ export function Community() {
         console.error("Error loading community feed:", err);
     } finally {
         setLoading(false);
-        setLoadingMore(false);
+        setIsLoadingMore(false);
     }
   };
 
   useEffect(() => {
     fetchFeedBatch(true);
-    
-    // Update lastCommunityVisit
-    if (user?.uid) {
-        updateDoc(doc(db, 'profiles', user.uid), {
-            lastCommunityVisit: serverTimestamp()
-        }).catch(err => console.error("Error updating lastCommunityVisit:", err));
-    }
   }, [user?.uid]);
-
-  const handleObserver = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-        const target = entries[0];
-        if (target.isIntersecting && hasMore && !loading && !loadingMore) {
-            fetchFeedBatch(false);
-        }
-    },
-    [hasMore, loading, loadingMore] // fetchFeedBatch doesn't need to be dependency as it uses state but we use functional updates. Oh wait, it accesses cursors.
-  );
-
-  // We need a ref to access latest states in observer if we don't want to constantly re-bind
-  // But re-binding the observer is fine.
-  useEffect(() => {
-    const option = { root: null, rootMargin: '200px', threshold: 0 };
-    const observer = new IntersectionObserver(handleObserver, option);
-    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [handleObserver]);
 
   const filteredFeed = feed.filter(item => {
       if (settings?.content?.filterAI && item.usesAI) return false;
       return true;
   });
+
+  // Observer for marking items as read as they scroll past
+  useEffect(() => {
+    if (!user?.uid || filteredFeed.length === 0) return;
+
+    const readItems = profile?.readCommunityItems || {};
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const id = entry.target.getAttribute('data-id');
+                if (id && !readItems[id]) {
+                    // Mark as read in Firestore using dot notation for atomic update
+                    updateDoc(doc(db, 'profiles', user.uid), {
+                        [`readCommunityItems.${id}`]: true
+                    }).catch(err => console.warn("Error marking item read:", err));
+                }
+            }
+        });
+    }, { 
+        threshold: 0.5, // 50% visibility
+        rootMargin: '0px' 
+    });
+
+    // Observe all feed items currently in the DOM
+    const elements = document.querySelectorAll('[data-feed-item]');
+    elements.forEach(el => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [filteredFeed, user?.uid, profile?.readCommunityItems]);
+
+  // Infinite Scroll Observer
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+        const target = entries[0];
+        if (target.isIntersecting && hasMore && !loading && !isLoadingMore) {
+            fetchFeedBatch(false);
+        }
+    }, { root: null, rootMargin: '200px', threshold: 0 });
+
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loading, isLoadingMore]);
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
@@ -212,7 +228,9 @@ export function Community() {
         ) : (
             <div className="space-y-4">
                 {filteredFeed.map(item => (
-                    <FeedItemRow key={item.id} item={item} />
+                    <div key={item.id} data-id={item.id} data-feed-item>
+                        <FeedItemRow item={item} />
+                    </div>
                 ))}
                 
                 {hasMore && (

@@ -70,22 +70,17 @@ export function Sidebar({ onClose }: SidebarProps) {
     if (user || participantEmail) {
         // Only start counting from March 3, 2026 to avoid 99+ on first load for old activity
         const START_DATE = new Date('2026-03-03T00:00:00Z').getTime();
-        const lastVisit = Math.max(
-            profile?.lastCommunityVisit 
-                ? (typeof profile.lastCommunityVisit === 'number' ? profile.lastCommunityVisit : (profile.lastCommunityVisit as any).seconds * 1000)
-                : 0,
-            START_DATE
-        );
+        const readItems = profile?.readCommunityItems || {};
 
         const subQuery = query(
             collection(db, 'submissions'),
-            where('createdAt', '>', new Date(lastVisit)),
+            where('createdAt', '>', new Date(START_DATE)),
             orderBy('createdAt', 'desc')
         );
 
         const commQuery = query(
             collection(db, 'comments'),
-            where('createdAt', '>', new Date(lastVisit)),
+            where('createdAt', '>', new Date(START_DATE)),
             orderBy('createdAt', 'desc')
         );
 
@@ -93,7 +88,10 @@ export function Sidebar({ onClose }: SidebarProps) {
         let commIds = new Set<string>();
 
         const updateCommCount = () => {
-            setCommunityUnreadCount(subIds.size + commIds.size);
+            // Count items that are NOT in the readItems map
+            const unreadSubs = Array.from(subIds).filter(id => !readItems[id]).length;
+            const unreadComms = Array.from(commIds).filter(id => !readItems[id]).length;
+            setCommunityUnreadCount(unreadSubs + unreadComms);
         };
 
         unsubs.push(onSnapshot(subQuery, (snap) => {
@@ -108,7 +106,7 @@ export function Sidebar({ onClose }: SidebarProps) {
     }
 
     return () => unsubs.forEach(unsub => unsub());
-  }, [user, participantEmail, profile?.lastCommunityVisit]); // Depend on lastCommunityVisit
+  }, [user, participantEmail, profile?.readCommunityItems]); // Depend on readCommunityItems
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },

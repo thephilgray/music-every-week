@@ -131,8 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setIsAdmin(adminStatus);
                     
                     // isHost is true if user is admin OR if they have the isHost flag in Firestore
-                    setIsHost(adminStatus || !!data.isHost); 
-                    
+                    // We use nullish coalescing to allow an explicit 'false' to override the admin default
+                    setIsHost(data.isHost ?? adminStatus); 
+
                     setSettings(data.settings || {});
                     setProfile(data as UserProfile);
                 } else {

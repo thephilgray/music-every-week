@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Loader2, Check, Bell } from 'lucide-react';
+import { MessageSquare, Loader2, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where, updateDoc, serverTimestamp } from 'firebase/firestore';
 import type { Submission, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
@@ -175,11 +175,22 @@ export function Community() {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 const id = entry.target.getAttribute('data-id');
+                const item = filteredFeed.find(f => f.id === id);
+                
                 if (id && !readItems[id]) {
-                    // Mark as read in Firestore using dot notation for atomic update
-                    updateDoc(doc(db, 'profiles', user.uid), {
+                    const updates: Record<string, any> = {
                         [`readCommunityItems.${id}`]: true
-                    }).catch(err => console.warn("Error marking item read:", err));
+                    };
+
+                    // If we scroll past an item older than 2 days, mark everything as read 
+                    // by updating the lastCommunityVisit timestamp to now.
+                    const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
+                    if (item && item.createdAt < twoDaysAgo) {
+                        updates.lastCommunityVisit = serverTimestamp();
+                    }
+
+                    updateDoc(doc(db, 'profiles', user.uid), updates)
+                        .catch(err => console.warn("Error updating read status:", err));
                 }
             }
         });
@@ -210,41 +221,12 @@ export function Community() {
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
-        <div className="flex items-center justify-between mb-8">
-            <div>
-                <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                    <Bell className="w-8 h-8 text-blue-500" />
-                    Community Feed
-                </h1>
-                <p className="text-gray-400">See what's happening across all requests.</p>
-            </div>
-            
-            {filteredFeed.some(item => !profile?.readCommunityItems?.[item.id]) && (
-                <button 
-                    onClick={async () => {
-                        if (!user?.uid) return;
-                        const unreadIds = filteredFeed
-                            .filter(item => !profile?.readCommunityItems?.[item.id])
-                            .map(item => item.id);
-                        
-                        if (unreadIds.length > 0) {
-                            const updates: Record<string, boolean> = {};
-                            unreadIds.forEach(id => {
-                                updates[`readCommunityItems.${id}`] = true;
-                            });
-                            try {
-                                await updateDoc(doc(db, 'profiles', user.uid), updates);
-                            } catch (e) {
-                                console.error("Error marking all read:", e);
-                            }
-                        }
-                    }}
-                    className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1 bg-blue-900/20 px-3 py-1.5 rounded-lg border border-blue-800/50 transition-colors"
-                >
-                    <Check className="w-4 h-4" />
-                    Mark page read
-                </button>
-            )}
+        <div className="mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                <Bell className="w-8 h-8 text-blue-500" />
+                Community Feed
+            </h1>
+            <p className="text-gray-400">See what's happening across all requests.</p>
         </div>
 
         {loading ? (

@@ -71,6 +71,14 @@ export function Sidebar({ onClose }: SidebarProps) {
         // Only start counting from March 3, 2026 to avoid 99+ on first load for old activity
         const START_DATE = new Date('2026-03-03T00:00:00Z').getTime();
         const readItems = profile?.readCommunityItems || {};
+        
+        // Use lastCommunityVisit as a base for clearing (Mark All Read)
+        const lastVisit = profile?.lastCommunityVisit 
+            ? (typeof profile.lastCommunityVisit === 'number' ? profile.lastCommunityVisit : (profile.lastCommunityVisit as any).seconds * 1000)
+            : 0;
+        
+        const effectiveStartDate = Math.max(START_DATE, lastVisit);
+
         const email = user?.email || participantEmail;
         const uid = user?.uid;
 
@@ -121,13 +129,13 @@ export function Sidebar({ onClose }: SidebarProps) {
 
         const subQuery = query(
             collection(db, 'submissions'),
-            where('createdAt', '>', new Date(START_DATE)),
+            where('createdAt', '>', new Date(effectiveStartDate)),
             orderBy('createdAt', 'desc')
         );
 
         const commQuery = query(
             collection(db, 'comments'),
-            where('createdAt', '>', new Date(START_DATE)),
+            where('createdAt', '>', new Date(effectiveStartDate)),
             orderBy('createdAt', 'desc')
         );
 

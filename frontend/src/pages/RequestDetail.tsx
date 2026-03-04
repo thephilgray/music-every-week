@@ -357,53 +357,57 @@ export function RequestDetail() {
   const computedVisibleSubmissions = useMemo(() => {
       let filtered = submissions;
 
-      // Apply global AI filter from settings
-      if (settings?.content?.filterAI) {
-          filtered = filtered.filter(s => !s.usesAI);
-      }
+      const shouldApplyFilters = isPlaylistLive || isOwner || isAdmin;
 
-      // Apply search term filter
-      if (debouncedSearchTerm) {
-          const term = debouncedSearchTerm.toLowerCase();
-          filtered = filtered.filter(s => 
-              s.title.toLowerCase().includes(term) || 
-              s.byline?.toLowerCase().includes(term) ||
-              s.uploaderEmail?.toLowerCase().includes(term)
-          );
-      }
-
-      // Apply specific filter toggles
-      if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
-      if (filterByFragile) filtered = filtered.filter(s => s.fragile);
-      if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
-      if (filterByFeedbackFocus.length > 0) {
-          filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
-      }
-
-      // Apply sorting
-      const sorted = [...filtered].sort((a, b) => {
-          switch (sortBy) {
-              case 'newest':
-                  return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
-              case 'oldest':
-                  return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
-              case 'alpha':
-                  return a.title.localeCompare(b.title);
-              case 'mostComments':
-                  return (submissionCommentCounts[b.id!] || 0) - (submissionCommentCounts[a.id!] || 0);
-              case 'fewestComments':
-                  return (submissionCommentCounts[a.id!] || 0) - (submissionCommentCounts[b.id!] || 0);
-              case 'unlistenedFirst': {
-                  const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
-                  const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
-                  if (aListened !== bListened) return aListened - bListened;
-                  return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
-              }
-              default:
-                  return 0;
+      if (shouldApplyFilters) {
+          // Apply global AI filter from settings
+          if (settings?.content?.filterAI) {
+              filtered = filtered.filter(s => !s.usesAI);
           }
-      });
-      filtered = sorted;
+
+          // Apply search term filter
+          if (debouncedSearchTerm) {
+              const term = debouncedSearchTerm.toLowerCase();
+              filtered = filtered.filter(s => 
+                  s.title.toLowerCase().includes(term) || 
+                  s.byline?.toLowerCase().includes(term) ||
+                  s.uploaderEmail?.toLowerCase().includes(term)
+              );
+          }
+
+          // Apply specific filter toggles
+          if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
+          if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+          if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
+          if (filterByFeedbackFocus.length > 0) {
+              filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
+          }
+
+          // Apply sorting
+          const sorted = [...filtered].sort((a, b) => {
+              switch (sortBy) {
+                  case 'newest':
+                      return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+                  case 'oldest':
+                      return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
+                  case 'alpha':
+                      return a.title.localeCompare(b.title);
+                  case 'mostComments':
+                      return (submissionCommentCounts[b.id!] || 0) - (submissionCommentCounts[a.id!] || 0);
+                  case 'fewestComments':
+                      return (submissionCommentCounts[a.id!] || 0) - (submissionCommentCounts[b.id!] || 0);
+                  case 'unlistenedFirst': {
+                      const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
+                      const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
+                      if (aListened !== bListened) return aListened - bListened;
+                      return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+                  }
+                  default:
+                      return 0;
+              }
+          });
+          filtered = sorted;
+      }
 
       // Apply locking logic to the filtered and sorted list
       const visibleAfterLocking = filtered.filter(sub => {

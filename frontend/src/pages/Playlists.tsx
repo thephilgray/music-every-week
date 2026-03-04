@@ -659,42 +659,47 @@ function PlaylistDetail({ id }: { id: string }) {
     const computedVisibleSubmissions = useMemo(() => {
         let filtered = submissions;
         
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filtered = filtered.filter(s => 
-                s.title.toLowerCase().includes(term) || 
-                s.byline?.toLowerCase().includes(term) ||
-                s.uploaderEmail?.toLowerCase().includes(term)
-            );
-        }
+        const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
+        const deadlineTime = getTimestampAsNumber(request?.deadline);
+        const effectiveLiveTime = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
+        const isLive = effectiveLiveTime > 0 && Date.now() >= effectiveLiveTime;
 
-        if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
-        if (filterByFragile) filtered = filtered.filter(s => s.fragile);
-        if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
-        if (filterByFeedbackFocus.length > 0) {
-            filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
-        }
+        const shouldApplyFilters = isLive || isHost;
 
-        filtered.sort((a, b) => {
-            if (sortBy === 'newest') return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
-            if (sortBy === 'oldest') return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
-            if (sortBy === 'alpha') return a.title.localeCompare(b.title);
-            if (sortBy === 'unlistenedFirst') {
-                const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
-                const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
-                if (aListened !== bListened) return aListened - bListened;
-                return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+        if (shouldApplyFilters) {
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                filtered = filtered.filter(s => 
+                    s.title.toLowerCase().includes(term) || 
+                    s.byline?.toLowerCase().includes(term) ||
+                    s.uploaderEmail?.toLowerCase().includes(term)
+                );
             }
-            return 0; 
-        });
+
+            if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
+            if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+            if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
+            if (filterByFeedbackFocus.length > 0) {
+                filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
+            }
+
+            filtered.sort((a, b) => {
+                if (sortBy === 'newest') return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+                if (sortBy === 'oldest') return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
+                if (sortBy === 'alpha') return a.title.localeCompare(b.title);
+                if (sortBy === 'unlistenedFirst') {
+                    const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
+                    const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
+                    if (aListened !== bListened) return aListened - bListened;
+                    return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+                }
+                return 0; 
+            });
+        }
 
         let lockMessage = "";
         const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
         
-        const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
-        const deadlineTime = getTimestampAsNumber(request?.deadline);
-        const effectiveLiveTime = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
-
         if (!isHost && effectiveLiveTime > 0) {
             if (Date.now() < effectiveLiveTime) {
                 if (hasSubmitted) {
@@ -714,7 +719,7 @@ function PlaylistDetail({ id }: { id: string }) {
         }
 
         return { filtered, lockMessage, isHost };
-    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isAdmin, isHost, listenedTracks]);
+    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isHost, listenedTracks]);
 
     const { filtered: visibleSubmissions } = computedVisibleSubmissions;
 

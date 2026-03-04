@@ -13,7 +13,7 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, participantEmail } = useAuth(); // Destructure profile
+  const { user, profile, participantEmail, settings } = useAuth(); // Destructure settings
   const [unreadCount, setUnreadCount] = useState(0);
   const [communityUnreadCount, setCommunityUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
@@ -71,6 +71,50 @@ export function Sidebar({ onClose }: SidebarProps) {
         // Only start counting from March 3, 2026 to avoid 99+ on first load for old activity
         const START_DATE = new Date('2026-03-03T00:00:00Z').getTime();
         const readItems = profile?.readCommunityItems || {};
+        const email = user?.email || participantEmail;
+        const uid = user?.uid;
+
+        // 1. Fetch Accessible Request IDs first to filter feed
+        const accessibleRequestIds = new Set<string>();
+        const reqQueries = [];
+        if (uid) reqQueries.push(query(collection(db, 'requests'), where('ownerPub', '==', uid)));
+        if (email) reqQueries.push(query(collection(db, 'requests'), where('accessList', 'array-contains', email)));
+        reqQueries.push(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer')));
+
+        const updateCommCount = () => {
+            // Count items that are NOT in the readItems map AND belong to an accessible request
+            // AND respect the AI filter setting (for submissions)
+            const filterAI = !!settings?.content?.filterAI;
+
+            const unreadSubs = Array.from(subDocs).filter(d => {
+                const data = d.data();
+                return !readItems[d.id] && accessibleRequestIds.has(data.requestId) && !(filterAI && data.usesAI);
+            }).length;
+
+            const unreadComms = Array.from(commDocs).filter(d => {
+                const data = d.data();
+                return !readItems[d.id] && accessibleRequestIds.has(data.requestId);
+            }).length;
+
+            setCommunityUnreadCount(unreadSubs + unreadComms);
+        };
+
+        let subDocs: any[] = [];
+        let commDocs: any[] = [];
+
+        // Listen to requests to keep accessible list updated
+        reqQueries.forEach(q => {
+            unsubs.push(onSnapshot(q, (snap) => {
+                snap.forEach(doc => {
+                    if (!doc.data().deleted) {
+                        accessibleRequestIds.add(doc.id);
+                    } else {
+                        accessibleRequestIds.delete(doc.id);
+                    }
+                });
+                updateCommCount();
+            }));
+        });
 
         const subQuery = query(
             collection(db, 'submissions'),
@@ -84,29 +128,19 @@ export function Sidebar({ onClose }: SidebarProps) {
             orderBy('createdAt', 'desc')
         );
 
-        let subIds = new Set<string>();
-        let commIds = new Set<string>();
-
-        const updateCommCount = () => {
-            // Count items that are NOT in the readItems map
-            const unreadSubs = Array.from(subIds).filter(id => !readItems[id]).length;
-            const unreadComms = Array.from(commIds).filter(id => !readItems[id]).length;
-            setCommunityUnreadCount(unreadSubs + unreadComms);
-        };
-
         unsubs.push(onSnapshot(subQuery, (snap) => {
-            subIds = new Set(snap.docs.map(d => d.id));
+            subDocs = snap.docs;
             updateCommCount();
         }));
 
         unsubs.push(onSnapshot(commQuery, (snap) => {
-            commIds = new Set(snap.docs.map(d => d.id));
+            commDocs = snap.docs;
             updateCommCount();
         }));
     }
 
     return () => unsubs.forEach(unsub => unsub());
-  }, [user, participantEmail, profile?.readCommunityItems]); // Depend on readCommunityItems
+  }, [user, participantEmail, profile?.readCommunityItems, settings?.content?.filterAI]);
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },

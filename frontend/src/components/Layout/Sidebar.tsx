@@ -68,9 +68,14 @@ export function Sidebar({ onClose }: SidebarProps) {
 
     // Community Unread Logic
     if (user || participantEmail) {
-        const lastVisit = profile?.lastCommunityVisit 
-            ? (typeof profile.lastCommunityVisit === 'number' ? profile.lastCommunityVisit : (profile.lastCommunityVisit as any).seconds * 1000)
-            : 0;
+        // Only start counting from March 3, 2026 to avoid 99+ on first load for old activity
+        const START_DATE = new Date('2026-03-03T00:00:00Z').getTime();
+        const lastVisit = Math.max(
+            profile?.lastCommunityVisit 
+                ? (typeof profile.lastCommunityVisit === 'number' ? profile.lastCommunityVisit : (profile.lastCommunityVisit as any).seconds * 1000)
+                : 0,
+            START_DATE
+        );
 
         const subQuery = query(
             collection(db, 'submissions'),

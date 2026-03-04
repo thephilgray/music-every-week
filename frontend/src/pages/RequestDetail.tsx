@@ -316,7 +316,7 @@ export function RequestDetail() {
   // Show filter notification toast on land
   useEffect(() => {
     if (areFiltersActive && canSeeFilters) {
-        toast("Filters are active from a previous session.", {
+        toast("Filters are active.", {
             duration: 15000,
             actions: [
                 {

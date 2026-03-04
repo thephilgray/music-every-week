@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Home, Inbox, Layers, Users, Archive, User, Settings, X, ListMusic, Bug, Globe } from 'lucide-react';
+import { Home, Inbox, Layers, Users, User, Settings, X, ListMusic, Bug, Globe } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
@@ -59,7 +59,6 @@ export function Sidebar({ onClose }: SidebarProps) {
     { icon: Globe, label: 'Community', path: '/feed' },
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     { icon: Users, label: 'Directory', path: '/directory' },
-    { icon: Archive, label: 'Archive', path: '/archive' },
     { icon: Layers, label: 'Creator Tools', path: '/creator' },
     { icon: User, label: 'Profile', path: '/profile' },
     { icon: Settings, label: 'Settings', path: '/settings' },

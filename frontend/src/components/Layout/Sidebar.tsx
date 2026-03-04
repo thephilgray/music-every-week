@@ -214,10 +214,10 @@ export function Sidebar({ onClose }: SidebarProps) {
         })}
       </nav>
 
-      <div className="pt-6 pb-4 px-4 border-t border-gray-800 mb-20">
+      <div className="pt-4 pb-4 px-4 border-t border-gray-800 mb-4 md:mb-20">
         <button 
             onClick={() => setShowBugReport(true)}
-            className="w-full text-left px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition mb-1 text-sm font-medium flex items-center gap-3"
+            className="w-full text-left px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition text-sm font-medium flex items-center gap-3"
         >
             <Bug className="w-5 h-5" />
             Report Bug

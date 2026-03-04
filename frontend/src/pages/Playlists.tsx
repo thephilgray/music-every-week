@@ -664,7 +664,7 @@ function PlaylistDetail({ id }: { id: string }) {
         const effectiveLiveTime = playlistLiveTime > 0 ? playlistLiveTime : deadlineTime;
         const isLive = effectiveLiveTime > 0 && Date.now() >= effectiveLiveTime;
 
-        const shouldApplyFilters = isLive || isHost;
+        const shouldApplyFilters = isLive;
 
         if (shouldApplyFilters) {
             if (searchTerm) {
@@ -695,6 +695,9 @@ function PlaylistDetail({ id }: { id: string }) {
                 }
                 return 0; 
             });
+        } else {
+            // Default sort by newest when filters are bypassed (e.g. not live yet)
+            filtered = [...filtered].sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
         }
 
         let lockMessage = "";

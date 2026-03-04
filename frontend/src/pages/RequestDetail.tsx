@@ -357,7 +357,7 @@ export function RequestDetail() {
   const computedVisibleSubmissions = useMemo(() => {
       let filtered = submissions;
 
-      const shouldApplyFilters = isPlaylistLive || isOwner || isAdmin;
+      const shouldApplyFilters = isPlaylistLive;
 
       if (shouldApplyFilters) {
           // Apply global AI filter from settings
@@ -407,6 +407,9 @@ export function RequestDetail() {
               }
           });
           filtered = sorted;
+      } else {
+          // Default sort by newest when filters are bypassed (e.g. not live yet)
+          filtered = [...filtered].sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
       }
 
       // Apply locking logic to the filtered and sorted list

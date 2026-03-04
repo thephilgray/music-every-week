@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Loader2, Bell } from 'lucide-react';
+import { MessageSquare, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
@@ -222,10 +222,7 @@ export function Community() {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
         <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                <Bell className="w-8 h-8 text-blue-500" />
-                Community Feed
-            </h1>
+            <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
             <p className="text-gray-400">See what's happening across all requests.</p>
         </div>
 

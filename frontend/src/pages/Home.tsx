@@ -61,9 +61,9 @@ export function Home() {
   }, [user, participantEmail]);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20 p-4">
+    <div className="max-w-5xl mx-auto space-y-4 md:space-y-8 pb-20 p-4">
       {/* Tertiary Nav */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-800/50 pb-4">
+      <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-2 text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-800/50 pb-3 md:pb-4">
           <a href="https://discord.com/invite/MJRRwBddKV" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors flex items-center gap-1.5">
               Discord
           </a>

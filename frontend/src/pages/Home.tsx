@@ -9,7 +9,7 @@ import type { FileRequest } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function Home() {
-  const { user, isAdmin, participantEmail } = useAuth(); 
+  const { user, isAdmin, isHost, participantEmail } = useAuth(); 
   const [showCreate, setShowCreate] = useState(false);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +88,7 @@ export function Home() {
            </div>
            <p className="text-gray-400">Submit tracks, listen, and provide feedback</p>
         </div>
-        {user && isAdmin && ( 
+        {user && isAdmin && isHost && ( 
         <button 
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-blue-900/20"

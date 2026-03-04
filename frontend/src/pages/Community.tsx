@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where, updateDoc, serverTimestamp } from 'firebase/firestore';
 import type { Submission, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
@@ -159,7 +159,14 @@ export function Community() {
 
   useEffect(() => {
     fetchFeedBatch(true);
-  }, []);
+    
+    // Update lastCommunityVisit
+    if (user?.uid) {
+        updateDoc(doc(db, 'profiles', user.uid), {
+            lastCommunityVisit: serverTimestamp()
+        }).catch(err => console.error("Error updating lastCommunityVisit:", err));
+    }
+  }, [user?.uid]);
 
   const handleObserver = useCallback(
     (entries: IntersectionObserverEntry[]) => {

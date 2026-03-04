@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
 import { db } from '../../lib/firebase'; // Added Firebase import
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; // Added Firestore imports
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'; // Added Firestore imports
 
 interface SidebarProps {
   onClose?: () => void;
@@ -13,14 +13,16 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, participantEmail } = useAuth(); // Destructure user and participantEmail from useAuth
+  const { user, profile, participantEmail } = useAuth(); // Destructure profile
   const [unreadCount, setUnreadCount] = useState(0);
+  const [communityUnreadCount, setCommunityUnreadCount] = useState(0);
   const [showBugReport, setShowBugReport] = useState(false);
 
   useEffect(() => {
     // If auth is loading, or no user/participantEmail, return
     if (!user && !participantEmail) {
-        setUnreadCount(0); // No user, no unread notifications
+        setUnreadCount(0); 
+        setCommunityUnreadCount(0);
         return;
     }
 
@@ -64,12 +66,49 @@ export function Sidebar({ onClose }: SidebarProps) {
         }));
     }
 
+    // Community Unread Logic
+    if (user || participantEmail) {
+        const lastVisit = profile?.lastCommunityVisit 
+            ? (typeof profile.lastCommunityVisit === 'number' ? profile.lastCommunityVisit : (profile.lastCommunityVisit as any).seconds * 1000)
+            : 0;
+
+        const subQuery = query(
+            collection(db, 'submissions'),
+            where('createdAt', '>', new Date(lastVisit)),
+            orderBy('createdAt', 'desc')
+        );
+
+        const commQuery = query(
+            collection(db, 'comments'),
+            where('createdAt', '>', new Date(lastVisit)),
+            orderBy('createdAt', 'desc')
+        );
+
+        let subIds = new Set<string>();
+        let commIds = new Set<string>();
+
+        const updateCommCount = () => {
+            setCommunityUnreadCount(subIds.size + commIds.size);
+        };
+
+        unsubs.push(onSnapshot(subQuery, (snap) => {
+            subIds = new Set(snap.docs.map(d => d.id));
+            updateCommCount();
+        }));
+
+        unsubs.push(onSnapshot(commQuery, (snap) => {
+            commIds = new Set(snap.docs.map(d => d.id));
+            updateCommCount();
+        }));
+    }
+
     return () => unsubs.forEach(unsub => unsub());
-  }, [user, participantEmail]); // Depend on user and participantEmail  
+  }, [user, participantEmail, profile?.lastCommunityVisit]); // Depend on lastCommunityVisit
+
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: ListMusic, label: 'Playlists', path: '/playlists' },
-    { icon: Globe, label: 'Community', path: '/feed' },
+    { icon: Globe, label: 'Community', path: '/feed', badge: communityUnreadCount },
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     { icon: Users, label: 'Directory', path: '/directory' },
     { icon: Layers, label: 'Creator Tools', path: '/creator' },

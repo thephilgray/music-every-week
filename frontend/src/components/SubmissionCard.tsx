@@ -121,27 +121,32 @@ export function SubmissionCard({
 
                          {/* Tags Section - Restored from Gun App */}
                         {!locked && (submission.fragile || submission.usesAI || (submission.feedbackFocus && submission.feedbackFocus.length > 0)) && (
-                            <div className="flex flex-wrap gap-2 mt-1.5">
-                                {submission.usesAI && (
-                                    <span className="bg-purple-900/20 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-purple-800/30 flex items-center gap-1">
-                                        AI
-                                    </span>
+                            <div className="relative overflow-hidden mt-1.5">
+                                <div className={`flex ${isExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'} gap-2 pr-8`}>
+                                    {submission.usesAI && (
+                                        <span className="bg-purple-900/20 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-purple-800/30 flex items-center gap-1 flex-shrink-0">
+                                            AI
+                                        </span>
+                                    )}
+                                    {submission.fragile && (
+                                        <span className="bg-pink-900/20 text-pink-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-pink-800/30 flex items-center gap-1 flex-shrink-0">
+                                            <Heart className="w-3 h-3 fill-current animate-pulse" /> Fragile
+                                        </span>
+                                    )}
+                                    {submission.feedbackFocus?.map((focus, i) => (
+                                        <span key={i} className="bg-blue-900/20 text-blue-300 px-1.5 py-0.5 rounded text-[10px] font-medium border border-blue-800/30 flex-shrink-0">
+                                            {focus}
+                                        </span>
+                                    ))}
+                                </div>
+                                {!isExpanded && (
+                                    <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-gray-900 to-transparent pointer-events-none" />
                                 )}
-                                {submission.fragile && (
-                                    <span className="bg-pink-900/20 text-pink-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-pink-800/30 flex items-center gap-1">
-                                        <Heart className="w-3 h-3 fill-current animate-pulse" /> Fragile
-                                    </span>
-                                )}
-                                {submission.feedbackFocus?.map((focus, i) => (
-                                    <span key={i} className="bg-blue-900/20 text-blue-300 px-1.5 py-0.5 rounded text-[10px] font-medium border border-blue-800/30">
-                                        {focus}
-                                    </span>
-                                ))}
                             </div>
                         )}
 
                         {submission.waveform && submission.waveform.length > 0 && !locked && (
-                            <div className="mt-2 w-full max-w-md opacity-70 hover:opacity-100 transition hidden md:block">
+                            <div className="mt-2 w-full flex-1 opacity-70 hover:opacity-100 transition hidden md:block">
                                 <Waveform data={Array.isArray(submission.waveform) ? submission.waveform : []} />
                             </div>
                         )}

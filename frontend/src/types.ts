@@ -103,7 +103,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'comment' | 'submission' | 'invite' | 'mention' | 'bug';
+  type: 'comment' | 'submission' | 'invite' | 'mention' | 'bug' | 'collaborator';
   message: string;
   link: string;
   fromUid: string; // Changed from fromPub

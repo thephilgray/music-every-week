@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign, AlertCircle } from 'lucide-react';
+import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign, AlertCircle, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext'; // Changed to useAuth
 import { Skeleton } from '../components/ui/Skeleton';
 import type { Notification, UserProfile } from '../types'; // Added UserProfile for fetching sender alias
@@ -13,7 +13,7 @@ export function Inbox() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention' | 'bug'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention' | 'bug' | 'collaborator'>('all');
   
   // Privacy & Contacts
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
@@ -79,7 +79,10 @@ const updateNotificationState = useCallback(async (
     
     // If no user AND no participant email, we can't fetch anything.
     if (!user?.uid && !participantEmail) {
-        setLoading(false);
+        setLoading(prev => {
+            if (prev) return false;
+            return prev;
+        });
         return;
     }
 
@@ -226,9 +229,10 @@ const updateNotificationState = useCallback(async (
         console.log(`Attempting to delete notification: ${n.id}`);
         await deleteDoc(doc(db, 'notifications', n.id));
         console.log(`Successfully deleted notification: ${n.id}`);
-    } catch (error: any) {
+    } catch (err: unknown) { 
+        const error = err as any;
         console.error("Error deleting notification:", error);
-        if (error.code === 'not-found') {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'not-found') {
              // Already deleted
         } else {
              alert('Failed to delete notification.');
@@ -287,6 +291,7 @@ const updateNotificationState = useCallback(async (
           case 'comment': return <MessageSquare className="w-5 h-5 text-green-400" />;
           case 'mention': return <AtSign className="w-5 h-5 text-yellow-400" />;
           case 'bug': return <AlertCircle className="w-5 h-5 text-red-400" />;
+          case 'collaborator': return <Users className="w-5 h-5 text-purple-400" />;
           default: return <Bell className="w-5 h-5 text-gray-400" />;
       }
   };
@@ -311,7 +316,7 @@ const updateNotificationState = useCallback(async (
 
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          {(['all', 'invite', 'submission', 'comment', 'mention', 'bug'] as const).map(type => (
+          {(['all', 'invite', 'submission', 'comment', 'mention', 'bug', 'collaborator'] as const).map(type => (
               <button
                   key={type}
                   onClick={() => setFilterType(type)}

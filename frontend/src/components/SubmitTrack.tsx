@@ -455,6 +455,41 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 ...submissionData,
                 updatedAt: serverTimestamp()
              });
+
+             // Send notifications to NEW collaborators
+             const existingCollabs = Object.keys(existingSubmission.collaborators || {}).filter(k => k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#'));
+             const newCollabs = collaborators.filter(c => !existingCollabs.includes(c));
+             
+             if (newCollabs.length > 0) {
+                 const notificationPromises = newCollabs.map(async (collabUid) => {
+                     try {
+                         const profileDoc = await getDoc(doc(db, 'profiles', collabUid));
+                         if (profileDoc.exists()) {
+                             const profileData = profileDoc.data();
+                             const recipientEmail = profileData.email;
+                             if (recipientEmail) {
+                                 const notifData = {
+                                     type: 'collaborator',
+                                     message: `You've been added as a collaborator on "${title}" by ${user?.displayName || user?.email || participantEmail}`,
+                                     link: `/request/${requestId}?submission=${existingSubmission.id}`,
+                                     fromUid: user?.uid || 'participant',
+                                     fromName: user?.displayName || user?.email || participantEmail,
+                                     fromEmail: user?.email || participantEmail,
+                                     createdAt: serverTimestamp(),
+                                     read: false,
+                                     requestId,
+                                     recipientEmail
+                                 };
+                                 await addDoc(collection(db, 'notifications'), notifData);
+                             }
+                         }
+                     } catch (e) {
+                         console.error("Error sending collaborator notification:", e);
+                     }
+                 });
+                 await Promise.all(notificationPromises);
+             }
+
              onSuccess({ ...existingSubmission, ...submissionData });
         } else {
             // Create
@@ -462,6 +497,37 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 ...submissionData,
                 createdAt: serverTimestamp()
             });
+
+            // Send notifications to all collaborators
+            if (collaborators.length > 0) {
+                const notificationPromises = collaborators.map(async (collabUid) => {
+                    try {
+                        const profileDoc = await getDoc(doc(db, 'profiles', collabUid));
+                        if (profileDoc.exists()) {
+                            const profileData = profileDoc.data();
+                            const recipientEmail = profileData.email;
+                            if (recipientEmail) {
+                                const notifData = {
+                                    type: 'collaborator',
+                                    message: `You've been added as a collaborator on "${title}" by ${user?.displayName || user?.email || participantEmail}`,
+                                    link: `/request/${requestId}?submission=${docRef.id}`,
+                                    fromUid: user?.uid || 'participant',
+                                    fromName: user?.displayName || user?.email || participantEmail,
+                                    fromEmail: user?.email || participantEmail,
+                                    createdAt: serverTimestamp(),
+                                    read: false,
+                                    requestId,
+                                    recipientEmail
+                                };
+                                await addDoc(collection(db, 'notifications'), notifData);
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Error sending collaborator notification:", e);
+                    }
+                });
+                await Promise.all(notificationPromises);
+            }
             
             // Award points (Only if NOT proxy or if we want to award to original artist)
             const pointsToUid = isProxy && proxyUser ? proxyUser.uid : user?.uid;

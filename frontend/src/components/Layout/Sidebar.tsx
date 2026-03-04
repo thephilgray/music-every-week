@@ -24,34 +24,47 @@ export function Sidebar({ onClose }: SidebarProps) {
         return;
     }
 
-    let q;
+    const unsubs: (() => void)[] = [];
+    const idsByQuery: Record<string, Set<string>> = {};
+    
+    const updateCount = () => {
+        const combinedIds = new Set<string>();
+        Object.values(idsByQuery).forEach(set => {
+            set.forEach(id => combinedIds.add(id));
+        });
+        setUnreadCount(combinedIds.size);
+    };
+
     if (user?.uid) {
-        // For Firebase authenticated users
-        q = query(
+        const q = query(
             collection(db, 'notifications'),
             where('recipientUid', '==', user.uid),
             where('read', '==', false)
         );
-    } else if (participantEmail) {
-        // For email-only participants
-        q = query(
-            collection(db, 'notifications'),
-            where('recipientEmail', '==', participantEmail),
-            where('read', '==', false)
-        );
-    } else {
-        setUnreadCount(0);
-        return;
+        unsubs.push(onSnapshot(q, (snapshot) => {
+            idsByQuery['uid'] = new Set(snapshot.docs.map(d => d.id));
+            updateCount();
+        }, (error) => {
+            console.error("Error fetching unread notifications (UID):", error);
+        }));
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        setUnreadCount(snapshot.size);
-    }, (error) => {
-        console.error("Error fetching unread notifications:", error);
-        setUnreadCount(0);
-    });
-    
-    return () => unsubscribe();
+    const email = user?.email || participantEmail;
+    if (email) {
+        const q = query(
+            collection(db, 'notifications'),
+            where('recipientEmail', '==', email),
+            where('read', '==', false)
+        );
+        unsubs.push(onSnapshot(q, (snapshot) => {
+            idsByQuery['email'] = new Set(snapshot.docs.map(d => d.id));
+            updateCount();
+        }, (error) => {
+            console.error("Error fetching unread notifications (Email):", error);
+        }));
+    }
+
+    return () => unsubs.forEach(unsub => unsub());
   }, [user, participantEmail]); // Depend on user and participantEmail  
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },

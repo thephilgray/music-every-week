@@ -17,7 +17,6 @@ export function Sidebar({ onClose }: SidebarProps) {
   
   const [notifDocs, setNotifDocs] = useState<Record<string, any>>({});
   const [accessibleRequestIds, setAccessibleRequestIds] = useState<Set<string>>(new Set());
-  const [subDocs, setSubDocs] = useState<QueryDocumentSnapshot<DocumentData, DocumentData>[]>([]);
   const [commDocs, setCommDocs] = useState<QueryDocumentSnapshot<DocumentData, DocumentData>[]>([]);
   
   const [showBugReport, setShowBugReport] = useState(false);
@@ -111,10 +110,9 @@ export function Sidebar({ onClose }: SidebarProps) {
     return () => unsubs.forEach(unsub => unsub());
   }, [user?.uid, user?.email, participantEmail]);
 
-  // 3. Community Content Listener (Submissions & Comments)
+  // 3. Community Content Listener (Comments Only)
   useEffect(() => {
     if (!user && !participantEmail) {
-        setSubDocs([]);
         setCommDocs([]);
         return;
     }
@@ -134,23 +132,15 @@ export function Sidebar({ onClose }: SidebarProps) {
     
     const effectiveStartDate = Math.max(START_DATE, lastVisit);
 
-    const subQuery = query(
-        collection(db, 'submissions'),
-        where('createdAt', '>', new Date(effectiveStartDate)),
-        orderBy('createdAt', 'desc')
-    );
-
     const commQuery = query(
         collection(db, 'comments'),
         where('createdAt', '>', new Date(effectiveStartDate)),
         orderBy('createdAt', 'desc')
     );
 
-    const unsubSub = onSnapshot(subQuery, (snap) => setSubDocs(snap.docs));
     const unsubComm = onSnapshot(commQuery, (snap) => setCommDocs(snap.docs));
 
     return () => {
-        unsubSub();
         unsubComm();
     };
   }, [user?.uid, profile?.lastCommunityVisit]);
@@ -165,18 +155,13 @@ export function Sidebar({ onClose }: SidebarProps) {
       const readItems = profile?.readCommunityItems || {};
       const filterAI = !!settings?.content?.filterAI;
 
-      const unreadSubs = subDocs.filter(d => {
-          const data = d.data();
-          return !readItems[d.id] && accessibleRequestIds.has(data.requestId) && !(filterAI && data.usesAI);
-      }).length;
-
       const unreadComms = commDocs.filter(d => {
           const data = d.data();
           return !readItems[d.id] && accessibleRequestIds.has(data.requestId) && !(filterAI && data.usesAI);
       }).length;
 
-      return unreadSubs + unreadComms;
-  }, [subDocs, commDocs, accessibleRequestIds, profile?.readCommunityItems, settings?.content?.filterAI]);
+      return unreadComms;
+  }, [commDocs, accessibleRequestIds, profile?.readCommunityItems, settings?.content?.filterAI]);
 
 
   const navItems = [

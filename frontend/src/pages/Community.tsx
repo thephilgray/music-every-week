@@ -232,7 +232,7 @@ export function Community() {
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
-        <div className="flex justify-between items-end mb-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-8 gap-4">
             <div>
                 <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
                 <p className="text-gray-400">See what's happening across all requests.</p>
@@ -240,10 +240,10 @@ export function Community() {
             {user?.uid && (
                 <button 
                     onClick={markAllRead}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-colors bg-gray-900/50"
+                    className="flex items-center justify-center gap-2 px-3 py-2 sm:py-1.5 text-sm font-medium text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-colors bg-gray-900/50 w-full sm:w-auto"
                 >
                     <CheckCheck className="w-4 h-4" />
-                    Mark all read
+                    <span>Mark all read</span>
                 </button>
             )}
         </div>

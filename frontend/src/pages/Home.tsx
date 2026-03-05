@@ -81,9 +81,9 @@ export function Home() {
           </a>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div>
-           <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="text-center sm:text-left">
+           <div className="flex items-center justify-center sm:justify-start gap-3">
                <h1 className="text-3xl font-bold text-white mb-2">Active Requests</h1>
            </div>
            <p className="text-gray-400">Submit tracks, listen, and provide feedback</p>

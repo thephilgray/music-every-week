@@ -81,13 +81,13 @@ export function Directory() {
   );
 
   return (
-      <div className="max-w-6xl mx-auto pb-20">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-              <div>
-                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 pb-20">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 text-center md:text-left">
+              <div className="flex flex-col items-center md:items-start">
+                <h1 className="text-3xl font-bold text-white flex flex-col sm:flex-row items-center justify-center md:justify-start gap-3">
                   Community Directory
                   <span className="text-sm font-medium bg-gray-800 text-gray-400 px-3 py-1 rounded-full border border-gray-700">
-                    {filteredUsers.length}
+                    {filteredUsers.length} members
                   </span>
                 </h1>
                 <p className="text-gray-400 text-sm mt-2">Connect with other creators.</p>

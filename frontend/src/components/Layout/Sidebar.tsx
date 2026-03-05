@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Home, Inbox, Layers, Users, User, Settings, X, ListMusic, Bug, Globe } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
-import { db } from '../../lib/firebase'; // Added Firebase import
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'; // Added Firestore imports
+import { db } from '../../lib/firebase';
+import { collection, query, where, onSnapshot, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 
 interface SidebarProps {
   onClose?: () => void;
@@ -13,28 +13,31 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, participantEmail, settings } = useAuth(); // Destructure settings
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [communityUnreadCount, setCommunityUnreadCount] = useState(0);
+  const { user, profile, participantEmail, settings } = useAuth();
+  
+  const [notifDocs, setNotifDocs] = useState<Record<string, any>>({});
+  const [accessibleRequestIds, setAccessibleRequestIds] = useState<Set<string>>(new Set());
+  const [subDocs, setSubDocs] = useState<QueryDocumentSnapshot<DocumentData, DocumentData>[]>([]);
+  const [commDocs, setCommDocs] = useState<QueryDocumentSnapshot<DocumentData, DocumentData>[]>([]);
+  
   const [showBugReport, setShowBugReport] = useState(false);
 
+  // 1. Notifications Listener (Inbox)
   useEffect(() => {
-    // If auth is loading, or no user/participantEmail, return
     if (!user && !participantEmail) {
-        setUnreadCount(0); 
-        setCommunityUnreadCount(0);
+        setNotifDocs({});
         return;
     }
 
     const unsubs: (() => void)[] = [];
-    const idsByQuery: Record<string, Set<string>> = {};
-    
-    const updateCount = () => {
-        const combinedIds = new Set<string>();
-        Object.values(idsByQuery).forEach(set => {
-            set.forEach(id => combinedIds.add(id));
+    const docsByQuery: Record<string, Record<string, any>> = {};
+
+    const updateNotifState = () => {
+        const merged: Record<string, any> = {};
+        Object.values(docsByQuery).forEach(map => {
+            Object.assign(merged, map);
         });
-        setUnreadCount(combinedIds.size);
+        setNotifDocs(merged);
     };
 
     if (user?.uid) {
@@ -43,11 +46,11 @@ export function Sidebar({ onClose }: SidebarProps) {
             where('recipientUid', '==', user.uid),
             where('read', '==', false)
         );
-        unsubs.push(onSnapshot(q, (snapshot) => {
-            idsByQuery['uid'] = new Set(snapshot.docs.map(d => d.id));
-            updateCount();
-        }, (error) => {
-            console.error("Error fetching unread notifications (UID):", error);
+        unsubs.push(onSnapshot(q, (snap) => {
+            const map: Record<string, any> = {};
+            snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
+            docsByQuery['uid'] = map;
+            updateNotifState();
         }));
     }
 
@@ -58,100 +61,123 @@ export function Sidebar({ onClose }: SidebarProps) {
             where('recipientEmail', '==', email),
             where('read', '==', false)
         );
-        unsubs.push(onSnapshot(q, (snapshot) => {
-            idsByQuery['email'] = new Set(snapshot.docs.map(d => d.id));
-            updateCount();
-        }, (error) => {
-            console.error("Error fetching unread notifications (Email):", error);
-        }));
-    }
-
-    // Community Unread Logic
-    if (user || participantEmail) {
-        // Only start counting from March 3, 2026 to avoid 99+ on first load for old activity
-        const START_DATE = new Date('2026-03-03T00:00:00Z').getTime();
-        const readItems = profile?.readCommunityItems || {};
-        
-        // Use lastCommunityVisit as a base for clearing (Mark All Read)
-        const lastVisit = profile?.lastCommunityVisit 
-            ? (typeof profile.lastCommunityVisit === 'number' ? profile.lastCommunityVisit : (profile.lastCommunityVisit as any).seconds * 1000)
-            : 0;
-        
-        const effectiveStartDate = Math.max(START_DATE, lastVisit);
-
-        const email = user?.email || participantEmail;
-        const uid = user?.uid;
-
-        // 1. Fetch Accessible Request IDs first to filter feed
-        const requestIdsByQuery: Record<number, Set<string>> = {};
-        const reqQueries = [];
-        if (uid) reqQueries.push(query(collection(db, 'requests'), where('ownerPub', '==', uid)));
-        if (email) reqQueries.push(query(collection(db, 'requests'), where('accessList', 'array-contains', email)));
-        reqQueries.push(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer')));
-
-        const updateCommCount = () => {
-            const accessibleRequestIds = new Set<string>();
-            Object.values(requestIdsByQuery).forEach(set => {
-                set.forEach(id => accessibleRequestIds.add(id));
-            });
-
-            // Count items that are NOT in the readItems map AND belong to an accessible request
-            // AND respect the AI filter setting (for submissions)
-            const filterAI = !!settings?.content?.filterAI;
-
-            const unreadSubs = Array.from(subDocs).filter(d => {
-                const data = d.data();
-                return !readItems[d.id] && accessibleRequestIds.has(data.requestId) && !(filterAI && data.usesAI);
-            }).length;
-
-            const unreadComms = Array.from(commDocs).filter(d => {
-                const data = d.data();
-                return !readItems[d.id] && accessibleRequestIds.has(data.requestId);
-            }).length;
-
-            setCommunityUnreadCount(unreadSubs + unreadComms);
-        };
-
-        let subDocs: any[] = [];
-        let commDocs: any[] = [];
-
-        // Listen to requests to keep accessible list updated
-        reqQueries.forEach((q, index) => {
-            unsubs.push(onSnapshot(q, (snap) => {
-                const ids = new Set<string>();
-                snap.forEach(doc => {
-                    if (!doc.data().deleted) ids.add(doc.id);
-                });
-                requestIdsByQuery[index] = ids;
-                updateCommCount();
-            }));
-        });
-
-        const subQuery = query(
-            collection(db, 'submissions'),
-            where('createdAt', '>', new Date(effectiveStartDate)),
-            orderBy('createdAt', 'desc')
-        );
-
-        const commQuery = query(
-            collection(db, 'comments'),
-            where('createdAt', '>', new Date(effectiveStartDate)),
-            orderBy('createdAt', 'desc')
-        );
-
-        unsubs.push(onSnapshot(subQuery, (snap) => {
-            subDocs = snap.docs;
-            updateCommCount();
-        }));
-
-        unsubs.push(onSnapshot(commQuery, (snap) => {
-            commDocs = snap.docs;
-            updateCommCount();
+        unsubs.push(onSnapshot(q, (snap) => {
+            const map: Record<string, any> = {};
+            snap.docs.forEach(d => { map[d.id] = { id: d.id, ...d.data() }; });
+            docsByQuery['email'] = map;
+            updateNotifState();
         }));
     }
 
     return () => unsubs.forEach(unsub => unsub());
-  }, [user, participantEmail, profile?.readCommunityItems, settings?.content?.filterAI]);
+  }, [user?.uid, user?.email, participantEmail]);
+
+  // 2. Accessible Requests Listener
+  useEffect(() => {
+    if (!user && !participantEmail) {
+        setAccessibleRequestIds(new Set());
+        return;
+    }
+
+    const unsubs: (() => void)[] = [];
+    const idsByQuery: Record<number, Set<string>> = {};
+    const email = user?.email || participantEmail;
+    const uid = user?.uid;
+
+    const updateIds = () => {
+        const merged = new Set<string>();
+        Object.values(idsByQuery).forEach(set => {
+            set.forEach(id => merged.add(id));
+        });
+        setAccessibleRequestIds(merged);
+    };
+
+    const reqQueries = [];
+    if (uid) reqQueries.push(query(collection(db, 'requests'), where('ownerPub', '==', uid)));
+    if (email) reqQueries.push(query(collection(db, 'requests'), where('accessList', 'array-contains', email)));
+    reqQueries.push(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer')));
+
+    reqQueries.forEach((q, index) => {
+        unsubs.push(onSnapshot(q, (snap) => {
+            const ids = new Set<string>();
+            snap.forEach(doc => {
+                if (!doc.data().deleted) ids.add(doc.id);
+            });
+            idsByQuery[index] = ids;
+            updateIds();
+        }));
+    });
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user?.uid, user?.email, participantEmail]);
+
+  // 3. Community Content Listener (Submissions & Comments)
+  useEffect(() => {
+    if (!user && !participantEmail) {
+        setSubDocs([]);
+        setCommDocs([]);
+        return;
+    }
+
+    const START_DATE = new Date('2026-03-03T00:00:00Z').getTime();
+    
+    let lastVisit = 0;
+    if (profile?.lastCommunityVisit) {
+        if (typeof profile.lastCommunityVisit === 'number') {
+            lastVisit = profile.lastCommunityVisit;
+        } else if ((profile.lastCommunityVisit as any).toMillis) {
+            lastVisit = (profile.lastCommunityVisit as any).toMillis();
+        } else if ((profile.lastCommunityVisit as any).seconds) {
+            lastVisit = (profile.lastCommunityVisit as any).seconds * 1000;
+        }
+    }
+    
+    const effectiveStartDate = Math.max(START_DATE, lastVisit);
+
+    const subQuery = query(
+        collection(db, 'submissions'),
+        where('createdAt', '>', new Date(effectiveStartDate)),
+        orderBy('createdAt', 'desc')
+    );
+
+    const commQuery = query(
+        collection(db, 'comments'),
+        where('createdAt', '>', new Date(effectiveStartDate)),
+        orderBy('createdAt', 'desc')
+    );
+
+    const unsubSub = onSnapshot(subQuery, (snap) => setSubDocs(snap.docs));
+    const unsubComm = onSnapshot(commQuery, (snap) => setCommDocs(snap.docs));
+
+    return () => {
+        unsubSub();
+        unsubComm();
+    };
+  }, [user?.uid, profile?.lastCommunityVisit]);
+
+  // 4. Badge Calculations (Memoized for performance)
+  const unreadCount = useMemo(() => {
+      const filterAI = !!settings?.content?.filterAI;
+      return Object.values(notifDocs).filter(data => !(filterAI && data.usesAI)).length;
+  }, [notifDocs, settings?.content?.filterAI]);
+
+  const communityUnreadCount = useMemo(() => {
+      const readItems = profile?.readCommunityItems || {};
+      const filterAI = !!settings?.content?.filterAI;
+
+      const unreadSubs = subDocs.filter(d => {
+          const data = d.data();
+          return !readItems[d.id] && accessibleRequestIds.has(data.requestId) && !(filterAI && data.usesAI);
+      }).length;
+
+      const unreadComms = commDocs.filter(d => {
+          const data = d.data();
+          return !readItems[d.id] && accessibleRequestIds.has(data.requestId) && !(filterAI && data.usesAI);
+      }).length;
+
+      return unreadSubs + unreadComms;
+  }, [subDocs, commDocs, accessibleRequestIds, profile?.readCommunityItems, settings?.content?.filterAI]);
+
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
@@ -166,7 +192,6 @@ export function Sidebar({ onClose }: SidebarProps) {
 
   const handleNavigation = (path: string) => {
       if (onClose) onClose();
-      // Small delay to ensure sidebar close animation starts/state clears before heavy routing
       setTimeout(() => navigate(path), 50);
   };
 
@@ -177,7 +202,6 @@ export function Sidebar({ onClose }: SidebarProps) {
           <img src="/mewlogo.png" alt="MEW" className="h-8 w-auto" />
           <span className="font-bold text-xl tracking-tight text-white">MEW</span>
         </Link>
-        {/* Mobile Close Button */}
         <button 
           onClick={onClose}
           className="md:hidden text-gray-400 hover:text-white"

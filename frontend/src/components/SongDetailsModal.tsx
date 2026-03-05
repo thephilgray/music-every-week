@@ -16,6 +16,7 @@ interface Track {
     linkProfile?: boolean;
     stage?: string;
     feedbackFocus?: string[];
+    usesAI?: boolean;
     context?: {
         name: string;
         link: string;
@@ -74,8 +75,13 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
                    </div>
 
                                       <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                                          {(currentTrack.stage || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
+                                          {(currentTrack.stage || currentTrack.usesAI || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
                                               <div className="flex flex-wrap gap-2">
+                                                   {currentTrack.usesAI && (
+                                                       <span className="px-3 py-1 rounded-full bg-purple-900/30 border border-purple-800 text-purple-300 text-xs font-bold">
+                                                           Uses AI
+                                                       </span>
+                                                   )}
                                                    {currentTrack.stage && (
                                                        <span className="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800 text-blue-300 text-xs font-medium">
                                                            Stage: {currentTrack.stage}
@@ -115,6 +121,7 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
                                                       submissionOwnerUid={currentTrack.uploaderUid || currentTrack.uploaderPub}
                                                       submissionOwnerEmail={currentTrack.uploaderEmail}
                                                       currentUserEmail={currentUserEmail}
+                                                      usesAI={currentTrack.usesAI}
                                                   />
                                               </div>
                                           )}

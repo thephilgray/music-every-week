@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Loader2 } from 'lucide-react';
+import { MessageSquare, Loader2, CheckCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FeedItemRow, type FeedItemData } from '../components/FeedItemRow';
@@ -13,6 +13,17 @@ export function Community() {
   const [feed, setFeed] = useState<FeedItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const markAllRead = async () => {
+    if (!user?.uid) return;
+    try {
+        await updateDoc(doc(db, 'profiles', user.uid), {
+            lastCommunityVisit: Date.now()
+        });
+    } catch (err) {
+        console.error("Error marking all as read:", err);
+    }
+  };
 
   const [subCursor, setSubCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
   const [commCursor, setCommCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
@@ -221,9 +232,20 @@ export function Community() {
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
-        <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
-            <p className="text-gray-400">See what's happening across all requests.</p>
+        <div className="flex justify-between items-end mb-8">
+            <div>
+                <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
+                <p className="text-gray-400">See what's happening across all requests.</p>
+            </div>
+            {user?.uid && (
+                <button 
+                    onClick={markAllRead}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-colors bg-gray-900/50"
+                >
+                    <CheckCheck className="w-4 h-4" />
+                    Mark all read
+                </button>
+            )}
         </div>
 
         {loading ? (

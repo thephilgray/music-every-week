@@ -112,11 +112,16 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
             {/* Content */}
             <div className="flex-1 min-w-0">
                 <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-1 gap-1 md:gap-0">
-                    <div className="text-sm">
+                    <div className="text-sm flex items-center gap-2">
                         <Link to={profileLink} className={`font-bold text-white hover:underline ${!resolvedAuthorUid ? 'pointer-events-none' : ''}`}>
                             {authorAlias}
                         </Link>
-                        <span className="text-gray-500 ml-1">
+                        {item.usesAI && (
+                            <span className="bg-purple-900/20 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-purple-800/30 flex items-center gap-1 flex-shrink-0">
+                                Uses AI
+                            </span>
+                        )}
+                        <span className="text-gray-500">
                             {item.type === 'submission' ? 'uploaded a track' : 'commented on'}
                         </span>
                     </div>

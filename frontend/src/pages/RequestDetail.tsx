@@ -352,32 +352,24 @@ export function RequestDetail() {
       
       return rotatedSubs.slice(0, previewCount).map(s => s.id);
   }, [submissions, participantEmail, hasSubmitted, request?.previewTrackCount, isOwner, isAdmin]);
+// Filtering, sorting and locking logic for visible submissions
+const computedVisibleSubmissions = useMemo(() => {
+    let filtered = submissions;
 
-  // Filtering, sorting and locking logic for visible submissions
-  const computedVisibleSubmissions = useMemo(() => {
-      let filtered = submissions;
+    // Always apply global AI filter if enabled in settings
+    if (settings?.content?.filterAI) {
+        filtered = filtered.filter(s => !s.usesAI);
+    }
 
-      const shouldApplyFilters = isPlaylistLive;
+    const shouldApplyFilters = isPlaylistLive;
 
-      if (shouldApplyFilters) {
-          // Apply global AI filter from settings
-          if (settings?.content?.filterAI) {
-              filtered = filtered.filter(s => !s.usesAI);
-          }
+    if (shouldApplyFilters) {
+        // Apply local filter if global is NOT already filtering
+        if (!settings?.content?.filterAI && filterByAI) {
+            filtered = filtered.filter(s => !s.usesAI);
+        }
 
-          // Apply search term filter
-          if (debouncedSearchTerm) {
-              const term = debouncedSearchTerm.toLowerCase();
-              filtered = filtered.filter(s => 
-                  s.title.toLowerCase().includes(term) || 
-                  s.byline?.toLowerCase().includes(term) ||
-                  s.uploaderEmail?.toLowerCase().includes(term)
-              );
-          }
-
-          // Apply specific filter toggles
-          if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
-          if (filterByFragile) filtered = filtered.filter(s => s.fragile);
+        // Apply search term filter
           if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
           if (filterByFeedbackFocus.length > 0) {
               filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));

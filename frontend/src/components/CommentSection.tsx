@@ -18,10 +18,11 @@ interface CommentSectionProps {
   submissionOwnerUid?: string; 
   submissionOwnerEmail?: string; // Added prop
   currentUserEmail?: string | null; // Added prop for authless/manual auth
+  usesAI?: boolean; // Added prop
   // onCommentsLoaded?: (submissionId: string, count: number) => void; // Removed prop
 }
 
-export function CommentSection({ requestId, submissionId, highlightCommentId, submissionOwnerUid, submissionOwnerEmail, currentUserEmail }: CommentSectionProps) { // Removed prop
+export function CommentSection({ requestId, submissionId, highlightCommentId, submissionOwnerUid, submissionOwnerEmail, currentUserEmail, usesAI }: CommentSectionProps) { // Added prop
   const { participantEmail, user, addPoints } = useAuth(); // Removed unused isAdmin
   const [comments, setComments] = useState<Comment[]>([]);
   const [firestoreProfile, setFirestoreProfile] = useState<any>(null); // Store fetched profile
@@ -343,6 +344,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
             text: newComment.trim(),
             createdAt: serverTimestamp(),
             userProfile: currentUserProfile, // Use the derived current user profile
+            usesAI: !!usesAI
         };
         
         if (audioUrl) {
@@ -374,7 +376,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
                     fromEmail: authorEmail, // Save email
                     createdAt: Date.now(),
                     read: false,
-                    requestId
+                    requestId,
+                    usesAI: !!usesAI
                 };
                 
                 const notifData: any = { ...notif };
@@ -415,7 +418,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
                             fromEmail: authorEmail,
                             createdAt: Date.now(),
                             read: false,
-                            requestId
+                            requestId,
+                            usesAI: !!usesAI
                         };
                         
                         const notifData: any = {

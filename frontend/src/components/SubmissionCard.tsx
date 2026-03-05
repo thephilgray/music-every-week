@@ -125,7 +125,7 @@ export function SubmissionCard({
                                 <div className={`flex ${isExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'} gap-2 pr-8`}>
                                     {submission.usesAI && (
                                         <span className="bg-purple-900/20 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold border border-purple-800/30 flex items-center gap-1 flex-shrink-0">
-                                            AI
+                                            Uses AI
                                         </span>
                                     )}
                                     {submission.fragile && (
@@ -236,6 +236,7 @@ export function SubmissionCard({
                         submissionOwnerEmail={submission.uploaderEmail}
                         highlightCommentId={highlightCommentId}
                         currentUserEmail={currentUserEmail}
+                        usesAI={submission.usesAI}
                     />
                 </div>
             )}

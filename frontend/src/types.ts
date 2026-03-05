@@ -101,6 +101,7 @@ export interface Comment {
   requestId?: string;
   submissionId?: string;
   reactions?: Record<string, 'heart' | '+1'>; // user UID or Email -> reaction type
+  usesAI?: boolean;
 }
 
 export interface Notification {

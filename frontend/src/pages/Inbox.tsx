@@ -9,7 +9,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, 
 import { getTimestampAsNumber } from '../lib/utils'; // Import the utility
 
 export function Inbox() {
-  const { user, participantEmail, isLoading: authLoading, isAdmin } = useAuth(); // Changed from useGun
+  const { user, profile, participantEmail, isLoading: authLoading, isAdmin } = useAuth(); // Changed from useGun
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,22 +289,45 @@ const updateNotificationState = useCallback(async (
       await deleteNotification(e, n);
   };
 
-  const submitBugReply = async (e: React.MouseEvent | React.FormEvent, n: Notification) => {
+  const submitReply = async (e: React.MouseEvent | React.FormEvent, n: Notification) => {
       e.preventDefault();
       e.stopPropagation();
       if (!replyText.trim() || !n.fromUid) return;
       setSendingReply(true);
 
       try {
+          const currentThread = n.thread || [{
+              id: crypto.randomUUID(),
+              fromUid: n.fromUid,
+              fromName: n.fromName || (n.fromEmail ? n.fromEmail.split('@')[0] : 'User'),
+              text: n.message,
+              createdAt: typeof n.createdAt === 'number' ? n.createdAt : Date.now()
+          }];
+
           const replyId = crypto.randomUUID();
+          const senderUid = user?.uid || 'guest';
+          const senderName = profile?.alias || (user?.email ? user.email.split('@')[0] : 'User');
+          
+          const newReply = {
+              id: replyId,
+              fromUid: senderUid,
+              fromName: senderName,
+              text: replyText,
+              createdAt: Date.now()
+          };
+
+          const updatedThread = [...currentThread, newReply];
+
           const notification: Notification = {
               id: replyId,
-              type: 'mention',
-              message: `Admin replied to your bug report:\n\n${replyText}`,
-              link: `/inbox`,
-              fromUid: user?.uid || 'admin',
+              type: n.type,
+              message: `New reply to ${n.type === 'bug' ? 'bug report' : 'message'}`,
+              link: n.link || `/inbox`,
+              fromUid: senderUid,
+              fromName: senderName,
               createdAt: serverTimestamp() as any,
-              read: false
+              read: false,
+              thread: updatedThread
           };
           
           await addDoc(collection(db, 'notifications'), {
@@ -315,9 +338,12 @@ const updateNotificationState = useCallback(async (
           setReplyingTo(null);
           setReplyText('');
           
-          // Optionally mark the bug as read
-          if (!n.read && n.id) {
-              await updateDoc(doc(db, 'notifications', n.id), { read: true });
+          // Update the current notification with the new thread and mark as read
+          if (n.id) {
+              await updateDoc(doc(db, 'notifications', n.id), { 
+                  thread: updatedThread,
+                  read: true 
+              });
           }
       } catch (err) {
           console.error("Failed to send reply:", err);
@@ -334,6 +360,7 @@ const updateNotificationState = useCallback(async (
           case 'comment': return <MessageSquare className="w-5 h-5 text-green-400" />;
           case 'mention': return <AtSign className="w-5 h-5 text-yellow-400" />;
           case 'bug': return <AlertCircle className="w-5 h-5 text-red-400" />;
+          case 'message': return <MessageSquare className="w-5 h-5 text-blue-400" />;
           case 'collaborator': return <Users className="w-5 h-5 text-purple-400" />;
           default: return <Bell className="w-5 h-5 text-gray-400" />;
       }
@@ -359,7 +386,7 @@ const updateNotificationState = useCallback(async (
 
       {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          {(['all', 'invite', 'submission', 'comment', 'mention', 'bug', 'collaborator'] as const).map(type => (
+          {(['all', 'invite', 'submission', 'comment', 'mention', 'bug', 'message', 'collaborator'] as const).map(type => (
               <button
                   key={type}
                   onClick={() => setFilterType(type)}
@@ -420,9 +447,24 @@ const updateNotificationState = useCallback(async (
                               </span>
                           </div>
                           
-                          <p className={`text-sm mb-3 break-words ${n.read ? 'text-gray-500' : 'text-gray-300 font-medium'}`}>
-                              {n.message}
-                          </p>
+                          {n.thread && n.thread.length > 0 ? (
+                              <div className="flex flex-col gap-3 mt-4 mb-4" onClick={(e) => e.stopPropagation()}>
+                                  {n.thread.map((msg, i) => (
+                                      <div key={msg.id || i} className={`flex flex-col ${msg.fromUid === user?.uid ? 'items-end' : 'items-start'}`}>
+                                          <div className={`max-w-[90%] rounded-xl p-3 ${msg.fromUid === user?.uid ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200'}`}>
+                                              <span className="text-[10px] opacity-70 mb-1 block">
+                                                  {msg.fromName} • {new Date(msg.createdAt).toLocaleString()}
+                                              </span>
+                                              <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          ) : (
+                              <p className={`text-sm mb-3 break-words ${n.read ? 'text-gray-500' : 'text-gray-300 font-medium'}`}>
+                                  {n.message}
+                              </p>
+                          )}
                           
                           {/* Invite Actions */}
                           {n.type === 'invite' && !n.read && (
@@ -442,15 +484,15 @@ const updateNotificationState = useCallback(async (
                               </div>
                           )}
 
-                          {/* Admin Bug Reply */}
-                          {n.type === 'bug' && isAdmin && (
+                          {/* Bug/Message Reply */}
+                          {(n.type === 'bug' || n.type === 'message') && (
                               <div className="mt-3">
                                   {replyingTo === n.id ? (
                                       <div className="mt-2 flex flex-col gap-2 bg-gray-950 p-3 rounded border border-gray-800" onClick={e => e.stopPropagation()}>
                                           <textarea 
                                               value={replyText}
                                               onChange={e => setReplyText(e.target.value)}
-                                              placeholder="Type your reply to the user..."
+                                              placeholder="Type your reply..."
                                               className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm outline-none focus:border-blue-500 min-h-[60px]"
                                               autoFocus
                                           />
@@ -463,7 +505,7 @@ const updateNotificationState = useCallback(async (
                                                   Cancel
                                               </button>
                                               <button 
-                                                  onClick={(e) => submitBugReply(e, n)}
+                                                  onClick={(e) => submitReply(e, n)}
                                                   disabled={sendingReply || !replyText.trim()}
                                                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
                                               >
@@ -477,7 +519,7 @@ const updateNotificationState = useCallback(async (
                                           onClick={(e) => { e.stopPropagation(); setReplyingTo(n.id!); setReplyText(''); }}
                                           className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                                       >
-                                          <MessageSquare className="w-3 h-3" /> Reply to User
+                                          <MessageSquare className="w-3 h-3" /> Reply
                                       </button>
                                   )}
                               </div>

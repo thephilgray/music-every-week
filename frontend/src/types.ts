@@ -106,7 +106,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'comment' | 'submission' | 'invite' | 'mention' | 'bug' | 'collaborator';
+  type: 'comment' | 'submission' | 'invite' | 'mention' | 'bug' | 'collaborator' | 'message';
   message: string;
   link: string;
   fromUid: string; // Changed from fromPub
@@ -117,6 +117,13 @@ export interface Notification {
   requestId?: string;
   usesAI?: boolean;
   recipientEmail?: string;
+  thread?: {
+    id: string;
+    fromUid: string;
+    fromName: string;
+    text: string;
+    createdAt: number;
+  }[];
 }
 
 export interface Playlist {

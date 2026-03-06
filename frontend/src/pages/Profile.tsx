@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff, Shield } from 'lucide-react';
+import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff, Shield, MessageSquare, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext'; // Replaced useGun
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2'; // Replaced uploadFile
 import { db } from '../lib/firebase'; // Added firebase db import
-import { doc, updateDoc, collection, query, where, getDocs, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'; // Added specific firestore functions
+import { doc, updateDoc, collection, query, where, getDocs, getDoc, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore'; // Added specific firestore functions
 import { fixUrl } from '../lib/url';
 import { getTimestampAsNumber } from '../lib/utils';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
@@ -45,12 +45,14 @@ export function Profile() {
   const [isSaving, setIsSaving] = useState(false);
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+  const [showDMModal, setShowDMModal] = useState(false);
+  const [dmMessage, setDmMessage] = useState('');
+  const [sendingDM, setSendingDM] = useState(false);
+
   // Track linked public keys for migration (not used for Firebase)
   // const linkedPubsRef = useRef(new Set<string>()); // Removed - not needed for Firebase directly
 
-  useEffect(() => {
-    if (searchParams.get('edit') === 'true' && isOwnProfile) {
+  useEffect(() => {    if (searchParams.get('edit') === 'true' && isOwnProfile) {
         setIsEditing(true);
     }
   }, [searchParams, isOwnProfile]);
@@ -292,8 +294,44 @@ export function Profile() {
                   }  
           return () => unsubs.forEach(u => u());
       }, [resolvedProfileUid, profile?.email]);
-  const handleSaveProfile = async () => {
-      if (!isOwnProfile || !resolvedProfileUid) return;
+  const handleSendDM = async () => {
+      if (!dmMessage.trim() || !profile || !resolvedProfileUid || !user?.uid) return;
+      setSendingDM(true);
+      try {
+          const dmId = crypto.randomUUID();
+          const notification: Notification = {
+              id: dmId,
+              type: 'message',
+              message: 'Direct Message',
+              link: `/inbox`,
+              fromUid: user.uid,
+              fromName: user.displayName || user.email?.split('@')[0] || 'Someone',
+              createdAt: serverTimestamp() as any,
+              read: false,
+              thread: [{
+                  id: crypto.randomUUID(),
+                  fromUid: user.uid,
+                  fromName: user.displayName || user.email?.split('@')[0] || 'Someone',
+                  text: dmMessage.trim(),
+                  createdAt: Date.now()
+              }]
+          };
+          await addDoc(collection(db, 'notifications'), {
+              ...notification,
+              recipientUid: resolvedProfileUid
+          });
+          success("Message sent!");
+          setShowDMModal(false);
+          setDmMessage('');
+      } catch (e) {
+          console.error("Failed to send DM", e);
+          error("Failed to send message.");
+      } finally {
+          setSendingDM(false);
+      }
+  };
+
+  const handleSaveProfile = async () => {      if (!isOwnProfile || !resolvedProfileUid) return;
       setIsSaving(true);
       
       try {
@@ -459,14 +497,23 @@ export function Profile() {
                             )}
                         </h1>
                         {isOwnProfile && (
-                            <button 
+                            <button
                                 onClick={() => setIsEditing(true)}
                                 className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
                             >
                                 <Edit className="w-4 h-4" />
                             </button>
                         )}
-                        {isAdmin && !isOwnProfile && !profile.isAdmin && (
+                        {!isOwnProfile && user && (
+                             <Tooltip content="Send Message">
+                                 <button
+                                     onClick={() => setShowDMModal(true)}
+                                     className="p-2 text-blue-400 hover:text-blue-200 bg-blue-900/20 rounded-full hover:bg-blue-900/40 border border-blue-900/50 transition"
+                                 >
+                                     <MessageSquare className="w-4 h-4" />
+                                 </button>
+                             </Tooltip>
+                        )}                        {isAdmin && !isOwnProfile && !profile.isAdmin && (
                             <Tooltip content="Promote to Admin">
                                 <button 
                                     onClick={() => setShowPromoteConfirm(true)}
@@ -760,6 +807,44 @@ export function Profile() {
                     </div>
                 </div>
             </div>
+        )}
+
+        {showDMModal && (
+             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                 <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6 relative">
+                     <div className="flex justify-between items-center mb-4">
+                         <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                             <MessageSquare className="w-5 h-5 text-blue-400" />
+                             Message {profile?.displayName || profile?.alias}
+                         </h2>
+                         <button onClick={() => setShowDMModal(false)} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
+                     </div>
+                     <textarea
+                         value={dmMessage}
+                         onChange={e => setDmMessage(e.target.value)}
+                         placeholder="Type your message here..."
+                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-500 min-h-[120px] focus:outline-none focus:border-blue-500 mb-4"
+                         autoFocus
+                     />
+                     <div className="flex justify-end gap-2">
+                         <button 
+                             onClick={() => setShowDMModal(false)}
+                             className="px-4 py-2 text-sm text-gray-400 hover:text-white transition"
+                             disabled={sendingDM}
+                         >
+                             Cancel
+                         </button>
+                         <button 
+                             onClick={handleSendDM}
+                             disabled={sendingDM || !dmMessage.trim()}
+                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50 transition"
+                         >
+                             {sendingDM ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                             Send Message
+                         </button>
+                     </div>
+                 </div>
+             </div>
         )}
 
         <ConfirmModal 

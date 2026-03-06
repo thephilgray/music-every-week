@@ -2,6 +2,7 @@ import { X, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CommentSection } from './CommentSection';
 import { ArtworkDisplay } from './ui/ArtworkDisplay';
+import { CollaboratorList } from './ui/CollaboratorList';
 
 interface Track {
     id?: string; // Submission ID
@@ -14,6 +15,8 @@ interface Track {
     uploaderEmail?: string; // Added for email notifications
     uploaderUid?: string; // Firebase UID
     linkProfile?: boolean;
+    collaborators?: Record<string, boolean>;
+    proxyFor?: { alias: string, pub?: string, uid?: string };
     stage?: string;
     feedbackFocus?: string[];
     usesAI?: boolean;
@@ -56,15 +59,17 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
                        
                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-900 to-transparent p-6 pt-20">
                            <h3 className="text-2xl md:text-3xl font-bold text-white mb-1 shadow-black drop-shadow-md">{currentTrack.title}</h3>
-                           <p className="text-gray-200 text-sm md:text-base font-medium drop-shadow-md">
-                               By {currentTrack.uploaderPub && currentTrack.linkProfile !== false ? (
-                                   <Link to={`/profile/${currentTrack.uploaderPub}`} className="hover:text-blue-300 hover:underline" onClick={onClose}>
-                                       {currentTrack.byline || `${currentTrack.uploaderPub.substring(0, 6)}...`}
-                                   </Link>
-                               ) : (
-                                   currentTrack.byline || 'Unknown'
-                               )}
-                           </p>
+                           <div className="text-gray-200 text-sm md:text-base font-medium drop-shadow-md flex items-center gap-1">
+                               By <CollaboratorList
+                                   uploaderPub={currentTrack.uploaderUid || currentTrack.uploaderPub || ''}
+                                   uploaderEmail={currentTrack.uploaderEmail}
+                                   byline={currentTrack.byline}
+                                   collaborators={currentTrack.collaborators}
+                                   linkProfile={currentTrack.linkProfile}
+                                   proxyFor={currentTrack.proxyFor}
+                                   className="text-gray-200 font-medium drop-shadow-md flex items-center gap-1"
+                               />
+                           </div>
                            {currentTrack.context && (
                                <Link to={currentTrack.context.link} className="text-blue-400 hover:text-blue-300 hover:underline text-xs flex items-center gap-1 mt-2 w-fit" onClick={onClose}>
                                    <span className="truncate">From: {currentTrack.context.name}</span>

@@ -5,6 +5,7 @@ import { SongDetailsModal } from '../SongDetailsModal';
 import { QueueModal } from './QueueModal';
 import { Waveform } from '../ui/Waveform';
 import { ArtworkDisplay } from '../ui/ArtworkDisplay';
+import { CollaboratorList } from '../ui/CollaboratorList';
 import { useAuth } from '../../contexts/AuthContext';
 
 
@@ -120,9 +121,21 @@ export function Player() { // Removed props
             </div>
 
             <div className={`min-w-0 flex-1 ${!isMinimized ? 'text-center md:text-left w-full' : ''}`}>
-                <div className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}>
-                    {currentTrack?.byline || (currentTrack?.uploaderUid ? `${currentTrack.uploaderUid.substring(0, 8)}...` : 'No Artist Selected')}
-                </div>
+                {currentTrack ? (
+                    <CollaboratorList
+                        uploaderPub={currentTrack.uploaderUid || currentTrack.originalUploaderPub || ''}
+                        uploaderEmail={currentTrack.uploaderEmail}
+                        byline={currentTrack.byline}
+                        collaborators={currentTrack.collaborators}
+                        linkProfile={currentTrack.linkProfile}
+                        proxyFor={currentTrack.proxyFor}
+                        className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}
+                    />
+                ) : (
+                    <div className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}>
+                        No Artist Selected
+                    </div>
+                )}
                 <div className={`text-gray-500 text-xs truncate ${!isMinimized ? 'text-lg md:text-xs mt-1 md:mt-0' : ''} flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start' : ''}`}>
                     {currentTrack?.title || 'Select a track to play'}
                     {currentTrack?.lyrics && !isMinimized && (

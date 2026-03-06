@@ -12,7 +12,7 @@ import { getTimestampAsNumber } from '../lib/utils';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { Tooltip } from '../components/ui/Tooltip';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import type { UserProfile, Submission, FileRequest } from '../types';
+import type { UserProfile, Submission, FileRequest, Notification } from '../types';
 
 export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
@@ -298,7 +298,6 @@ export function Profile() {
       if (!dmMessage.trim() || !profile || !resolvedProfileUid || !user?.uid) return;
       setSendingDM(true);
       try {
-          const dmId = crypto.randomUUID();
           const notification: Omit<Notification, 'id'> = {
               type: 'message',
               message: 'Direct Message',

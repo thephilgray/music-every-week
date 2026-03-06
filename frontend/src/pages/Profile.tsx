@@ -299,8 +299,7 @@ export function Profile() {
       setSendingDM(true);
       try {
           const dmId = crypto.randomUUID();
-          const notification: Notification = {
-              id: dmId,
+          const notification: Omit<Notification, 'id'> = {
               type: 'message',
               message: 'Direct Message',
               link: `/inbox`,

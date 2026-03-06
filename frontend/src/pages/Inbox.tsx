@@ -9,11 +9,11 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, 
 import { getTimestampAsNumber } from '../lib/utils'; // Import the utility
 
 export function Inbox() {
-  const { user, profile, participantEmail, isLoading: authLoading, isAdmin } = useAuth(); // Changed from useGun
+  const { user, profile, participantEmail, isLoading: authLoading } = useAuth(); // Changed from useGun
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention' | 'bug' | 'collaborator'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention' | 'bug' | 'message' | 'collaborator'>('all');
   
   // Bug Reply State
   const [replyingTo, setReplyingTo] = useState<string | null>(null);

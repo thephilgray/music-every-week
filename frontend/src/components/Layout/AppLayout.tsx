@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { ContextBar } from './ContextBar';
 import { Player } from './Player';
 import { PointsAnimation } from '../PointsAnimation';
+import { FloatingScrollToTop } from '../ui/FloatingScrollToTop';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -30,7 +31,7 @@ export function AppLayout() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 w-full">
+      <div className="flex-1 flex flex-col min-w-0 w-full relative">
         <ContextBar onToggleSidebar={() => setSidebarOpen(true)} />
         
         {/* Removed Connection Status Banner */}
@@ -39,6 +40,8 @@ export function AppLayout() {
         <main className="flex-1 overflow-y-auto bg-black p-4 md:p-8 pb-32 relative w-full">
           <Outlet />
         </main>
+        
+        <FloatingScrollToTop />
         
         {/* Sticky Player */}
         <Player />

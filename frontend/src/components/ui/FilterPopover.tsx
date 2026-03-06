@@ -1,4 +1,3 @@
-import React from 'react';
 import { Filter, X } from 'lucide-react';
 
 // Feedback focus categories, mirrored from AuthlessSubmissionForm for consistency
@@ -12,6 +11,7 @@ const FEEDBACK_FOCUS_CATEGORIES = {
 interface FilterPopoverProps {
     searchTerm: string;
     setSearchTerm: (term: string) => void;
+    searchSuggestions?: string[];
     sortBy: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst';
     setSortBy: (sort: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst') => void;
     filterByAI: boolean;
@@ -26,9 +26,10 @@ interface FilterPopoverProps {
     forceModal?: boolean; // Force modal mode even on desktop
 }
 
-export const FilterPopover: React.FC<FilterPopoverProps> = ({
+export function FilterPopover({
     searchTerm,
     setSearchTerm,
+    searchSuggestions,
     sortBy,
     setSortBy,
     filterByAI,
@@ -41,7 +42,7 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
     setFilterByFeedbackFocus,
     onClose,
     forceModal = false
-}) => {
+}: FilterPopoverProps) {
     // Check if any filters are active to show/hide "Clear Filters" button
     const hasActiveFilters = searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFeedbackFocus.length > 0;
 
@@ -73,14 +74,31 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
 
             <div className="flex flex-col gap-3">
                 {/* Search */}
-                <div>
+                <div className="relative">
                     <input
                         type="text"
                         placeholder="Search title, artist, or email..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white placeholder-gray-500 focus:border-blue-500 outline-none"
+                        list="search-suggestions"
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 pr-8 text-white placeholder-gray-500 focus:border-blue-500 outline-none"
                     />
+                    {searchSuggestions && searchSuggestions.length > 0 && (
+                        <datalist id="search-suggestions">
+                            {searchSuggestions.map((suggestion, idx) => (
+                                <option key={idx} value={suggestion} />
+                            ))}
+                        </datalist>
+                    )}
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white focus:outline-none"
+                            title="Clear search"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
 
                 {/* Sort */}

@@ -25,6 +25,7 @@ export function RequestDetail() {
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [hostName, setHostName] = useState<string>('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [resolvedArtistNames, setResolvedArtistNames] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -82,7 +83,7 @@ export function RequestDetail() {
   useEffect(() => {
     const timerId = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
-    }, 300); // 300ms debounce delay
+    }, 1500); // 1500ms debounce delay
     return () => clearTimeout(timerId);
   }, [searchTerm]);
 
@@ -157,10 +158,55 @@ export function RequestDetail() {
           const q = query(collection(db, 'submissions'), where('requestId', '==', id));
           const querySnapshot = await getDocs(q);
           const loadedSubmissions: Submission[] = [];
+          const missingProfilesToFetch = new Set<string>();
+          const newResolvedNames: Record<string, string> = {};
+
           querySnapshot.forEach((doc) => {
-              loadedSubmissions.push({ id: doc.id, ...doc.data() } as Submission);
+              const sub = { id: doc.id, ...doc.data() } as Submission;
+              loadedSubmissions.push(sub);
+              
+              if (sub.byline) {
+                  // If it has a byline, we use that for the final name
+                  newResolvedNames[sub.id!] = sub.byline;
+              } else if (sub.uploaderUid || sub.originalUploaderPub) {
+                  // Need to fetch profile
+                  missingProfilesToFetch.add(sub.uploaderUid || sub.originalUploaderPub);
+              } else if (sub.uploaderEmail) {
+                  newResolvedNames[sub.id!] = sub.uploaderEmail.split('@')[0];
+              }
           });
+          
           setSubmissions(loadedSubmissions);
+
+          // Fetch profiles for those missing bylines
+          if (missingProfilesToFetch.size > 0) {
+              const profileNames: Record<string, string> = {};
+              // Note: Firestore 'in' query is limited to 10. For larger playlists, we fetch individually to be safe
+              await Promise.all(Array.from(missingProfilesToFetch).map(async (uid) => {
+                  try {
+                      const profileDoc = await getDoc(doc(db, 'profiles', uid));
+                      if (profileDoc.exists()) {
+                          const pData = profileDoc.data();
+                          profileNames[uid] = pData.displayName || pData.alias || 'Unknown';
+                      }
+                  } catch (e) {
+                      console.error("Failed to fetch profile for suggestion resolution", e);
+                  }
+              }));
+
+              // Map back to submissions
+              loadedSubmissions.forEach(sub => {
+                  if (!sub.byline) {
+                      const uid = sub.uploaderUid || sub.originalUploaderPub;
+                      if (uid && profileNames[uid]) {
+                           newResolvedNames[sub.id!] = profileNames[uid];
+                      }
+                  }
+              });
+          }
+          
+          setResolvedArtistNames(newResolvedNames);
+
       } catch (err) {
           console.error("Error fetching submissions:", err);
       }
@@ -352,6 +398,15 @@ export function RequestDetail() {
       
       return rotatedSubs.slice(0, previewCount).map(s => s.id);
   }, [submissions, participantEmail, hasSubmitted, request?.previewTrackCount, isOwner, isAdmin]);
+  const searchSuggestions = useMemo(() => {
+    const suggestions = new Set<string>();
+    submissions.forEach(sub => {
+      if (sub.title) suggestions.add(sub.title);
+      if (sub.id && resolvedArtistNames[sub.id]) suggestions.add(resolvedArtistNames[sub.id]);
+    });
+    return Array.from(suggestions).sort();
+  }, [submissions, resolvedArtistNames]);
+
 // Filtering, sorting and locking logic for visible submissions
 const computedVisibleSubmissions = useMemo(() => {
     let filtered = submissions;
@@ -370,7 +425,20 @@ const computedVisibleSubmissions = useMemo(() => {
         }
 
         // Apply search term filter
-          if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
+        if (debouncedSearchTerm) {
+            const term = debouncedSearchTerm.toLowerCase();
+            filtered = filtered.filter(s => 
+                s.title.toLowerCase().includes(term) ||
+                (s.byline && s.byline.toLowerCase().includes(term)) ||
+                (s.uploaderEmail && s.uploaderEmail.toLowerCase().includes(term))
+            );
+        }
+
+        if (filterByFragile) {
+            filtered = filtered.filter(s => s.fragile);
+        }
+
+        if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
           if (filterByFeedbackFocus.length > 0) {
               filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
           }
@@ -674,6 +742,7 @@ const computedVisibleSubmissions = useMemo(() => {
                                 <FilterPopover
                                     searchTerm={searchTerm}
                                     setSearchTerm={setSearchTerm}
+                                    searchSuggestions={searchSuggestions}
                                     sortBy={sortBy}
                                     setSortBy={setSortBy}
                                     filterByAI={filterByAI}

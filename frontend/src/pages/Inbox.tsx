@@ -1,20 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign, AlertCircle, Users } from 'lucide-react';
+import { Bell, MessageSquare, Music, UserPlus, Check, X, CheckCircle, AtSign, AlertCircle, Users, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext'; // Changed to useAuth
 import { Skeleton } from '../components/ui/Skeleton';
 import type { Notification, UserProfile } from '../types'; // Added UserProfile for fetching sender alias
 import { db } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore'; // Removed writeBatch
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore'; // Removed writeBatch
 import { getTimestampAsNumber } from '../lib/utils'; // Import the utility
 
 export function Inbox() {
-  const { user, participantEmail, isLoading: authLoading } = useAuth(); // Changed from useGun
+  const { user, participantEmail, isLoading: authLoading, isAdmin } = useAuth(); // Changed from useGun
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<(Notification & { fromAlias?: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<'all' | 'invite' | 'submission' | 'comment' | 'mention' | 'bug' | 'collaborator'>('all');
   
+  // Bug Reply State
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+
   // Privacy & Contacts
   const [acceptUnsolicited, setAcceptUnsolicited] = useState(true);
   const [contacts, setContacts] = useState<Set<string>>(new Set());
@@ -284,6 +289,44 @@ const updateNotificationState = useCallback(async (
       await deleteNotification(e, n);
   };
 
+  const submitBugReply = async (e: React.MouseEvent | React.FormEvent, n: Notification) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!replyText.trim() || !n.fromUid) return;
+      setSendingReply(true);
+
+      try {
+          const replyId = crypto.randomUUID();
+          const notification: Notification = {
+              id: replyId,
+              type: 'mention',
+              message: `Admin replied to your bug report:\n\n${replyText}`,
+              link: `/inbox`,
+              fromUid: user?.uid || 'admin',
+              createdAt: serverTimestamp() as any,
+              read: false
+          };
+          
+          await addDoc(collection(db, 'notifications'), {
+              ...notification,
+              recipientUid: n.fromUid
+          });
+          
+          setReplyingTo(null);
+          setReplyText('');
+          
+          // Optionally mark the bug as read
+          if (!n.read && n.id) {
+              await updateDoc(doc(db, 'notifications', n.id), { read: true });
+          }
+      } catch (err) {
+          console.error("Failed to send reply:", err);
+          alert("Failed to send reply.");
+      } finally {
+          setSendingReply(false);
+      }
+  };
+
   const getIcon = (type: string) => {
       switch (type) {
           case 'invite': return <UserPlus className="w-5 h-5 text-purple-400" />;
@@ -396,6 +439,47 @@ const updateNotificationState = useCallback(async (
                                   >
                                       <X className="w-3 h-3" /> Decline
                                   </button>
+                              </div>
+                          )}
+
+                          {/* Admin Bug Reply */}
+                          {n.type === 'bug' && isAdmin && (
+                              <div className="mt-3">
+                                  {replyingTo === n.id ? (
+                                      <div className="mt-2 flex flex-col gap-2 bg-gray-950 p-3 rounded border border-gray-800" onClick={e => e.stopPropagation()}>
+                                          <textarea 
+                                              value={replyText}
+                                              onChange={e => setReplyText(e.target.value)}
+                                              placeholder="Type your reply to the user..."
+                                              className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm outline-none focus:border-blue-500 min-h-[60px]"
+                                              autoFocus
+                                          />
+                                          <div className="flex justify-end gap-2">
+                                              <button 
+                                                  onClick={() => setReplyingTo(null)}
+                                                  className="px-3 py-1 text-xs text-gray-400 hover:text-white transition"
+                                                  disabled={sendingReply}
+                                              >
+                                                  Cancel
+                                              </button>
+                                              <button 
+                                                  onClick={(e) => submitBugReply(e, n)}
+                                                  disabled={sendingReply || !replyText.trim()}
+                                                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+                                              >
+                                                  {sendingReply ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                                                  Reply
+                                              </button>
+                                          </div>
+                                      </div>
+                                  ) : (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); setReplyingTo(n.id!); setReplyText(''); }}
+                                          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                      >
+                                          <MessageSquare className="w-3 h-3" /> Reply to User
+                                      </button>
+                                  )}
                               </div>
                           )}
                       </div>

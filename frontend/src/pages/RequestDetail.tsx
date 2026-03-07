@@ -22,6 +22,13 @@ export function RequestDetail() {
   const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
   const { toast } = useToast();
   
+  const scrolledRef = useRef(false);
+
+  // Reset scrolledRef when ID changes
+  useEffect(() => {
+    scrolledRef.current = false;
+  }, [id]);
+
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [hostName, setHostName] = useState<string>('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -222,11 +229,10 @@ export function RequestDetail() {
 
     const params = new URLSearchParams(location.search);
     const submissionId = params.get('submission');
-    // Extract parameters from URL
 
     if (submissionId) {
         // Wait a tick for rendering
-        setTimeout(() => {
+        const timer = setTimeout(() => {
             const element = document.getElementById(`submission-${submissionId}`);
             if (element) {
                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -235,6 +241,7 @@ export function RequestDetail() {
                 scrolledRef.current = true;
             }
         }, 100);
+        return () => clearTimeout(timer);
     }
   }, [submissions, location.search]);
 
@@ -491,8 +498,6 @@ const computedVisibleSubmissions = useMemo(() => {
 
   const visibleSubmissions = computedVisibleSubmissions;
 
-  const scrolledRef = useRef(false);
-
   // Scroll to current track on load
   useEffect(() => {
       const params = new URLSearchParams(location.search);
@@ -501,13 +506,18 @@ const computedVisibleSubmissions = useMemo(() => {
       if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0 && !hasDeepLink) {
           const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
           if (trackIsVisible) {
-              setTimeout(() => {
+              const timer = setTimeout(() => {
+                  // Double check hasDeepLink inside timeout to prevent overriding deep-link scrolls
+                  const currentParams = new URLSearchParams(window.location.search);
+                  if (currentParams.has('submission') || currentParams.has('comment')) return;
+
                   const el = document.getElementById(`submission-${currentTrack.id}`);
                   if (el) {
                       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                       scrolledRef.current = true;
                   }
               }, 500);
+              return () => clearTimeout(timer);
           }
       }
   }, [visibleSubmissions, currentTrack, location.search]);

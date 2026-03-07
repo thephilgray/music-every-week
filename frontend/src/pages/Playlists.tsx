@@ -549,7 +549,14 @@ function PlaylistDetail({ id }: { id: string }) {
     const { play, currentTrack, isPlaying, pause } = usePlayer();
     const { toast } = useToast();
     const location = useLocation();
-    
+
+    const scrolledRef = useRef(false);
+
+    // Reset scrolledRef when ID changes
+    useEffect(() => {
+        scrolledRef.current = false;
+    }, [id]);
+
     const [loading, setLoading] = useState(true);
     const [playlist, setPlaylist] = useState<Playlist | null>(null);
     const [request, setRequest] = useState<FileRequest | null>(null);
@@ -653,8 +660,6 @@ function PlaylistDetail({ id }: { id: string }) {
         }
     }, [areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]);
 
-    const scrolledRef = useRef(false);
-
     // Filter Logic
     const computedVisibleSubmissions = useMemo(() => {
         let filtered = submissions;
@@ -726,6 +731,7 @@ function PlaylistDetail({ id }: { id: string }) {
 
     const { filtered: visibleSubmissions } = computedVisibleSubmissions;
 
+    // Scroll to current track on load
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const hasDeepLink = params.has('submission') || params.has('comment');
@@ -733,13 +739,18 @@ function PlaylistDetail({ id }: { id: string }) {
         if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0 && !hasDeepLink) {
             const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
             if (trackIsVisible) {
-                setTimeout(() => {
+                const timer = setTimeout(() => {
+                    // Double check hasDeepLink inside timeout to prevent overriding deep-link scrolls
+                    const currentParams = new URLSearchParams(window.location.search);
+                    if (currentParams.has('submission') || currentParams.has('comment')) return;
+
                     const el = document.getElementById(`track-${currentTrack.id}`);
                     if (el) {
                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         scrolledRef.current = true;
                     }
                 }, 500);
+                return () => clearTimeout(timer);
             }
         }
     }, [visibleSubmissions, currentTrack, location.search]);

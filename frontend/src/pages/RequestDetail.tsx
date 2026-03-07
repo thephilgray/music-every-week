@@ -24,10 +24,12 @@ export function RequestDetail() {
   const { toast } = useToast();
   
   const scrolledRef = useRef(false);
+  const toastShownRef = useRef(false);
 
   // Reset scrolledRef when ID changes
   useEffect(() => {
     scrolledRef.current = false;
+    toastShownRef.current = false;
   }, [id]);
 
   const removeCommentParam = useCallback(() => {
@@ -60,17 +62,13 @@ export function RequestDetail() {
 
   // Filter/Sort States
   const [showFilterPopover, setShowFilterPopover] = useState(false);
-  const [searchTerm, setSearchTerm] = useState(localStorage.getItem('requestSearchTerm') || '');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>(
-    (localStorage.getItem('requestSortBy') as any) || 'newest'
-  );
-  const [filterByAI, setFilterByAI] = useState(localStorage.getItem('requestFilterByAI') === 'true');
-  const [filterByFragile, setFilterByFragile] = useState(localStorage.getItem('requestFilterByFragile') === 'true');
-  const [filterByUnlistened, setFilterByUnlistened] = useState(localStorage.getItem('requestFilterByUnlistened') === 'true');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>('newest');
+  const [filterByAI, setFilterByAI] = useState(false);
+  const [filterByFragile, setFilterByFragile] = useState(false);
+  const [filterByUnlistened, setFilterByUnlistened] = useState(false);
   const { listenedTracks } = useListenedTracks();
-  const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>(
-    JSON.parse(localStorage.getItem('requestFilterByFeedbackFocus') || '[]')
-  );
+  const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>([]);
 
   const areFiltersActive = useMemo(() => {
     return (
@@ -389,7 +387,7 @@ export function RequestDetail() {
 
   // Show filter notification toast on land
   useEffect(() => {
-    if (areFiltersActive && canSeeFilters) {
+    if (areFiltersActive && canSeeFilters && !toastShownRef.current) {
         toast("Filters are active.", {
             duration: 15000,
             actions: [
@@ -403,6 +401,7 @@ export function RequestDetail() {
                 }
             ]
         });
+        toastShownRef.current = true;
     }
   }, [canSeeFilters, areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]); 
 

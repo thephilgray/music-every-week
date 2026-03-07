@@ -552,10 +552,12 @@ function PlaylistDetail({ id }: { id: string }) {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const scrolledRef = useRef(false);
+    const toastShownRef = useRef(false);
 
     // Reset scrolledRef when ID changes
     useEffect(() => {
         scrolledRef.current = false;
+        toastShownRef.current = false;
     }, [id]);
 
     const [loading, setLoading] = useState(true);
@@ -653,7 +655,7 @@ function PlaylistDetail({ id }: { id: string }) {
 
     // Show filter notification toast on land
     useEffect(() => {
-        if (areFiltersActive) {
+        if (areFiltersActive && !toastShownRef.current) {
             toast("Filters are active.", {
                 duration: 15000,
                 actions: [
@@ -667,6 +669,7 @@ function PlaylistDetail({ id }: { id: string }) {
                     }
                 ]
             });
+            toastShownRef.current = true;
         }
     }, [areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]);
 

@@ -56,6 +56,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [resolvedArtist, setResolvedArtist] = useState<string>('');
+  const resolvedArtistRef = useRef<string>('');
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<Submission[]>(queue);
@@ -66,6 +67,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const { markAsListened } = useListenedTracks();
   const markAsListenedRef = useRef(markAsListened);
+
+  // Sync resolvedArtist with its ref
+  useEffect(() => {
+    resolvedArtistRef.current = resolvedArtist;
+  }, [resolvedArtist]);
 
   // Playback Functions
   const pause = () => setIsPlaying(false);
@@ -216,7 +222,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
       navigator.mediaSession.metadata = new MediaMetadata({
           title: currentTrack.title,
-          artist: resolvedArtist || 'Unknown Artist',
+          artist: resolvedArtistRef.current || 'Unknown Artist',
           artwork: [{ src: fixUrl(artworkUrl), sizes: '512x512', type: 'image/jpeg' }]
       });
 
@@ -235,6 +241,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (!('mediaSession' in navigator)) return;
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   };
+
+  // Trigger update whenever relevant state changes
+  useEffect(() => {
+    if (isPlaying && currentTrack) {
+        updateMediaSession();
+    }
+  }, [currentTrack, resolvedArtist, isPlaying]);
 
   useEffect(() => {
     if (!currentTrack) {
@@ -285,13 +298,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return () => { isMounted = false; };
   }, [currentTrack]);
 
-  // Trigger update when artist name is resolved
-  useEffect(() => {
-    if (isPlaying) {
-        updateMediaSession();
-    }
-  }, [resolvedArtist, isPlaying]);
-
   // Handle Playback Logic when currentTrack changes
   useEffect(() => {
     const audio = audioRef.current;
@@ -319,14 +325,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 }
 
                 if (isPlaying) {
-                    audio.play().then(() => {
-                        updateMediaSession();
-                    }).catch(e => console.error("Playback failed", e));
+                    audio.play().catch(e => console.error("Playback failed", e));
                 }
             } else if (isPlaying && audio.paused) {
-                audio.play().then(() => {
-                    updateMediaSession();
-                }).catch(e => console.error("Playback failed", e));
+                audio.play().catch(e => console.error("Playback failed", e));
             }
         } else {
             console.warn("Track has no valid audio URL:", currentTrack);

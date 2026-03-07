@@ -670,16 +670,6 @@ function PlaylistDetail({ id }: { id: string }) {
         }
     }, [areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]);
 
-    // Remove comment param when filters change
-    const initialMount = useRef(true);
-    useEffect(() => {
-        if (initialMount.current) {
-            initialMount.current = false;
-            return;
-        }
-        removeCommentParam();
-    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, removeCommentParam]);
-
     // Filter Logic
     const computedVisibleSubmissions = useMemo(() => {
         let filtered = submissions;
@@ -754,9 +744,30 @@ function PlaylistDetail({ id }: { id: string }) {
     // Scroll to current track on load
     useEffect(() => {
         const params = new URLSearchParams(location.search);
+        const submissionId = params.get('submission');
         const hasDeepLink = params.has('submission') || params.has('comment');
 
-        if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0 && !hasDeepLink) {
+        if (submissionId && visibleSubmissions.length > 0) {
+            const trackIsVisible = visibleSubmissions.some(s => s.id === submissionId);
+            if (trackIsVisible) {
+                const timer = setTimeout(() => {
+                    const el = document.getElementById(`track-${submissionId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        scrolledRef.current = true;
+
+                        // Clear the comment/submission params after successful scroll
+                        removeCommentParam();
+                        if (params.has('submission')) {
+                            const newParams = new URLSearchParams(window.location.search);
+                            newParams.delete('submission');
+                            setSearchParams(newParams, { replace: true });
+                        }
+                    }
+                }, 500);
+                return () => clearTimeout(timer);
+            }
+        } else if (!scrolledRef.current && currentTrack && visibleSubmissions.length > 0 && !hasDeepLink) {
             const trackIsVisible = visibleSubmissions.some(s => s.id === currentTrack.id);
             if (trackIsVisible) {
                 const timer = setTimeout(() => {
@@ -773,7 +784,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 return () => clearTimeout(timer);
             }
         }
-    }, [visibleSubmissions, currentTrack, location.search]);
+    }, [visibleSubmissions, currentTrack, location.search, removeCommentParam, setSearchParams]);
 
     const handlePlayAll = () => {
         if (visibleSubmissions.length > 0) {

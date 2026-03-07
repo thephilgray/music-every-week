@@ -128,16 +128,6 @@ export function RequestDetail() {
     localStorage.setItem('requestFilterByFeedbackFocus', JSON.stringify(filterByFeedbackFocus));
   }, [filterByFeedbackFocus]);
 
-  // Remove comment param when filters change
-  const initialMount = useRef(true);
-  useEffect(() => {
-    if (initialMount.current) {
-        initialMount.current = false;
-        return;
-    }
-    removeCommentParam();
-  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, removeCommentParam]);
-
   // Load Request Data
   const loadRequest = useCallback(async () => {
       if (!id) return;
@@ -259,11 +249,19 @@ export function RequestDetail() {
                 // Also expand it
                 setExpandedSubmissionId(submissionId);
                 scrolledRef.current = true;
+                
+                // Clear the comment/submission params after successful scroll
+                removeCommentParam();
+                if (params.has('submission')) {
+                    const newParams = new URLSearchParams(window.location.search);
+                    newParams.delete('submission');
+                    setSearchParams(newParams, { replace: true });
+                }
             }
         }, 100);
         return () => clearTimeout(timer);
     }
-  }, [submissions, location.search]);
+  }, [submissions, location.search, removeCommentParam, setSearchParams]);
 
       
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -549,6 +549,7 @@ function PlaylistDetail({ id }: { id: string }) {
     const { play, currentTrack, isPlaying, pause } = usePlayer();
     const { toast } = useToast();
     const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const scrolledRef = useRef(false);
 
@@ -556,6 +557,14 @@ function PlaylistDetail({ id }: { id: string }) {
     useEffect(() => {
         scrolledRef.current = false;
     }, [id]);
+
+    const removeCommentParam = useCallback(() => {
+        if (searchParams.has('comment')) {
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('comment');
+            setSearchParams(newParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     const [loading, setLoading] = useState(true);
     const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -630,7 +639,8 @@ function PlaylistDetail({ id }: { id: string }) {
         setFilterByFragile(false);
         setFilterByUnlistened(false);
         setFilterByFeedbackFocus([]);
-    }, []);
+        removeCommentParam();
+    }, [removeCommentParam]);
 
     const handleEditFiltersFromToast = useCallback(() => {
         setIsFilterModalForced(true);
@@ -659,6 +669,16 @@ function PlaylistDetail({ id }: { id: string }) {
             });
         }
     }, [areFiltersActive, toast, handleClearAllFilters, handleEditFiltersFromToast]);
+
+    // Remove comment param when filters change
+    const initialMount = useRef(true);
+    useEffect(() => {
+        if (initialMount.current) {
+            initialMount.current = false;
+            return;
+        }
+        removeCommentParam();
+    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, removeCommentParam]);
 
     // Filter Logic
     const computedVisibleSubmissions = useMemo(() => {
@@ -769,6 +789,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 });
             }
         }
+        removeCommentParam();
     };
 
     const handleShufflePlay = () => {
@@ -784,6 +805,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 artworkUrl: playlist?.artworkUrl
             });
         }
+        removeCommentParam();
     };
 
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500" /></div>;
@@ -952,7 +974,10 @@ function PlaylistDetail({ id }: { id: string }) {
                                      <button 
                                          onClick={() => {
                                              if (isPlaying && currentTrack?.id === sub.id) pause();
-                                             else play(sub, visibleSubmissions, { type: 'playlist', id: id, name: playlist.title, link: `/playlists/${id}`, artworkUrl: playlist.artworkUrl });
+                                             else {
+                                                 play(sub, visibleSubmissions, { type: 'playlist', id: id, name: playlist.title, link: `/playlists/${id}`, artworkUrl: playlist.artworkUrl });
+                                                 removeCommentParam();
+                                             }
                                          }}
                                          className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition"
                                      >

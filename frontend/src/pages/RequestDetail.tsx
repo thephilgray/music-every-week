@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, Pause, Edit, Lock, Copy, Check, AlertTriangle, Loader2, Shuffle, Filter } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
@@ -18,6 +18,7 @@ import type { FileRequest, Submission } from '../types';
 export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation(); // Added useLocation
+  const [searchParams, setSearchParams] = useSearchParams();
   const { participantEmail, isAdmin, settings } = useAuth();
   const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
   const { toast } = useToast();
@@ -28,6 +29,14 @@ export function RequestDetail() {
   useEffect(() => {
     scrolledRef.current = false;
   }, [id]);
+
+  const removeCommentParam = useCallback(() => {
+    if (searchParams.has('comment')) {
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('comment');
+        setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [hostName, setHostName] = useState<string>('');
@@ -78,7 +87,8 @@ export function RequestDetail() {
     setFilterByFragile(false);
     setFilterByUnlistened(false);
     setFilterByFeedbackFocus([]);
-  }, []);
+    removeCommentParam();
+  }, [removeCommentParam]);
 
   const handleEditFiltersFromToast = useCallback(() => {
     setIsFilterModalForced(true);
@@ -117,6 +127,16 @@ export function RequestDetail() {
   useEffect(() => {
     localStorage.setItem('requestFilterByFeedbackFocus', JSON.stringify(filterByFeedbackFocus));
   }, [filterByFeedbackFocus]);
+
+  // Remove comment param when filters change
+  const initialMount = useRef(true);
+  useEffect(() => {
+    if (initialMount.current) {
+        initialMount.current = false;
+        return;
+    }
+    removeCommentParam();
+  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, removeCommentParam]);
 
   // Load Request Data
   const loadRequest = useCallback(async () => {
@@ -540,6 +560,7 @@ const computedVisibleSubmissions = useMemo(() => {
               artworkUrl: request.artworkUrl
           });
       }
+      removeCommentParam();
   };
 
   const handleShufflePlay = useCallback(() => {
@@ -554,8 +575,9 @@ const computedVisibleSubmissions = useMemo(() => {
         link: `/request/${request?.id}`,
         artworkUrl: request?.artworkUrl
       });
+      removeCommentParam();
     }
-  }, [visibleSubmissions, request, participantEmail, play]);
+  }, [visibleSubmissions, request, participantEmail, play, removeCommentParam]);
 
   const copyLink = () => {
       const url = window.location.href;
@@ -811,6 +833,7 @@ const computedVisibleSubmissions = useMemo(() => {
                                             link: `/request/${request.id}`,
                                             artworkUrl: request.artworkUrl
                                         });
+                                        removeCommentParam();
                                     }}
                                     onPause={pause}
                                     commentCount={commentCount}

@@ -32,6 +32,8 @@ export function RequestDetail() {
 
   const removeCommentParam = useCallback(() => {
     if (searchParams.has('comment')) {
+        const commentId = searchParams.get('comment');
+        if (commentId) setHighlightCommentIdState(commentId);
         const newParams = new URLSearchParams(searchParams);
         newParams.delete('comment');
         setSearchParams(newParams, { replace: true });
@@ -43,6 +45,7 @@ export function RequestDetail() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [resolvedArtistNames, setResolvedArtistNames] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [highlightCommentIdState, setHighlightCommentIdState] = useState<string | undefined>(undefined);
   
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
@@ -843,7 +846,7 @@ const computedVisibleSubmissions = useMemo(() => {
                                     currentUserEmail={participantEmail}
                                     requestId={id}
                                     isMySubmission={isMySubmission}
-                                    highlightCommentId={new URLSearchParams(location.search).get('comment') || undefined}
+                                    highlightCommentId={highlightCommentIdState || new URLSearchParams(location.search).get('comment') || undefined}
                                     isListened={sub.id ? listenedTracks.has(sub.id) : false}
                                 />
                             );

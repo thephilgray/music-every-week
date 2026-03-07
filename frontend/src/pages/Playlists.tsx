@@ -558,6 +558,13 @@ function PlaylistDetail({ id }: { id: string }) {
         scrolledRef.current = false;
     }, [id]);
 
+    const [loading, setLoading] = useState(true);
+    const [playlist, setPlaylist] = useState<Playlist | null>(null);
+    const [request, setRequest] = useState<FileRequest | null>(null);
+    const [submissions, setSubmissions] = useState<Submission[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [hostName, setHostName] = useState<string>('');
+
     const removeCommentParam = useCallback(() => {
         if (searchParams.has('comment')) {
             const newParams = new URLSearchParams(searchParams);
@@ -565,13 +572,6 @@ function PlaylistDetail({ id }: { id: string }) {
             setSearchParams(newParams, { replace: true });
         }
     }, [searchParams, setSearchParams]);
-
-    const [loading, setLoading] = useState(true);
-    const [playlist, setPlaylist] = useState<Playlist | null>(null);
-    const [request, setRequest] = useState<FileRequest | null>(null);
-    const [submissions, setSubmissions] = useState<Submission[]>([]);
-    const [error, setError] = useState<string | null>(null);
-    const [hostName, setHostName] = useState<string>('');
     
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [expandedLyricsMap, setExpandedLyricsMap] = useState<Record<string, boolean>>({});

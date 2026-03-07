@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageSquare, Loader2, CheckCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -25,20 +25,36 @@ export function Community() {
     }
   };
 
-  const [subCursor, setSubCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
-  const [commCursor, setCommCursor] = useState<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(true);
+  const subCursorRef = useRef<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
+  const commCursorRef = useRef<QueryDocumentSnapshot<DocumentData, DocumentData> | null>(null);
+  const [hasMoreSubs, setHasMoreSubs] = useState(true);
+  const [hasMoreComms, setHasMoreComms] = useState(true);
+  const hasMoreSubsRef = useRef(true);
+  const hasMoreCommsRef = useRef(true);
+
+  // We keep these in state ONLY to trigger re-renders for the watermark
+  const [lastSubT, setLastSubT] = useState(Number.MAX_SAFE_INTEGER);
+  const [lastCommT, setLastCommT] = useState(Number.MAX_SAFE_INTEGER);
 
   const reqMapRef = useRef<Record<string, string>>({});
   const submissionsMapRef = useRef<Record<string, Submission>>({});
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const ITEMS_PER_PAGE = 20;
+  const ITEMS_PER_PAGE = 30;
 
-  const fetchFeedBatch = async (isInitial = false) => {
+  const fetchFeedBatch = useCallback(async (isInitial = false) => {
     try {
         if (isInitial) {
             setLoading(true);
+            subCursorRef.current = null;
+            commCursorRef.current = null;
+            hasMoreSubsRef.current = true;
+            hasMoreCommsRef.current = true;
+            setHasMoreSubs(true);
+            setHasMoreComms(true);
+            setLastSubT(Number.MAX_SAFE_INTEGER);
+            setLastCommT(Number.MAX_SAFE_INTEGER);
+
             const email = user?.email || participantEmail;
             const uid = user?.uid;
 
@@ -58,97 +74,131 @@ export function Community() {
             setIsLoadingMore(true);
         }
 
-        // 2. Fetch Recent Submissions
-        let subQueryArgs: any[] = [collection(db, 'submissions'), orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE)];
-        if (!isInitial && subCursor) subQueryArgs.splice(2, 0, startAfter(subCursor));
-        
-        const subQuery = query.apply(null, subQueryArgs as any);
-        const subSnapshot = await getDocs(subQuery);
-        
-        if (!subSnapshot.empty) {
-            setSubCursor(subSnapshot.docs[subSnapshot.docs.length - 1] as QueryDocumentSnapshot<DocumentData, DocumentData>);
-        }
-
-        const submissionFeedItems = subSnapshot.docs.map(d => {
-            const data = d.data() as Submission;
-            const reqTitle = reqMapRef.current[data.requestId];
-            if (!reqTitle) return null; 
+        const fetchSubs = async () => {
+            if (!hasMoreSubsRef.current && !isInitial) return [];
             
-            submissionsMapRef.current[d.id] = data;
+            const constraints: any[] = [
+                orderBy('createdAt', 'desc'),
+                limit(ITEMS_PER_PAGE)
+            ];
             
-            return {
-                id: d.id,
-                type: 'submission',
-                text: `Submitted a new track: ${data.title}`,
-                authorUid: data.uploaderUid, 
-                authorEmail: data.uploaderEmail,
-                authorName: data.byline,
-                submissionId: d.id,
-                requestId: data.requestId,
-                submissionTitle: data.title,
-                requestTitle: reqTitle,
-                createdAt: getTimestampAsNumber(data.createdAt), 
-                usesAI: data.usesAI
-            } as FeedItemData;
-        }).filter(item => item !== null) as FeedItemData[];
-
-        // 3. Fetch Recent Comments
-        let commQueryArgs: any[] = [collection(db, 'comments'), orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE)];
-        if (!isInitial && commCursor) commQueryArgs.splice(2, 0, startAfter(commCursor));
-        
-        const commQuery = query.apply(null, commQueryArgs as any);
-        const commSnapshot = await getDocs(commQuery);
-
-        if (!commSnapshot.empty) {
-            setCommCursor(commSnapshot.docs[commSnapshot.docs.length - 1] as QueryDocumentSnapshot<DocumentData, DocumentData>);
-        }
-
-        // Resolve missing submissions for comments
-        const commentsWithData = await Promise.all(commSnapshot.docs.map(async (docSnap) => {
-            const data = docSnap.data() as Comment;
-            if (!data.submissionId || !data.requestId) return null; 
+            if (!isInitial && subCursorRef.current) {
+                constraints.push(startAfter(subCursorRef.current));
+            }
             
-            const reqTitle = reqMapRef.current[data.requestId];
-            if (!reqTitle) return null; // Filter out if request not found (rules blocked it)
-
-            let submission = submissionsMapRef.current[data.submissionId];
+            const subQuery = query(collection(db, 'submissions'), ...constraints);
+            const subSnapshot = await getDocs(subQuery);
             
-            // If submission not in our recent list, fetch it
-            if (!submission) {
-                try {
-                    const subDoc = await getDoc(doc(db, 'submissions', data.submissionId));
-                    if (subDoc.exists()) {
-                        submission = subDoc.data() as Submission;
-                        submissionsMapRef.current[data.submissionId] = submission; // Cache
-                    }
-                } catch (e) {
-                    console.warn(`Failed to fetch submission ${data.submissionId} for comment ${docSnap.id}`);
-                }
+            if (!subSnapshot.empty) {
+                const lastDoc = subSnapshot.docs[subSnapshot.docs.length - 1];
+                subCursorRef.current = lastDoc as QueryDocumentSnapshot<DocumentData, DocumentData>;
+                setLastSubT(getTimestampAsNumber(lastDoc.data().createdAt));
+            } else {
+                setLastSubT(0);
             }
 
-            if (!submission) return null; 
+            if (subSnapshot.size < ITEMS_PER_PAGE) {
+                hasMoreSubsRef.current = false;
+                setHasMoreSubs(false);
+            }
 
-            return {
-                id: docSnap.id,
-                type: 'comment',
-                text: data.text,
-                authorUid: data.authorUid,
-                authorEmail: data.authorEmail,
-                authorName: data.userProfile?.displayName || (data.authorEmail ? data.authorEmail.split('@')[0] : 'Unknown'),
-                submissionId: data.submissionId,
-                requestId: data.requestId,
-                submissionTitle: submission.title,
-                requestTitle: reqTitle,
-                createdAt: getTimestampAsNumber(data.createdAt),
-                usesAI: submission.usesAI
-            } as FeedItemData;
-        }));
+            return subSnapshot.docs.map(d => {
+                const data = d.data() as Submission;
+                const reqTitle = reqMapRef.current[data.requestId];
+                if (!reqTitle) return null; 
+                
+                submissionsMapRef.current[d.id] = data;
+                
+                return {
+                    id: d.id,
+                    type: 'submission',
+                    text: `Submitted a new track: ${data.title}`,
+                    authorUid: data.uploaderUid, 
+                    authorEmail: data.uploaderEmail,
+                    authorName: data.byline,
+                    submissionId: d.id,
+                    requestId: data.requestId,
+                    submissionTitle: data.title,
+                    requestTitle: reqTitle,
+                    createdAt: getTimestampAsNumber(data.createdAt), 
+                    usesAI: data.usesAI
+                } as FeedItemData;
+            }).filter(item => item !== null) as FeedItemData[];
+        };
 
-        const validComments = commentsWithData.filter((c): c is FeedItemData => c !== null);
+        const fetchComms = async () => {
+            if (!hasMoreCommsRef.current && !isInitial) return [];
 
-        if (subSnapshot.empty && commSnapshot.empty) {
-            setHasMore(false);
-        }
+            const constraints: any[] = [
+                orderBy('createdAt', 'desc'),
+                limit(ITEMS_PER_PAGE)
+            ];
+
+            if (!isInitial && commCursorRef.current) {
+                constraints.push(startAfter(commCursorRef.current));
+            }
+            
+            const commQuery = query(collection(db, 'comments'), ...constraints);
+            const commSnapshot = await getDocs(commQuery);
+
+            if (!commSnapshot.empty) {
+                const lastDoc = commSnapshot.docs[commSnapshot.docs.length - 1];
+                commCursorRef.current = lastDoc as QueryDocumentSnapshot<DocumentData, DocumentData>;
+                setLastCommT(getTimestampAsNumber(lastDoc.data().createdAt));
+            } else {
+                setLastCommT(0);
+            }
+
+            if (commSnapshot.size < ITEMS_PER_PAGE) {
+                hasMoreCommsRef.current = false;
+                setHasMoreComms(false);
+            }
+
+            // Resolve missing submissions for comments
+            const commentsWithData = await Promise.all(commSnapshot.docs.map(async (docSnap) => {
+                const data = docSnap.data() as Comment;
+                if (!data.submissionId || !data.requestId) return null; 
+                
+                const reqTitle = reqMapRef.current[data.requestId];
+                if (!reqTitle) return null; // Filter out if request not found (rules blocked it)
+
+                let submission = submissionsMapRef.current[data.submissionId];
+                
+                // If submission not in our recent list, fetch it
+                if (!submission) {
+                    try {
+                        const subDoc = await getDoc(doc(db, 'submissions', data.submissionId));
+                        if (subDoc.exists()) {
+                            submission = subDoc.data() as Submission;
+                            submissionsMapRef.current[data.submissionId] = submission; // Cache
+                        }
+                    } catch (err) {
+                        console.warn(`Failed to fetch submission ${data.submissionId} for comment ${docSnap.id}`, err);
+                    }
+                }
+
+                if (!submission) return null; 
+
+                return {
+                    id: docSnap.id,
+                    type: 'comment',
+                    text: data.text,
+                    authorUid: data.authorUid,
+                    authorEmail: data.authorEmail,
+                    authorName: data.userProfile?.displayName || (data.authorEmail ? data.authorEmail.split('@')[0] : 'Unknown'),
+                    submissionId: data.submissionId,
+                    requestId: data.requestId,
+                    submissionTitle: submission.title,
+                    requestTitle: reqTitle,
+                    createdAt: getTimestampAsNumber(data.createdAt),
+                    usesAI: submission.usesAI
+                } as FeedItemData;
+            }));
+
+            return commentsWithData.filter((c): c is FeedItemData => c !== null);
+        };
+
+        const [submissionFeedItems, validComments] = await Promise.all([fetchSubs(), fetchComms()]);
 
         // 4. Merge and Sort
         const combinedNew = [...submissionFeedItems, ...validComments];
@@ -166,14 +216,27 @@ export function Community() {
         setLoading(false);
         setIsLoadingMore(false);
     }
-  };
+  }, [user?.email, user?.uid, participantEmail]);
 
   useEffect(() => {
     fetchFeedBatch(true);
-  }, [user?.uid]);
+  }, [user?.uid, fetchFeedBatch]);
+
+  // Calculate watermark for smooth merging of streams
+  let watermark = 0;
+  if (hasMoreSubs && hasMoreComms) {
+      watermark = Math.max(lastSubT, lastCommT);
+  } else if (hasMoreSubs) {
+      watermark = lastSubT;
+  } else if (hasMoreComms) {
+      watermark = lastCommT;
+  }
 
   const filteredFeed = feed.filter(item => {
       if (settings?.content?.filterAI && item.usesAI) return false;
+      // Watermark filter: only show items newer than the "worst" cursor
+      // to ensure correct relative ordering between streams.
+      if (item.createdAt < watermark) return false;
       return true;
   });
 
@@ -217,6 +280,8 @@ export function Community() {
     return () => observer.disconnect();
   }, [filteredFeed, user?.uid, profile?.readCommunityItems]);
 
+  const hasMore = hasMoreSubs || hasMoreComms;
+
   // Infinite Scroll Observer
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
@@ -228,7 +293,7 @@ export function Community() {
 
     if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [hasMore, loading, isLoadingMore]);
+  }, [hasMore, loading, isLoadingMore, fetchFeedBatch]);
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
@@ -252,11 +317,6 @@ export function Community() {
              <div className="space-y-4">
                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
              </div>
-        ) : filteredFeed.length === 0 ? (
-             <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
-                 <MessageSquare className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-                 <p className="text-gray-500">No submission activity yet.</p>
-             </div>
         ) : (
             <div className="space-y-4">
                 {filteredFeed.map(item => (
@@ -265,13 +325,20 @@ export function Community() {
                     </div>
                 ))}
                 
+                {filteredFeed.length === 0 && !hasMore && (
+                    <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
+                        <MessageSquare className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                        <p className="text-gray-500">No submission activity yet.</p>
+                    </div>
+                )}
+
                 {hasMore && (
                     <div ref={loadMoreRef} className="py-6 flex justify-center">
                         <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
                     </div>
                 )}
                 
-                {!hasMore && feed.length > 0 && (
+                {!hasMore && feed.length > 0 && filteredFeed.length > 0 && (
                     <div className="py-8 text-center text-sm text-gray-500">
                         You've reached the end of the feed.
                     </div>

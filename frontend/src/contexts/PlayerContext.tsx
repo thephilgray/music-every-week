@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
-import type { Submission } from '../types';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import type { Submission, UserProfile } from '../types';
 import { fixUrl } from '../lib/url';
 import { useListenedTracks } from '../hooks/useListenedTracks';
 
@@ -53,6 +55,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  const [resolvedArtist, setResolvedArtist] = useState<string>('');
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<Submission[]>(queue);
@@ -60,15 +63,69 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const contextRef = useRef<PlayerContextType['context']>(context);
   const initialTimeLoadedRef = useRef(false);
   const lastSavedTimeRef = useRef(currentTime);
-  
+
   const { markAsListened } = useListenedTracks();
   const markAsListenedRef = useRef(markAsListened);
-  useEffect(() => { markAsListenedRef.current = markAsListened; }, [markAsListened]);
+
+  // Playback Functions
+  const pause = () => setIsPlaying(false);
+  
+  const resume = () => {
+      initialTimeLoadedRef.current = true;
+      setIsPlaying(true);
+  };
+
+  const toggleMute = () => setMuted(prev => !prev);
+
+  const seek = (time: number) => {
+      if (audioRef.current) {
+          audioRef.current.currentTime = time;
+          setCurrentTime(time);
+          localStorage.setItem('player_currentTime', time.toString());
+          lastSavedTimeRef.current = time;
+      }
+  };
+
+  const play = (track: Submission, newQueue?: Submission[], newContext?: PlayerContextType['context']) => {
+    if (newQueue) setQueue(newQueue);
+    if (newContext) setContext(newContext);
+    initialTimeLoadedRef.current = true;
+    setCurrentTrack(track);
+    setIsPlaying(true);
+  };
+
+  const next = () => {
+      initialTimeLoadedRef.current = true;
+      if (!currentTrack || queue.length === 0) return;
+      const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
+      if (currentIndex < queue.length - 1) {
+          setCurrentTrack(queue[currentIndex + 1]);
+          setIsPlaying(true);
+      } else {
+          setIsPlaying(false);
+      }
+  };
+
+  const prev = () => {
+    initialTimeLoadedRef.current = true;
+    if (!currentTrack || queue.length === 0) return;
+    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
+    if (currentIndex > 0) {
+        setCurrentTrack(queue[currentIndex - 1]);
+        setIsPlaying(true);
+    } else {
+        if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            setIsPlaying(true);
+        }
+    }
+  };
 
   // Keep refs in sync
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
   useEffect(() => { contextRef.current = context; }, [context]);
+  useEffect(() => { markAsListenedRef.current = markAsListened; }, [markAsListened]);
 
   // Persist state
   useEffect(() => {
@@ -151,6 +208,90 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Update Media Session Metadata & Handlers
+  const updateMediaSession = () => {
+      if (!currentTrack || !('mediaSession' in navigator)) return;
+      
+      const artworkUrl = currentTrack.artworkUrl || contextRef.current?.artworkUrl || '/mewlogo.png';
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentTrack.title,
+          artist: resolvedArtist || 'Unknown Artist',
+          artwork: [{ src: fixUrl(artworkUrl), sizes: '512x512', type: 'image/jpeg' }]
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => resume());
+      navigator.mediaSession.setActionHandler('pause', () => pause());
+      navigator.mediaSession.setActionHandler('previoustrack', () => prev());
+      navigator.mediaSession.setActionHandler('nexttrack', () => next());
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime !== undefined) {
+              seek(details.seekTime);
+          }
+      });
+  };
+
+  const updateMediaSessionState = () => {
+      if (!('mediaSession' in navigator)) return;
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  };
+
+  useEffect(() => {
+    if (!currentTrack) {
+        setResolvedArtist('');
+        return;
+    }
+
+    if (currentTrack.byline) {
+        setResolvedArtist(currentTrack.byline);
+        return;
+    }
+
+    // Default to a temporary name while resolving
+    const tempName = currentTrack.uploaderUid ? currentTrack.uploaderUid.substring(0, 8) : (currentTrack.uploaderEmail ? currentTrack.uploaderEmail.split('@')[0] : 'Unknown Artist');
+    setResolvedArtist(tempName);
+
+    let isMounted = true;
+    const resolveName = async () => {
+        const uid = currentTrack.uploaderUid || currentTrack.originalUploaderPub;
+        if (uid) {
+            try {
+                const docRef = doc(db, 'profiles', uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists() && isMounted) {
+                    const data = docSnap.data() as UserProfile;
+                    setResolvedArtist(data.displayName || data.alias || uid.substring(0, 8));
+                    return;
+                }
+            } catch (e) {
+                // Ignore
+            }
+        } else if (currentTrack.uploaderEmail) {
+            try {
+                const q = query(collection(db, 'profiles'), where('email', '==', currentTrack.uploaderEmail));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty && isMounted) {
+                    const data = querySnapshot.docs[0].data() as UserProfile;
+                    setResolvedArtist(data.displayName || data.alias || currentTrack.uploaderEmail.split('@')[0]);
+                    return;
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+    };
+
+    resolveName();
+    return () => { isMounted = false; };
+  }, [currentTrack]);
+
+  // Trigger update when artist name is resolved
+  useEffect(() => {
+    if (isPlaying) {
+        updateMediaSession();
+    }
+  }, [resolvedArtist, isPlaying]);
+
   // Handle Playback Logic when currentTrack changes
   useEffect(() => {
     const audio = audioRef.current;
@@ -195,7 +336,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         audio.pause();
         if (isPlaying) setIsPlaying(false);
     }
-  }, [currentTrack, markAsListened]); // Removed isPlaying from deps to prevent unwanted triggers, handled below
+  }, [currentTrack, markAsListened]);
 
   // Handle Play/Pause Toggle separate from track changes
   useEffect(() => {
@@ -212,35 +353,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     updateMediaSessionState();
   }, [isPlaying, currentTrack]);
 
-  // Update Media Session Metadata & Handlers
-  const updateMediaSession = () => {
-      if (!currentTrack || !('mediaSession' in navigator)) return;
-      
-      const artworkUrl = currentTrack.artworkUrl || contextRef.current?.artworkUrl || '/mewlogo.png';
-
-      navigator.mediaSession.metadata = new MediaMetadata({
-          title: currentTrack.title,
-          artist: currentTrack.byline || 'Unknown Artist',
-          artwork: [{ src: fixUrl(artworkUrl), sizes: '512x512', type: 'image/jpeg' }]
-      });
-
-      navigator.mediaSession.setActionHandler('play', () => resume());
-      navigator.mediaSession.setActionHandler('pause', () => pause());
-      navigator.mediaSession.setActionHandler('previoustrack', () => prev());
-      navigator.mediaSession.setActionHandler('nexttrack', () => next());
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-          if (details.seekTime !== undefined) {
-              seek(details.seekTime);
-          }
-      });
-  };
-
-  const updateMediaSessionState = () => {
-      if (!('mediaSession' in navigator)) return;
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  };
-
-
   // Handle Volume/Mute changes
   useEffect(() => {
       if (audioRef.current) {
@@ -248,64 +360,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           audioRef.current.muted = muted;
       }
   }, [volume, muted]);
-
-  const play = (track: Submission, newQueue?: Submission[], newContext?: PlayerContextType['context']) => {
-    if (newQueue) {
-        setQueue(newQueue);
-    }
-    if (newContext) {
-        setContext(newContext);
-    }
-    // If selecting a different track, initial load logic is over
-    initialTimeLoadedRef.current = true;
-    setCurrentTrack(track);
-    setIsPlaying(true);
-  };
-
-  const pause = () => setIsPlaying(false);
-  const resume = () => {
-      // If we are resuming after page load, initial load logic is over
-      initialTimeLoadedRef.current = true;
-      setIsPlaying(true);
-  };
-  const toggleMute = () => setMuted(prev => !prev);
-
-  const next = () => {
-      initialTimeLoadedRef.current = true;
-      if (!currentTrack || queue.length === 0) return;
-      const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-      if (currentIndex < queue.length - 1) {
-          setCurrentTrack(queue[currentIndex + 1]);
-          setIsPlaying(true);
-      } else {
-          setIsPlaying(false);
-      }
-  };
-
-  const prev = () => {
-    initialTimeLoadedRef.current = true;
-    if (!currentTrack || queue.length === 0) return;
-    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-    if (currentIndex > 0) {
-        setCurrentTrack(queue[currentIndex - 1]);
-        setIsPlaying(true);
-    } else {
-        // Restart track
-        if (audioRef.current) {
-            audioRef.current.currentTime = 0;
-            setIsPlaying(true);
-        }
-    }
-  };
-  
-  const seek = (time: number) => {
-      if (audioRef.current) {
-          audioRef.current.currentTime = time;
-          setCurrentTime(time);
-          localStorage.setItem('player_currentTime', time.toString());
-          lastSavedTimeRef.current = time;
-      }
-  }
 
   return (
     <PlayerContext.Provider value={{ 

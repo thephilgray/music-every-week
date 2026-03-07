@@ -264,51 +264,42 @@ export function RequestDetail() {
     }
   }, [submissions, location.search, removeCommentParam, setSearchParams]);
 
-      
+  // Handle scrolling when a submission is expanded to prevent layout shifts from pushing it out of view
+  useEffect(() => {
+    if (expandedSubmissionId) {
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`submission-${expandedSubmissionId}`);
+        if (element) {
+          // Use 'nearest' to avoid jumping if it's already mostly in view, 
+          // but 'smooth' to make it feel natural
+          element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 50); // Very short delay to allow layout shift to happen
+      return () => clearTimeout(timer);
+    }
+  }, [expandedSubmissionId]);
 
-        useEffect(() => {
+  useEffect(() => {
+    if (!id) return;
 
-          if (!id) return;
+    const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
+    
+    const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
+      const counts: Record<string, number> = {};
+      commentsSnap.docs.forEach(commentDoc => {
+        const commentData = commentDoc.data();
+        if (commentData.submissionId) {
+          counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
+        }
+      });
+      setSubmissionCommentCounts(counts);
+    }, (err) => {
+      console.error("Error fetching submission comment counts:", err);
+      setSubmissionCommentCounts({}); // Clear counts on error
+    });
 
-      
-
-          const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
-
-          
-
-          const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
-
-            const counts: Record<string, number> = {};
-
-            commentsSnap.docs.forEach(commentDoc => {
-
-              const commentData = commentDoc.data();
-
-              if (commentData.submissionId) {
-
-                counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
-
-              }
-
-            });
-
-            setSubmissionCommentCounts(counts);
-
-          }, (err) => {
-
-            console.error("Error fetching submission comment counts:", err);
-
-            setSubmissionCommentCounts({}); // Clear counts on error
-
-          });
-
-      
-
-          return () => unsubscribe(); // Unsubscribe on cleanup
-
-        }, [id]); // Depend only on id
-
-
+    return () => unsubscribe();
+  }, [id]);
 
   useEffect(() => {
       loadSubmissions();

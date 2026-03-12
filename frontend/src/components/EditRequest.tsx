@@ -378,7 +378,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       if (!inviteCode) {
           inviteCode = crypto.randomUUID().substring(0, 8).toUpperCase();
           // Store invite code in Firestore
-          await updateDoc(doc(db, 'invites', inviteCode), {
+          await setDoc(doc(db, 'invites', inviteCode), {
               fromUid: user?.uid || 'participant',
               createdAt: serverTimestamp(),
               status: 'active',
@@ -405,15 +405,16 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
         accessMode,
         artworkUrl,
         inviteCode,
-        accessList: pendingEmails, // Store as array directly in Firestore
+        accessList: finalPendingEmails, // Use normalized emails
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
         previewTrackCount: previewTrackCount,
-        updatedAt: serverTimestamp() // Add an update timestamp
+        participants: selectedParticipants, // Consolidate participants update
+        updatedAt: serverTimestamp()
       };
 
-      // Only update ownerPub if we have a valid UID to set
-      if (user?.uid) {
+      // Only set ownerPub if it's missing (e.g., from old migration)
+      if (!request.ownerPub && user?.uid) {
           updates.ownerPub = user.uid;
       }
       
@@ -439,14 +440,6 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
           updatePromises.push(updateDoc(playlistDocRef, playlistUpdates));
       }
 
-      // Handle Participants (Firestore: stored as a map in the request document)
-      const oldParticipants = request.participants || {};
-      const newParticipants = { ...selectedParticipants }; 
-
-      updatePromises.push(updateDoc(requestDocRef, {
-        participants: newParticipants
-      }));
-
       await Promise.all(updatePromises);
       console.log("EditRequest: All primary document updates complete.");
       
@@ -457,6 +450,8 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       const notificationPromises: Promise<any>[] = [];
       addedParticipants.forEach(async (partUid: string) => { 
           if (user?.uid && partUid === user.uid) return; 
+          // Skip if it looks like an email (not a UID) - notifications only work for UID-based profiles
+          if (partUid.includes('@')) return;
           
           const notifId = crypto.randomUUID();
           const message = accessMode === 'direct' 

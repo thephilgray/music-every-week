@@ -26,8 +26,15 @@ service cloud.firestore {
     
     match /profiles/{userId} {
       allow read: if true;
-      // Only the user themselves or an admin can update their profile.
-      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      // Allow write if:
+      // 1. User is an admin
+      // 2. User is the owner (UID match)
+      // 3. User's authenticated email matches the profile email (allows merging duplicate accounts)
+      allow write: if isAdmin() || (isSignedIn() && (
+        request.auth.uid == userId || 
+        request.auth.token.email.lower() == resource.data.email.lower() ||
+        request.auth.token.email.lower() == request.resource.data.email.lower()
+      ));
     }
     
     match /requests/{requestId} {

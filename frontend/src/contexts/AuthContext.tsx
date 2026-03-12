@@ -74,45 +74,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             if (isCancelled) return;
 
-            if (!profileSnap.exists()) {
-                 // Creation / Migration Logic
-                 let existingData = {};
-                 if (user.email) {
-                      const q = query(collection(db, 'profiles'), where('email', '==', user.email));
-                      const querySnapshot = await getDocs(q);
-                      
-                      // Merge all duplicate profiles and delete them
-                      const oldDocs = querySnapshot.docs;
-                      for (const oldDoc of oldDocs) {
-                          const docData = oldDoc.data();
-                          // Strip sensitive flags that might have been erroneously given to regular users
-                          delete docData.isAdmin;
-                          delete docData.isHost;
-                          
-                          existingData = { ...docData, ...existingData };
-                          await deleteDoc(oldDoc.ref);
-                      }
-                  }
-                  
-                  if (isCancelled) return;
+            let existingData = profileSnap.exists() ? profileSnap.data() : {};
+            let shouldMerge = !profileSnap.exists();
+            
+            // Check for potential duplicate profiles with different email casing
+            // This also catches profiles with the same email but different UID (e.g. from GunDB migration)
+            if (user.email) {
+                const normalizedEmail = user.email.toLowerCase();
+                // Query for any profiles with the same email (exact or case-mismatch)
+                // Firestore 'in' query can match up to 10 values; we use [raw, lowercase]
+                const q = query(
+                    collection(db, 'profiles'), 
+                    where('email', 'in', Array.from(new Set([user.email, normalizedEmail])))
+                );
+                const querySnapshot = await getDocs(q);
+                
+                for (const oldDoc of querySnapshot.docs) {
+                    if (oldDoc.id === user.uid) continue;
+                    
+                    const docData = oldDoc.data();
+                    // Merge old profile data into our current profile object
+                    // We prefer current user data over old data if there's a conflict
+                    existingData = { ...docData, ...existingData };
+                    // Delete the duplicate
+                    await deleteDoc(oldDoc.ref);
+                    shouldMerge = true;
+                    console.log(`Merged duplicate profile: ${oldDoc.id} into ${user.uid}`);
+                }
+            }
 
-                  const mergedProfile: any = {
-                      uid: user.uid,
-                      email: user.email,
-                      createdAt: serverTimestamp(),
-                      ...existingData,
-                      isAdmin: isAllowedEmail, 
-                      isHost: isAllowedEmail,
-                  };
+            if (shouldMerge || !profileSnap.exists()) {
+                const mergedProfile: any = {
+                    uid: user.uid,
+                    email: user.email?.toLowerCase() || user.email, // Always store as lowercase
+                    createdAt: existingData.createdAt || serverTimestamp(),
+                    ...existingData,
+                    isAdmin: isAllowedEmail, 
+                    isHost: isAllowedEmail,
+                    updatedAt: serverTimestamp()
+                };
 
-                  // Fallback to Google defaults ONLY if the user hasn't explicitly set them
-                  if (!mergedProfile.displayName) mergedProfile.displayName = user.displayName || '';
-                  if (!mergedProfile.alias) mergedProfile.alias = user.displayName?.replace(/\s+/g, '') || 'User' + user.uid.substring(0, 5);
-                  if (!mergedProfile.avatarUrl) mergedProfile.avatarUrl = user.photoURL || '';
+                // Fallback to Google defaults ONLY if the user hasn't explicitly set them
+                if (!mergedProfile.displayName) mergedProfile.displayName = user.displayName || '';
+                if (!mergedProfile.alias) mergedProfile.alias = user.displayName?.replace(/\s+/g, '') || 'User' + user.uid.substring(0, 5);
+                if (!mergedProfile.avatarUrl) mergedProfile.avatarUrl = user.photoURL || '';
 
-                  await setDoc(profileRef, mergedProfile);
+                await setDoc(profileRef, mergedProfile);
             } else {
-                // If profile exists, ensure isAdmin is synced with the .env file in the database
+                // If profile exists and no merge needed, ensure isAdmin is synced
                 const data = profileSnap.data();
                 if (!!data.isAdmin !== isAllowedEmail) {
                     await updateDoc(profileRef, { isAdmin: isAllowedEmail });

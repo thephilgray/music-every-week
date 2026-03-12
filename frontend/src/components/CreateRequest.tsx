@@ -123,12 +123,12 @@ export function CreateRequest() {
 
     try {
       // Process any lingering email input
-      let finalEmails = [...emails];
+      let finalEmails = [...emails].map(e => e.toLowerCase());
       if (emailInput.trim()) {
           const lingering = emailInput
               .split(/[\s,]+/)
-              .map(s => s.trim())
-              .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !emails.includes(s));
+              .map(s => s.trim().toLowerCase())
+              .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !finalEmails.includes(s));
           if (lingering.length > 0) {
               finalEmails = Array.from(new Set([...finalEmails, ...lingering]));
               setEmails(finalEmails);
@@ -136,12 +136,12 @@ export function CreateRequest() {
           }
       }
 
-      let finalPlaylistEmails = [...playlistEmails];
+      let finalPlaylistEmails = [...playlistEmails].map(e => e.toLowerCase());
       if (separatePlaylistAccess && playlistEmailInput.trim()) {
           const lingeringPlaylist = playlistEmailInput
               .split(/[\s,]+/)
-              .map(s => s.trim())
-              .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !playlistEmails.includes(s));
+              .map(s => s.trim().toLowerCase())
+              .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !finalPlaylistEmails.includes(s));
           if (lingeringPlaylist.length > 0) {
               finalPlaylistEmails = Array.from(new Set([...finalPlaylistEmails, ...lingeringPlaylist]));
               setPlaylistEmails(finalPlaylistEmails);
@@ -187,13 +187,13 @@ export function CreateRequest() {
         playlistLiveDate: safeISO(playlistLiveDate),
         accessMode,
         artworkUrl: artworkUrl || null,
-        ownerEmail: user.email, 
+        ownerEmail: user.email.toLowerCase(), 
         ownerPub: user.uid, 
         accessList: finalEmails, 
         inviteCode,
         poolSeats: accessMode === 'volunteer' ? poolSeats : null,
         allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
-        hostEmail: user.email, 
+        hostEmail: user.email.toLowerCase(), 
         previewTrackCount: previewTrackCount,
         playlistId: playlistId, // Link immediately
         createdAt: serverTimestamp()

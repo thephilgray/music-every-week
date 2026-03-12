@@ -85,8 +85,12 @@ export function Profile() {
             // Not found
             setResolvedProfileUid(targetUid); // Fallback to let the snapshot listener confirm 404
         } else if (authParticipantEmail) {
-            // 3. Try Email
-            const q = query(collection(db, 'profiles'), where('email', '==', authParticipantEmail));
+            // 3. Try Email (Case-insensitive)
+            const normalizedEmail = authParticipantEmail.toLowerCase();
+            const q = query(
+                collection(db, 'profiles'), 
+                where('email', 'in', Array.from(new Set([authParticipantEmail, normalizedEmail])))
+            );
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 setResolvedProfileUid(snapshot.docs[0].id);

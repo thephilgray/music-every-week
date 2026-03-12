@@ -18,7 +18,11 @@ export function Settings() {
     if (user?.uid) {
         setResolvedUid(user.uid);
     } else if (participantEmail) {
-        const q = query(collection(db, 'profiles'), where('email', '==', participantEmail));
+        const normalizedEmail = participantEmail.toLowerCase();
+        const q = query(
+            collection(db, 'profiles'), 
+            where('email', 'in', Array.from(new Set([participantEmail, normalizedEmail])))
+        );
         getDocs(q).then(snap => {
             if (!snap.empty) {
                 setResolvedUid(snap.docs[0].id);

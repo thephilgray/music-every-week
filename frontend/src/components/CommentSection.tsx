@@ -39,7 +39,11 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
           // Fetch profile by email for participants
           const email = participantEmail || currentUserEmail;
           if (!email) return;
-          const q = query(collection(db, 'profiles'), where('email', '==', email));
+          const normalizedEmail = email.toLowerCase();
+          const q = query(
+              collection(db, 'profiles'), 
+              where('email', 'in', Array.from(new Set([email, normalizedEmail])))
+          );
           const unsub = onSnapshot(q, (snapshot) => {
               if (!snapshot.empty) {
                   setFirestoreProfile(snapshot.docs[0].data());

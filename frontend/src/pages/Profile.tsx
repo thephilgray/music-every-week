@@ -206,11 +206,12 @@ export function Profile() {
                       }));
                   }
           
-                  // 2. By Email
+                  // 2. By Email (Case-insensitive)
                   if (profile?.email) {
+                      const normalizedEmail = profile.email.toLowerCase();
                       const qEmail = query(
                           collection(db, 'submissions'),
-                          where('uploaderEmail', '==', profile.email)
+                          where('uploaderEmail', 'in', Array.from(new Set([profile.email, normalizedEmail])))
                       );
                       unsubs.push(onSnapshot(qEmail, (snapshot) => {
                           const res: Submission[] = [];
@@ -265,11 +266,12 @@ export function Profile() {
                       }));
                   }
           
-                  // 2. By Owner Email
+                  // 2. By Owner Email (Case-insensitive)
                   if (profile?.email) {
+                      const normalizedEmail = profile.email.toLowerCase();
                       const qOwnerEmail = query(
                           collection(db, 'requests'),
-                          where('ownerEmail', '==', profile.email)
+                          where('ownerEmail', 'in', Array.from(new Set([profile.email, normalizedEmail])))
                       );
                       unsubs.push(onSnapshot(qOwnerEmail, (snapshot) => {
                           const res: FileRequest[] = [];
@@ -281,10 +283,10 @@ export function Profile() {
                           setRequestsByOwnerEmail(res);
                       }));
           
-                       // 3. By Host Email
+                       // 3. By Host Email (Case-insensitive)
                       const qHostEmail = query(
                           collection(db, 'requests'),
-                          where('hostEmail', '==', profile.email)
+                          where('hostEmail', 'in', Array.from(new Set([profile.email, normalizedEmail])))
                       );
                       unsubs.push(onSnapshot(qHostEmail, (snapshot) => {
                           const res: FileRequest[] = [];

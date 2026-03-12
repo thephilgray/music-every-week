@@ -444,6 +444,7 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
       console.log("EditRequest: All primary document updates complete.");
       
       // Notify New Participants
+      const oldParticipants = request.participants || {};
       const existingKeys = Object.keys(oldParticipants);
       const addedParticipants = Object.keys(selectedParticipants).filter(uid => !existingKeys.includes(uid)); 
       

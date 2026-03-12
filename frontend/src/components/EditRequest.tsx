@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2'; 
 import { db } from '../lib/firebase';
-import { doc, updateDoc, collection, query, where, getDocs, getDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'; // Removed Timestamp
+import { doc, updateDoc, setDoc, collection, query, where, getDocs, getDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'; // Removed Timestamp
 import type { FileRequest, UserProfile, Notification, Playlist } from '../types';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { Tooltip } from './ui/Tooltip';

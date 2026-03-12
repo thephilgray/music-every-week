@@ -27,7 +27,7 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if true;
       // Only the user themselves or an admin can update their profile.
-      allow write: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
     
     match /requests/{requestId} {
@@ -35,12 +35,12 @@ service cloud.firestore {
                     request.auth.token.email in resource.data.accessList || 
                     request.auth.uid == resource.data.ownerPub ||
                     isAdmin();
-      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.ownerPub);
+      allow write: if isSignedIn();
     }
     
     match /playlists/{playlistId} {
       allow read: if true;
-      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.ownerPub);
+      allow write: if isSignedIn();
     }
 
     // --------------------------------------------------------------------------

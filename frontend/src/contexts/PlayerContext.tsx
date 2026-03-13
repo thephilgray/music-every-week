@@ -174,6 +174,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // Initialize Audio Element
   useEffect(() => {
     audioRef.current = new Audio();
+    (window as any).mewAudio = audioRef.current; // Expose for console debugging
     audioRef.current.preload = "metadata"; // Ensure metadata loads for duration
     
     // Initial volume application

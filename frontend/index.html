@@ -11,6 +11,11 @@
     <link rel="apple-touch-icon" href="/mewlogo.png" />
     <link rel="manifest" href="/manifest.json" />
     <title>MEW - Music Every Week</title>
+    <script>
+        if (typeof global === 'undefined') {
+            window.global = window;
+        }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -71,9 +71,6 @@ export default defineConfig({
     host: true, // Expose to network (for mobile testing)
     port: 5173,
   },
-  define: {
-    global: 'window',
-  },
   build: {
     chunkSizeWarningLimit: 1000, // Optional: bump limit if you prefer single file
     rollupOptions: {

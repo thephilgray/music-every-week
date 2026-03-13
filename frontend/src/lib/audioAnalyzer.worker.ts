@@ -1,5 +1,9 @@
 // audioAnalyzer.worker.ts
-self.onmessage = (event: MessageEvent<{ rawData: Float32Array, samples: number }>) => {
+if (typeof global === 'undefined') {
+    (self as any).global = self;
+}
+
+self.addEventListener('message', (event: MessageEvent<{ rawData: Float32Array, samples: number }>) => {
     const { rawData, samples } = event.data;
     const length = rawData.length;
     const blockSize = Math.floor(length / samples);
@@ -39,4 +43,4 @@ self.onmessage = (event: MessageEvent<{ rawData: Float32Array, samples: number }
     const volumeAdjustmentDb = parseFloat(Math.min(12, Math.max(-30, adjustment)).toFixed(2));
 
     self.postMessage({ waveform, volumeAdjustmentDb });
-};
+});

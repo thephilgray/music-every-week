@@ -328,11 +328,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 audio.src = url;
                 
                 // Logging for normalization debugging
-                const db = (isNormalizationEnabled && currentTrack.volumeAdjustmentDb) || 0;
+                const hasMetadata = typeof currentTrack.volumeAdjustmentDb === 'number';
+                const db = (isNormalizationEnabled && hasMetadata ? currentTrack.volumeAdjustmentDb : 0);
                 const multiplier = Math.pow(10, db / 20);
                 const finalVolume = Math.min(1.0, Math.max(0, volume * multiplier));
                 
-                console.log(`[Player] Playing: "${currentTrack.title}" | Normalization: ${isNormalizationEnabled ? 'ON' : 'OFF'} | Adjustment: ${db}dB | Final Volume: ${(finalVolume * 100).toFixed(1)}%`);
+                console.log(`[Player] Playing: "${currentTrack.title}" | Normalization: ${isNormalizationEnabled ? 'ON' : 'OFF'} | Metadata: ${hasMetadata ? 'YES' : 'NO'} | Adjustment: ${db}dB | Final Volume: ${(finalVolume * 100).toFixed(1)}%`);
 
                 if (!initialTimeLoadedRef.current) {
                     const savedTime = localStorage.getItem('player_currentTime');

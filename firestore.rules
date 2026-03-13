@@ -84,6 +84,11 @@ service cloud.firestore {
        allow write: if isSignedIn();
     }
     
+    match /config/{docId} {
+       allow read: if true; // Player needs this
+       allow write: if isAdmin();
+    }
+    
     match /system/{docId} {
         allow read: if isSignedIn();
         allow write: if isSignedIn();

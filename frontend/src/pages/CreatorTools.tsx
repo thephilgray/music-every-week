@@ -52,7 +52,7 @@ export function CreatorTools() {
   const [showDeleteRequestConfirm, setShowDeleteRequestConfirm] = useState(false);
   const [showDeleteSubmissionConfirm, setShowDeleteSubmissionConfirm] = useState(false);
 
-  const [, setLoading] = useState(false);
+  const [isActionLoading, setActionLoading] = useState(false);
 
   // Fetch comments count for selected submission
   useEffect(() => {
@@ -496,7 +496,7 @@ export function CreatorTools() {
   const handleBulkExtend = async (hours: number) => { 
       if (!selectedRequest || !selectedRequest.id) return;
       if (!confirm(`Are you sure you want to grant a ${hours} hour extension to ALL ${participants.length} participants?`)) return;
-      setLoading(true); 
+      setActionLoading(true); 
       try {
           const requestDocRef = doc(db, 'requests', selectedRequest.id);
           const updatePromises: Promise<void>[] = [];
@@ -519,7 +519,7 @@ export function CreatorTools() {
           console.error("Error bulk granting extension:", e);
           error("Failed to grant bulk extension.");
       } finally {
-          setLoading(false);
+          setActionLoading(false);
       }
   };
   
@@ -555,7 +555,7 @@ export function CreatorTools() {
           return;
       }
 
-      setLoading(true); 
+      setActionLoading(true); 
       try {
           const code = crypto.randomUUID().substring(0, 8).toUpperCase();
           
@@ -574,7 +574,7 @@ export function CreatorTools() {
           console.error("Error generating extension link:", e);
           error("Failed to generate extension link.");
       } finally {
-          setLoading(false);
+          setActionLoading(false);
       }
   };
 
@@ -584,7 +584,7 @@ export function CreatorTools() {
           return;
       }
       
-      setLoading(true);
+      setActionLoading(true);
       try {
           console.log("handleDeleteRequest: Updating Firestore for ID:", selectedRequest.id);
           const requestDocRef = doc(db, 'requests', selectedRequest.id);
@@ -610,14 +610,14 @@ export function CreatorTools() {
           console.error("Delete request failed in catch block", e);
           error("Failed to delete request: " + (e as Error).message);
       } finally {
-          setLoading(false);
+          setActionLoading(false);
       }
   };
 
   const handleDeleteSubmission = async () => {
       if (!selectedSubmission || !selectedSubmission.id) return;
       
-      setLoading(true);
+      setActionLoading(true);
       try {
           await deleteDoc(doc(db, 'submissions', selectedSubmission.id));
           
@@ -632,13 +632,11 @@ export function CreatorTools() {
           console.error("Delete failed", e);
           error("Failed to delete submission: " + (e as Error).message);
       } finally {
-          setLoading(false);
+          setActionLoading(false);
       }
   };
 
-  const [isLoading, setLoading] = useState(false);
-
-  if (isLoading) {
+  if (isActionLoading) {
     return (
         <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.16))] text-gray-500">
             <Loader2 className="w-10 h-10 animate-spin text-blue-500" />

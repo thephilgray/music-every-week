@@ -545,7 +545,7 @@ function PlaylistList() {
 // NEW Firestore DETAIL VIEW
 // ==========================================
 function PlaylistDetail({ id }: { id: string }) {
-    const { participantEmail, isAdmin } = useAuth();
+    const { user, participantEmail, isAdmin, profile: authProfile } = useAuth();
     const { play, currentTrack, isPlaying, pause } = usePlayer();
     const { toast } = useToast();
     const location = useLocation();
@@ -567,6 +567,7 @@ function PlaylistDetail({ id }: { id: string }) {
     const [error, setError] = useState<string | null>(null);
     const [hostName, setHostName] = useState<string>('');
     const [hostProfileId, setHostProfileId] = useState<string | null>(null);
+    const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
 
     const removeCommentParam = useCallback(() => {
         if (searchParams.has('comment')) {
@@ -583,16 +584,17 @@ function PlaylistDetail({ id }: { id: string }) {
     const [showFilterPopover, setShowFilterPopover] = useState(false);
     const [isFilterModalForced, setIsFilterModalForced] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>('newest');
+    const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst' | 'followedFirst'>('newest');
     const [filterByAI, setFilterByAI] = useState(false);
     const [filterByFragile, setFilterByFragile] = useState(false);
     const [filterByUnlistened, setFilterByUnlistened] = useState(false);
+    const [filterByFollowing, setFilterByFollowing] = useState(false);
     const { listenedTracks } = useListenedTracks();
     const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>([]);
 
     const areFiltersActive = useMemo(() => {
-        return searchTerm !== '' || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFeedbackFocus.length > 0;
-    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus]);
+        return searchTerm !== '' || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFollowing || filterByFeedbackFocus.length > 0;
+    }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFollowing, filterByFeedbackFocus]);
 
     // Fetch Data
     useEffect(() => {
@@ -646,6 +648,29 @@ function PlaylistDetail({ id }: { id: string }) {
         loadData();
     }, [id]);
 
+    useEffect(() => {
+        if (!id) return;
+
+        // Query by playlistId if submissions are linked to it
+        const qComments = query(collection(db, 'comments'), where('playlistId', '==', id));
+        
+        const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
+            const counts: Record<string, number> = {};
+            commentsSnap.docs.forEach(commentDoc => {
+                const commentData = commentDoc.data();
+                if (commentData.submissionId) {
+                    counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
+                }
+            });
+            setCommentCounts(counts);
+        }, (err) => {
+            console.error("Error fetching submission comment counts:", err);
+            setCommentCounts({}); 
+        });
+
+        return () => unsubscribe();
+    }, [id]);
+
     const handleClearAllFilters = useCallback(() => {
         setSearchTerm('');
         setSortBy('newest');
@@ -688,6 +713,7 @@ function PlaylistDetail({ id }: { id: string }) {
     // Filter Logic
     const computedVisibleSubmissions = useMemo(() => {
         let filtered = submissions;
+        const followedUids = authProfile?.following || [];
         
         const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
         const deadlineTime = getTimestampAsNumber(request?.deadline);
@@ -709,6 +735,12 @@ function PlaylistDetail({ id }: { id: string }) {
             if (filterByAI) filtered = filtered.filter(s => !s.usesAI);
             if (filterByFragile) filtered = filtered.filter(s => s.fragile);
             if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
+            if (filterByFollowing && user?.uid) {
+                filtered = filtered.filter(s => {
+                    const uploaderUid = s.uploaderUid || s.originalUploaderPub;
+                    return uploaderUid && followedUids.includes(uploaderUid);
+                });
+            }
             if (filterByFeedbackFocus.length > 0) {
                 filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
             }
@@ -717,10 +749,18 @@ function PlaylistDetail({ id }: { id: string }) {
                 if (sortBy === 'newest') return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
                 if (sortBy === 'oldest') return getTimestampAsNumber(a.createdAt) - getTimestampAsNumber(b.createdAt);
                 if (sortBy === 'alpha') return a.title.localeCompare(b.title);
+                if (sortBy === 'mostComments') return (commentCounts[b.id!] || 0) - (commentCounts[a.id!] || 0);
+                if (sortBy === 'fewestComments') return (commentCounts[a.id!] || 0) - (commentCounts[b.id!] || 0);
                 if (sortBy === 'unlistenedFirst') {
                     const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
                     const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
                     if (aListened !== bListened) return aListened - bListened;
+                    return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+                }
+                if (sortBy === 'followedFirst') {
+                    const aFollowed = a.uploaderUid || a.originalUploaderPub ? (followedUids.includes(a.uploaderUid || a.originalUploaderPub!) ? 0 : 1) : 1;
+                    const bFollowed = b.uploaderUid || b.originalUploaderPub ? (followedUids.includes(b.uploaderUid || b.originalUploaderPub!) ? 0 : 1) : 1;
+                    if (aFollowed !== bFollowed) return aFollowed - bFollowed;
                     return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
                 }
                 return 0; 
@@ -752,7 +792,7 @@ function PlaylistDetail({ id }: { id: string }) {
         }
 
         return { filtered, lockMessage, isHost };
-    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByFeedbackFocus, request, participantEmail, id, isHost, listenedTracks]);
+    }, [submissions, searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFollowing, filterByFeedbackFocus, request, participantEmail, id, isHost, listenedTracks, commentCounts, authProfile?.following, user?.uid]);
 
     const { filtered: visibleSubmissions } = computedVisibleSubmissions;
 
@@ -964,6 +1004,8 @@ function PlaylistDetail({ id }: { id: string }) {
                                 setFilterByFragile={setFilterByFragile}
                                 filterByUnlistened={filterByUnlistened}
                                 setFilterByUnlistened={setFilterByUnlistened}
+                                filterByFollowing={filterByFollowing}
+                                setFilterByFollowing={setFilterByFollowing}
                                 filterByFeedbackFocus={filterByFeedbackFocus}
                                 setFilterByFeedbackFocus={setFilterByFeedbackFocus}
                                 onClose={() => {
@@ -972,6 +1014,7 @@ function PlaylistDetail({ id }: { id: string }) {
                                 }}
                                 forceModal={isFilterModalForced}
                             />
+
                         )}
                  </div>
             </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff, Shield, MessageSquare, Send } from 'lucide-react';
+import { User, Edit, List, Play, Pause, Music, Upload, Loader2, X, MapPin, Link as LinkIcon, Trash2, ShieldAlert, Eye, EyeOff, Shield, MessageSquare, Send, UserPlus, UserMinus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext'; // Replaced useGun
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -18,21 +18,22 @@ export function Profile() {
   const { pub: routePub } = useParams<{ pub: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, isAdmin, participantEmail: authParticipantEmail } = useAuth(); // Replaced useGun context
+  const { user, profile: authProfile, isAdmin, participantEmail: authParticipantEmail, toggleFollow } = useAuth(); // Replaced useGun context
   const { play, currentTrack, isPlaying, pause } = usePlayer();
   const { success, error } = useToast();
   
   const targetUid = routePub || user?.uid; // Changed pubKey to user?.uid and targetPub to targetUid
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [resolvedProfileUid, setResolvedProfileUid] = useState<string | null>(null);
   
   const isOwnProfile = targetUid ? (user?.uid === targetUid || (profile?.email === authParticipantEmail)) : true;
+  const isFollowing = authProfile?.following?.includes(resolvedProfileUid || '');
+  const [isFollowingTransition, setIsFollowingTransition] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [requests, setRequests] = useState<FileRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'submissions' | 'requests'>('submissions');
-  
-  const [resolvedProfileUid, setResolvedProfileUid] = useState<string | null>(null);
   
   // Edit Mode
   const [isEditing, setIsEditing] = useState(false);
@@ -347,6 +348,19 @@ export function Profile() {
       }
   };
 
+  const handleToggleFollow = async () => {
+    if (!user || !resolvedProfileUid || isOwnProfile) return;
+    setIsFollowingTransition(true);
+    try {
+        await toggleFollow(resolvedProfileUid);
+        success(isFollowing ? `Unfollowed ${profile?.alias}` : `Now following ${profile?.alias}`);
+    } catch (e: any) {
+        error(e.message || "Failed to toggle follow.");
+    } finally {
+        setIsFollowingTransition(false);
+    }
+  };
+
   const handleSaveProfile = async () => {      if (!isOwnProfile || !resolvedProfileUid) return;
       setIsSaving(true);
       
@@ -521,15 +535,37 @@ export function Profile() {
                             </button>
                         )}
                         {!isOwnProfile && user && (
-                             <Tooltip content="Send Message">
-                                 <button
-                                     onClick={() => setShowDMModal(true)}
-                                     className="p-2 text-blue-400 hover:text-blue-200 bg-blue-900/20 rounded-full hover:bg-blue-900/40 border border-blue-900/50 transition"
-                                 >
-                                     <MessageSquare className="w-4 h-4" />
-                                 </button>
-                             </Tooltip>
-                        )}                        {isAdmin && !isOwnProfile && !profile.isAdmin && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleToggleFollow}
+                                    disabled={isFollowingTransition}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition ${
+                                        isFollowing 
+                                        ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-900/20'
+                                    }`}
+                                >
+                                    {isFollowingTransition ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : isFollowing ? (
+                                        <UserMinus className="w-4 h-4" />
+                                    ) : (
+                                        <UserPlus className="w-4 h-4" />
+                                    )}
+                                    {isFollowing ? 'Following' : 'Follow'}
+                                </button>
+
+                                <Tooltip content="Send Message">
+                                    <button
+                                        onClick={() => setShowDMModal(true)}
+                                        className="p-2 text-blue-400 hover:text-blue-200 bg-blue-900/20 rounded-full hover:bg-blue-900/40 border border-blue-900/50 transition"
+                                    >
+                                        <MessageSquare className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
+                            </div>
+                        )}
+                        {isAdmin && !isOwnProfile && !profile.isAdmin && (
                             <Tooltip content="Promote to Admin">
                                 <button 
                                     onClick={() => setShowPromoteConfirm(true)}

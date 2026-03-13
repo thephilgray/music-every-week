@@ -1,7 +1,4 @@
 // audioAnalyzer.worker.ts
-if (typeof global === 'undefined') {
-    (self as any).global = self;
-}
 
 self.addEventListener('message', (event: MessageEvent<{ rawData: Float32Array, samples: number }>) => {
     const { rawData, samples } = event.data;

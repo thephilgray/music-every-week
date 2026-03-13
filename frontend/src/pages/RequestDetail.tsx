@@ -19,7 +19,7 @@ export function RequestDetail() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation(); // Added useLocation
   const [searchParams, setSearchParams] = useSearchParams();
-  const { participantEmail, isAdmin, settings } = useAuth();
+  const { user, participantEmail, isAdmin, settings, profile: authProfile } = useAuth();
   const { play, currentTrack, isPlaying, pause, resume, context } = usePlayer();
   const { toast } = useToast();
   
@@ -63,13 +63,21 @@ export function RequestDetail() {
 
   // Filter/Sort States
   const [showFilterPopover, setShowFilterPopover] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst'>('newest');
-  const [filterByAI, setFilterByAI] = useState(false);
-  const [filterByFragile, setFilterByFragile] = useState(false);
-  const [filterByUnlistened, setFilterByUnlistened] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('requestSearchTerm') || '');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst' | 'followedFirst'>(() => (localStorage.getItem('requestSortBy') as any) || 'newest');
+  const [filterByAI, setFilterByAI] = useState(() => localStorage.getItem('requestFilterByAI') === 'true');
+  const [filterByFragile, setFilterByFragile] = useState(() => localStorage.getItem('requestFilterByFragile') === 'true');
+  const [filterByUnlistened, setFilterByUnlistened] = useState(() => localStorage.getItem('requestFilterByUnlistened') === 'true');
+  const [filterByFollowing, setFilterByFollowing] = useState(() => localStorage.getItem('requestFilterByFollowing') === 'true');
   const { listenedTracks } = useListenedTracks();
-  const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>([]);
+  const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>(() => {
+    try {
+        const stored = localStorage.getItem('requestFilterByFeedbackFocus');
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+  });
 
   const areFiltersActive = useMemo(() => {
     return (
@@ -78,9 +86,10 @@ export function RequestDetail() {
       filterByAI === true ||
       filterByFragile === true ||
       filterByUnlistened === true ||
+      filterByFollowing === true ||
       filterByFeedbackFocus.length > 0
     );
-  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus]);
+  }, [searchTerm, sortBy, filterByAI, filterByFragile, filterByUnlistened, filterByFollowing, filterByFeedbackFocus]);
 
   const handleClearAllFilters = useCallback(() => {
     setSearchTerm('');
@@ -88,6 +97,7 @@ export function RequestDetail() {
     setFilterByAI(false);
     setFilterByFragile(false);
     setFilterByUnlistened(false);
+    setFilterByFollowing(false);
     setFilterByFeedbackFocus([]);
     removeCommentParam();
   }, [removeCommentParam]);
@@ -432,6 +442,7 @@ export function RequestDetail() {
 // Filtering, sorting and locking logic for visible submissions
 const computedVisibleSubmissions = useMemo(() => {
     let filtered = submissions;
+    const followedUids = authProfile?.following || [];
 
     // Always apply global AI filter if enabled in settings
     if (settings?.content?.filterAI) {
@@ -461,6 +472,14 @@ const computedVisibleSubmissions = useMemo(() => {
         }
 
         if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
+        
+        if (filterByFollowing && user?.uid) {
+            filtered = filtered.filter(s => {
+                const uploaderUid = s.uploaderUid || s.originalUploaderPub;
+                return uploaderUid && followedUids.includes(uploaderUid);
+            });
+        }
+
           if (filterByFeedbackFocus.length > 0) {
               filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
           }
@@ -482,6 +501,12 @@ const computedVisibleSubmissions = useMemo(() => {
                       const aListened = a.id && listenedTracks.has(a.id) ? 1 : 0;
                       const bListened = b.id && listenedTracks.has(b.id) ? 1 : 0;
                       if (aListened !== bListened) return aListened - bListened;
+                      return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
+                  }
+                  case 'followedFirst': {
+                      const aFollowed = a.uploaderUid || a.originalUploaderPub ? (followedUids.includes(a.uploaderUid || a.originalUploaderPub!) ? 0 : 1) : 1;
+                      const bFollowed = b.uploaderUid || b.originalUploaderPub ? (followedUids.includes(b.uploaderUid || b.originalUploaderPub!) ? 0 : 1) : 1;
+                      if (aFollowed !== bFollowed) return aFollowed - bFollowed;
                       return getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt);
                   }
                   default:
@@ -509,7 +534,7 @@ const computedVisibleSubmissions = useMemo(() => {
       });
 
       return visibleAfterLocking;
-  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByUnlistened, filterByFeedbackFocus, sortBy, submissionCommentCounts, listenedTracks, isOwner, isAdmin, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds]);
+  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByUnlistened, filterByFollowing, filterByFeedbackFocus, sortBy, submissionCommentCounts, listenedTracks, isOwner, isAdmin, user?.uid, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds, authProfile?.following]);
 
   const visibleSubmissions = computedVisibleSubmissions;
 
@@ -784,6 +809,8 @@ const computedVisibleSubmissions = useMemo(() => {
                                     setFilterByFragile={setFilterByFragile}
                                     filterByUnlistened={filterByUnlistened}
                                     setFilterByUnlistened={setFilterByUnlistened}
+                                    filterByFollowing={filterByFollowing}
+                                    setFilterByFollowing={setFilterByFollowing}
                                     filterByFeedbackFocus={filterByFeedbackFocus}
                                     setFilterByFeedbackFocus={setFilterByFeedbackFocus}
                                     onClose={() => {
@@ -797,7 +824,7 @@ const computedVisibleSubmissions = useMemo(() => {
                         )}
                     </div>
                 </div>                
-                {visibleSubmissions.length === 0 && (searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByFeedbackFocus.length > 0) ? (
+                {visibleSubmissions.length === 0 && (searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFollowing || filterByFeedbackFocus.length > 0) ? (
                     <div className="bg-gray-900/50 rounded-lg p-10 text-center border border-gray-800 border-dashed flex flex-col items-center gap-4">
                         <p className="text-gray-500">No submissions found matching your filters.</p>
                         <button 

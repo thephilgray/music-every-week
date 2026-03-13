@@ -32,6 +32,7 @@ export interface UserProfile {
     };
   };
   contacts?: string[];
+  following?: string[];
 }
 
 export interface FileRequest {

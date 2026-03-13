@@ -12,14 +12,16 @@ interface FilterPopoverProps {
     searchTerm: string;
     setSearchTerm: (term: string) => void;
     searchSuggestions?: string[];
-    sortBy: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst';
-    setSortBy: (sort: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst') => void;
+    sortBy: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst' | 'followedFirst';
+    setSortBy: (sort: 'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst' | 'followedFirst') => void;
     filterByAI: boolean;
     setFilterByAI: (filter: boolean) => void;
     filterByFragile: boolean;
     setFilterByFragile: (filter: boolean) => void;
     filterByUnlistened: boolean;
     setFilterByUnlistened: (filter: boolean) => void;
+    filterByFollowing?: boolean;
+    setFilterByFollowing?: (filter: boolean) => void;
     filterByFeedbackFocus: string[];
     setFilterByFeedbackFocus: (filters: string[]) => void;
     onClose: () => void; // Function to close the popover
@@ -38,13 +40,15 @@ export function FilterPopover({
     setFilterByFragile,
     filterByUnlistened,
     setFilterByUnlistened,
+    filterByFollowing,
+    setFilterByFollowing,
     filterByFeedbackFocus,
     setFilterByFeedbackFocus,
     onClose,
     forceModal = false
 }: FilterPopoverProps) {
     // Check if any filters are active to show/hide "Clear Filters" button
-    const hasActiveFilters = searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFeedbackFocus.length > 0;
+    const hasActiveFilters = searchTerm || sortBy !== 'newest' || filterByAI || filterByFragile || filterByUnlistened || filterByFollowing || filterByFeedbackFocus.length > 0;
 
     const handleClearFilters = () => {
         setSearchTerm('');
@@ -52,6 +56,7 @@ export function FilterPopover({
         setFilterByAI(false);
         setFilterByFragile(false);
         setFilterByUnlistened(false);
+        if (setFilterByFollowing) setFilterByFollowing(false);
         setFilterByFeedbackFocus([]);
     };
 
@@ -116,11 +121,24 @@ export function FilterPopover({
                         <option value="fewestComments">Fewest Comments</option>
                         <option value="alpha">Alphabetical</option>
                         <option value="unlistenedFirst">Unlistened First</option>
+                        <option value="followedFirst">Followed First</option>
                     </select>
                 </div>
 
                 {/* Checkbox Filters */}
                 <div className="flex flex-col gap-2">
+                    {setFilterByFollowing && (
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="filter-following"
+                                checked={filterByFollowing}
+                                onChange={(e) => setFilterByFollowing(e.target.checked)}
+                                className="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-400 focus:ring-blue-500"
+                            />
+                            <label htmlFor="filter-following" className="text-sm text-blue-400 font-medium">Followed Users Only</label>
+                        </div>
+                    )}
                     <div className="flex items-center gap-2">
                         <input
                             type="checkbox"

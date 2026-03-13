@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { type User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
 import { auth, googleProvider, db } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, onSnapshot, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, onSnapshot, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 import { type UserProfile } from '../types';
 
@@ -19,6 +19,7 @@ interface AuthContextType {
   completeMagicLinkSignIn: (url: string, email: string) => Promise<void>;
   logout: () => Promise<void>;
   addPoints: (amount: number) => Promise<void>;
+  toggleFollow: (targetUid: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -279,6 +280,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
   };
 
+  const toggleFollow = async (targetUid: string) => {
+      if (!user?.uid) throw new Error("Must be logged in to follow users.");
+      if (user.uid === targetUid) throw new Error("You cannot follow yourself.");
+      
+      const profileRef = doc(db, 'profiles', user.uid);
+      const isFollowing = profile?.following?.includes(targetUid);
+      
+      try {
+          await updateDoc(profileRef, {
+              following: isFollowing ? arrayRemove(targetUid) : arrayUnion(targetUid)
+          });
+      } catch (e) {
+          console.error("Failed to toggle follow:", e);
+          throw e;
+      }
+  };
+
   const logout = async () => {
     if (user) {
       await firebaseSignOut(auth);
@@ -302,7 +320,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sendMagicLink,
     completeMagicLinkSignIn,
     logout,
-    addPoints
+    addPoints,
+    toggleFollow
   };
 
   return (

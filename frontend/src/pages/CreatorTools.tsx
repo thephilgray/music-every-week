@@ -22,7 +22,7 @@ interface ParticipantRow {
 }
 
 export function CreatorTools() {
-  const { user, participantEmail, isLoading, isAdmin } = useAuth(); 
+  const { user, participantEmail, isAdmin } = useAuth(); 
   const { success, error } = useToast();
 
   

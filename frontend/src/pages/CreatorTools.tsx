@@ -636,93 +636,7 @@ export function CreatorTools() {
       }
   };
 
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [migrationLog, setMigrationLog] = useState<string[]>([]);
-
-  const runEmailNormalization = async () => {
-      if (!window.confirm("This will lowercase ALL email fields in the database (profiles, submissions, requests, notifications). This is a one-time operation to fix case-sensitivity issues. Proceed?")) return;
-      
-      setIsMigrating(true);
-      setMigrationLog(["Starting normalization..."]);
-      
-      try {
-          const collectionsList = ['profiles', 'submissions', 'requests', 'notifications', 'playlists', 'comments'];
-          let totalFixed = 0;
-
-          for (const col of collectionsList) {
-              setMigrationLog(prev => [...prev, `Processing collection: ${col}...`]);
-              const q = query(collection(db, col));
-              const snapshot = await getDocs(q);
-              
-              const batch: Promise<void>[] = [];
-              snapshot.forEach(docSnap => {
-                  const data = docSnap.data();
-                  const updates: any = {};
-                  let changed = false;
-
-                  // Fields to normalize
-                  const fields = ['email', 'uploaderEmail', 'ownerEmail', 'hostEmail', 'recipientEmail', 'authorEmail', 'fromEmail'];
-                  fields.forEach(f => {
-                      if (data[f] && typeof data[f] === 'string' && data[f] !== data[f].toLowerCase()) {
-                          updates[f] = data[f].toLowerCase();
-                          changed = true;
-                      }
-                  });
-
-                  // Array fields (accessList)
-                  if (data.accessList && Array.isArray(data.accessList)) {
-                      const newList = data.accessList.map((e: any) => typeof e === 'string' ? e.toLowerCase() : e);
-                      if (JSON.stringify(newList) !== JSON.stringify(data.accessList)) {
-                          updates.accessList = newList;
-                          changed = true;
-                      }
-                  }
-
-                  // Object fields (participants) - keys are emails/pubs
-                  if (col === 'requests' && data.participants && typeof data.participants === 'object') {
-                      const newParticipants: any = {};
-                      let pChanged = false;
-                      Object.entries(data.participants).forEach(([key, val]: [string, any]) => {
-                          const newKey = key.includes('@') ? key.toLowerCase() : key;
-                          const newVal = { ...val };
-                          if (val.email) newVal.email = val.email.toLowerCase();
-                          
-                          if (newKey !== key || JSON.stringify(newVal) !== JSON.stringify(val)) {
-                              pChanged = true;
-                          }
-                          newParticipants[newKey] = newVal;
-                      });
-                      if (pChanged) {
-                          updates.participants = newParticipants;
-                          changed = true;
-                      }
-                  }
-
-                  if (changed) {
-                      batch.push(updateDoc(docSnap.ref, updates));
-                      totalFixed++;
-                  }
-              });
-
-              if (batch.length > 0) {
-                  // Process in chunks of 50 to avoid Firestore limits (though Promise.all is different, it's safer)
-                  for (let i = 0; i < batch.length; i += 50) {
-                      await Promise.all(batch.slice(i, i + 50));
-                  }
-                  setMigrationLog(prev => [...prev, `Updated ${batch.length} documents in ${col}.`]);
-              }
-          }
-
-          setMigrationLog(prev => [...prev, `DONE! Normalized ${totalFixed} documents across all collections.`]);
-          success(`Successfully normalized ${totalFixed} email fields.`);
-      } catch (e) {
-          console.error("Migration failed", e);
-          error("Migration failed: " + (e as Error).message);
-          setMigrationLog(prev => [...prev, `ERROR: ${(e as Error).message}`]);
-      } finally {
-          setIsMigrating(false);
-      }
-  };
+  const [isLoading, setLoading] = useState(false);
 
   if (isLoading) {
     return (
@@ -793,28 +707,6 @@ export function CreatorTools() {
                     </>
                 )}
             </div>
-
-            {/* Database Tools (Admin Only) */}
-            {isAdmin && (
-                <div className="p-4 border-t border-gray-800 bg-gray-900/50">
-                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 px-1">Database Tools</h4>
-                    <button
-                        onClick={runEmailNormalization}
-                        disabled={isMigrating}
-                        className={`w-full py-2 px-3 rounded text-xs font-bold flex items-center justify-center gap-2 transition ${isMigrating ? 'bg-gray-700 text-gray-400' : 'bg-purple-900/40 text-purple-400 border border-purple-800 hover:bg-purple-900/60'}`}
-                    >
-                        {isMigrating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
-                        Normalize Emails (lowercase)
-                    </button>
-                    {migrationLog.length > 0 && (
-                        <div className="mt-2 p-2 bg-black rounded border border-gray-800 max-h-32 overflow-y-auto font-mono text-[10px] text-gray-500">
-                            {migrationLog.map((log, i) => (
-                                <div key={i}>{log}</div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
 
         {

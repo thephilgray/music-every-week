@@ -519,72 +519,77 @@ export function Profile() {
                 </div>
                 
                 <div className="flex-1 text-center md:text-left">
-                    <div className="flex items-center justify-center md:justify-start gap-4 mb-2">
-                        <h1 className="text-3xl font-bold text-white">
-                            {profile.displayName || profile.alias}
-                            {profile.displayName && profile.displayName !== profile.alias && (
-                                <span className="text-lg text-gray-500 font-normal ml-2">@{profile.alias}</span>
-                            )}
-                        </h1>
-                        {isOwnProfile && (
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="p-2 text-gray-400 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
-                            >
-                                <Edit className="w-4 h-4" />
-                            </button>
-                        )}
-                        {!isOwnProfile && user && (
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={handleToggleFollow}
-                                    disabled={isFollowingTransition}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition ${
-                                        isFollowing 
-                                        ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
-                                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-900/20'
-                                    }`}
-                                >
-                                    {isFollowingTransition ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : isFollowing ? (
-                                        <UserMinus className="w-4 h-4" />
-                                    ) : (
-                                        <UserPlus className="w-4 h-4" />
-                                    )}
-                                    {isFollowing ? 'Following' : 'Follow'}
-                                </button>
-
-                                <Tooltip content="Send Message">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+                        <div>
+                            <div className="flex items-center justify-center md:justify-start gap-3 mb-1">
+                                <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
+                                    {profile.displayName || profile.alias}
+                                </h1>
+                                {isOwnProfile && (
                                     <button
-                                        onClick={() => setShowDMModal(true)}
-                                        className="p-2 text-blue-400 hover:text-blue-200 bg-blue-900/20 rounded-full hover:bg-blue-900/40 border border-blue-900/50 transition"
+                                        onClick={() => setIsEditing(true)}
+                                        className="p-1.5 text-gray-400 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
                                     >
-                                        <MessageSquare className="w-4 h-4" />
+                                        <Edit className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                            <p className="text-gray-500 text-lg font-medium">@{profile.alias}</p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center md:justify-end gap-2">
+                            {!isOwnProfile && user && (
+                                <>
+                                    <button
+                                        onClick={handleToggleFollow}
+                                        disabled={isFollowingTransition}
+                                        className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition shadow-lg ${
+                                            isFollowing 
+                                            ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
+                                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-900/20'
+                                        }`}
+                                    >
+                                        {isFollowingTransition ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : isFollowing ? (
+                                            <UserMinus className="w-4 h-4" />
+                                        ) : (
+                                            <UserPlus className="w-4 h-4" />
+                                        )}
+                                        {isFollowing ? 'Following' : 'Follow'}
+                                    </button>
+
+                                    <Tooltip content="Send Message">
+                                        <button
+                                            onClick={() => setShowDMModal(true)}
+                                            className="p-2.5 text-blue-400 hover:text-blue-200 bg-blue-900/20 rounded-full hover:bg-blue-900/40 border border-blue-900/50 transition"
+                                        >
+                                            <MessageSquare className="w-5 h-5" />
+                                        </button>
+                                    </Tooltip>
+                                </>
+                            )}
+                            {isAdmin && !isOwnProfile && !profile.isAdmin && (
+                                <Tooltip content="Promote to Admin">
+                                    <button 
+                                        onClick={() => setShowPromoteConfirm(true)}
+                                        className="p-2.5 text-green-400 hover:text-green-200 bg-green-900/20 rounded-full hover:bg-green-900/40 border border-green-900/50 transition"
+                                    >
+                                        <Shield className="w-5 h-5" />
                                     </button>
                                 </Tooltip>
-                            </div>
-                        )}
-                        {isAdmin && !isOwnProfile && !profile.isAdmin && (
-                            <Tooltip content="Promote to Admin">
-                                <button 
-                                    onClick={() => setShowPromoteConfirm(true)}
-                                    className="p-2 text-green-400 hover:text-green-200 bg-green-900/20 rounded-full hover:bg-green-900/40 border border-green-900/50 transition"
-                                >
-                                    <Shield className="w-4 h-4" />
-                                </button>
-                            </Tooltip>
-                        )}
-                        {isAdmin && !isOwnProfile && (
-                            <Tooltip content="Remove from Directory">
-                                <button 
-                                    onClick={() => setShowDeleteConfirm(true)}
-                                    className="p-2 text-red-400 hover:text-red-200 bg-red-900/20 rounded-full hover:bg-red-900/40 border border-red-900/50 transition"
-                                >
-                                    <ShieldAlert className="w-4 h-4" />
-                                </button>
-                            </Tooltip>
-                        )}
+                            )}
+                            {isAdmin && !isOwnProfile && (
+                                <Tooltip content="Remove from Directory">
+                                    <button 
+                                        onClick={() => setShowDeleteConfirm(true)}
+                                        className="p-2.5 text-red-400 hover:text-red-200 bg-red-900/20 rounded-full hover:bg-red-900/40 border border-red-900/50 transition"
+                                    >
+                                        <ShieldAlert className="w-5 h-5" />
+                                    </button>
+                                </Tooltip>
+                            )}
+                        </div>
                     </div>
                     
                     {profile.location && (

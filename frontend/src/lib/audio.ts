@@ -1,34 +1,37 @@
-export const generateWaveform = async (file: File, samples: number = 100): Promise<number[]> => {
+import AnalyzerWorker from './audioAnalyzer.worker?worker';
+
+export const analyzeAudio = async (file: File, samples: number = 100): Promise<{ waveform: number[], volumeAdjustmentDb: number }> => {
     let audioContext: AudioContext | null = null;
     try {
         const arrayBuffer = await file.arrayBuffer();
         audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         
-        // decodeAudioData happens on main thread but is largely async/native optimized.
+        // decodeAudioData is already async and handles threading internally for decoding
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         const rawData = audioBuffer.getChannelData(0); // Left channel
-        const blockSize = Math.floor(rawData.length / samples);
-        const filteredData = [];
-        
-        for (let i = 0; i < samples; i++) {
-            let blockStart = blockSize * i;
-            let sum = 0;
-            for (let j = 0; j < blockSize; j++) {
-                sum = sum + Math.abs(rawData[blockStart + j]);
-            }
-            filteredData.push(sum / blockSize);
-        }
-        
-        // Normalize
-        const max = Math.max(...filteredData);
-        if (max === 0) return new Array(samples).fill(0);
-        
-        const multiplier = Math.pow(max, -1);
-        return filteredData.map(n => n * multiplier);
+
+        // Offload the heavy math (loops) to a background worker
+        return new Promise((resolve, reject) => {
+            const worker = new AnalyzerWorker();
+            
+            worker.onmessage = (event) => {
+                worker.terminate();
+                resolve(event.data);
+            };
+
+            worker.onerror = (err) => {
+                console.error("Worker error analyzing audio:", err);
+                worker.terminate();
+                reject(err);
+            };
+
+            // Transfer the Float32Array's buffer to the worker (Zero-copy)
+            worker.postMessage({ rawData, samples }, [rawData.buffer]);
+        });
         
     } catch (e) {
-        console.error("Error generating waveform:", e);
-        return [];
+        console.error("Error analyzing audio:", e);
+        return { waveform: [], volumeAdjustmentDb: 0 };
     } finally {
         if (audioContext) {
             audioContext.close().catch(console.error);

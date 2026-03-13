@@ -7,10 +7,6 @@ const location = config.get("location") || "us-central1";
 
 // 1. Enable Services (Optional: might be managed manually)
 // We define them to ensure they are enabled.
-const runService = new gcp.projects.Service("run-service", {
-    service: "run.googleapis.com",
-    disableOnDestroy: false,
-});
 const artifactRegistryService = new gcp.projects.Service("artifact-registry-service", {
     service: "artifactregistry.googleapis.com",
     disableOnDestroy: false,

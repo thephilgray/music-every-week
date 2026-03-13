@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Submission, UserProfile } from '../types';
 import { fixUrl } from '../lib/url';
@@ -55,6 +55,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  const [isNormalizationEnabled, setIsNormalizationEnabled] = useState(true);
   const [resolvedArtist, setResolvedArtist] = useState<string>('');
   const resolvedArtistRef = useRef<string>('');
   
@@ -67,6 +68,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const { markAsListened } = useListenedTracks();
   const markAsListenedRef = useRef(markAsListened);
+
+  // Load Global Config for Normalization
+  useEffect(() => {
+    const configRef = doc(db, 'config', 'global');
+    const unsub = onSnapshot(configRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setIsNormalizationEnabled(data.playerNormalization ?? true);
+        }
+    });
+    return () => unsub();
+  }, []);
 
   // Sync resolvedArtist with its ref
   useEffect(() => {
@@ -162,7 +175,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     audioRef.current = new Audio();
     audioRef.current.preload = "metadata"; // Ensure metadata loads for duration
-    audioRef.current.volume = volume;
+    
+    // Initial volume application
+    const adjustmentDb = (isNormalizationEnabled && currentTrackRef.current?.volumeAdjustmentDb) || 0;
+    const multiplier = Math.pow(10, adjustmentDb / 20);
+    audioRef.current.volume = Math.min(1.0, Math.max(0, volume * multiplier));
     audioRef.current.muted = muted;
     
     const audio = audioRef.current;
@@ -358,10 +375,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // Handle Volume/Mute changes
   useEffect(() => {
       if (audioRef.current) {
-          audioRef.current.volume = volume;
+          // Calculate gain adjustment multiplier
+          // Formula: Multiplier = 10 ^ (dB / 20)
+          const adjustmentDb = (isNormalizationEnabled && currentTrack?.volumeAdjustmentDb) || 0;
+          const multiplier = Math.pow(10, adjustmentDb / 20);
+          
+          // Clamp final volume between 0 and 1 (HTML5 Audio limitation)
+          const finalVolume = Math.min(1.0, Math.max(0, volume * multiplier));
+          
+          audioRef.current.volume = finalVolume;
           audioRef.current.muted = muted;
       }
-  }, [volume, muted]);
+  }, [volume, muted, currentTrack?.id, currentTrack?.volumeAdjustmentDb, isNormalizationEnabled]);
 
   return (
     <PlayerContext.Provider value={{ 

@@ -79,6 +79,7 @@ export interface Submission {
   linkProfile?: boolean; // Whether to link to user profile
   collaborators?: Record<string, boolean>; // Map of user public keys
   waveform?: number[];
+  volumeAdjustmentDb?: number;
   hiddenFromProfile?: boolean;
   stage?: string;
   feedbackFocus?: string[];

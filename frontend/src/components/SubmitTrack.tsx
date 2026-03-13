@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Upload, X, Music, Image as ImageIcon, Loader2, Users, Mic, Square, Trash2, Search, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadToR2 } from '../lib/r2';
-import { generateWaveform } from '../lib/audio';
+import { analyzeAudio } from '../lib/audio';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { Tooltip } from './ui/Tooltip';
@@ -367,27 +367,30 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
     try {
         let audioUrlStr = existingSubmission?.audioUrl || '';
         let waveformData = existingSubmission?.waveform || [];
+        let volumeAdjustmentDb = existingSubmission?.volumeAdjustmentDb || 0;
         
         // 1. Handle Audio (New Upload or Keep Existing)
         if (audioFile) {
-            // Generate Waveform
-            setUploadStep('Processing audio...');
-            try {
-                // Defensive timeout for waveform generation
-                const waveformPromise = generateWaveform(audioFile);
-                const timeoutPromise = new Promise<number[]>((_, reject) => 
-                    setTimeout(() => reject(new Error("Waveform timeout")), 15000)
-                );
-                waveformData = await Promise.race([waveformPromise, timeoutPromise]) as number[];
-            } catch (e) {
-                console.warn("Waveform generation failed or timed out", e);
-                waveformData = [];
-            }
+            setUploadStep('Analyzing & Uploading...');
+            
+            // Run analysis and upload in parallel
+            const analysisPromise = (async () => {
+                try {
+                    const analysisResult = await analyzeAudio(audioFile);
+                    return analysisResult;
+                } catch (e) {
+                    console.warn("Audio analysis failed", e);
+                    return { waveform: [], volumeAdjustmentDb: 0 };
+                }
+            })();
 
-            // Upload to R2
-            setUploadStep(`Uploading audio (${(audioFile.size / (1024 * 1024)).toFixed(1)}MB)...`);
-            const { url } = await uploadToR2(audioFile);
-            audioUrlStr = url;
+            const uploadPromise = uploadToR2(audioFile);
+
+            const [analysisResult, uploadResult] = await Promise.all([analysisPromise, uploadPromise]);
+            
+            waveformData = analysisResult.waveform;
+            volumeAdjustmentDb = analysisResult.volumeAdjustmentDb;
+            audioUrlStr = uploadResult.url;
         }
 
         // 2. Handle Art (New Upload or Keep Existing)
@@ -444,6 +447,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             uploaderUid: uploaderUidToStore,
             collaborators: collaboratorsMap, 
             waveform: waveformData,
+            volumeAdjustmentDb,
             stage,
             feedbackFocus: feedbackFocus,
             usesAI: !doesNotUseAI,

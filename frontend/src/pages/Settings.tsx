@@ -5,7 +5,7 @@ import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2';
 import { fixUrl } from '../lib/url';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, onSnapshot, serverTimestamp, query, where, collection, getDocs, orderBy } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, serverTimestamp, query, where, collection, getDocs, orderBy, setDoc } from 'firebase/firestore';
 import type { UserProfile } from '../types';
 
 export function Settings() {
@@ -53,8 +53,24 @@ export function Settings() {
   // Content Preferences
   const [filterAI, setFilterAI] = useState(false);
 
+  // Global Config (Admin Only)
+  const [normalizationEnabled, setNormalizationEnabled] = useState(true);
+
   // Data State
   const [isClearing, setIsClearing] = useState(false);
+
+  // Load Global Config
+  useEffect(() => {
+    if (!isAdmin) return;
+    const configRef = doc(db, 'config', 'global');
+    const unsub = onSnapshot(configRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setNormalizationEnabled(data.playerNormalization ?? true);
+        }
+    });
+    return () => unsub();
+  }, [isAdmin]);
 
   // Load Initial Data
   useEffect(() => {
@@ -193,6 +209,24 @@ export function Settings() {
       const newValue = !filterAI;
       setFilterAI(newValue);
       updateSetting('filterAI', newValue, 'settings.content');
+  };
+
+  const handleToggleNormalization = async () => {
+      const newValue = !normalizationEnabled;
+      setNormalizationEnabled(newValue);
+      try {
+          const configRef = doc(db, 'config', 'global');
+          await setDoc(configRef, {
+              playerNormalization: newValue,
+              updatedAt: serverTimestamp(),
+              updatedBy: user?.uid || 'admin'
+          }, { merge: true });
+          success(`Normalization ${newValue ? 'enabled' : 'disabled'} globally.`);
+      } catch (e) {
+          console.error("Failed to update global config", e);
+          error("Failed to update global normalization setting.");
+          setNormalizationEnabled(!newValue);
+      }
   };
 
   const handleClearData = async () => {
@@ -495,6 +529,52 @@ export function Settings() {
         </div>
       </section>
 
+      {/* Admin Global Config Section */}
+      {isAdmin && (
+      <section className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 sm:p-6 mb-8">
+        <h2 className="text-xl font-semibold text-purple-300 mb-6 flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Admin: Global Configuration
+        </h2>
+        
+        <div className="space-y-6">
+            <div className="flex items-center justify-between gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Global Player Normalization</h3>
+                    <p className="text-xs text-purple-200/70">
+                        When enabled, the player will automatically adjust track volumes to a standard loudness (-14 LUFS). 
+                        Turn this off globally if users report issues with playback volume.
+                    </p>
+                </div>
+                <button 
+                    onClick={handleToggleNormalization}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${normalizationEnabled ? 'bg-purple-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${normalizationEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+            
+            <div className="flex items-center justify-between border-t border-purple-500/20 pt-4 gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1 flex items-center gap-2">
+                        Download Bug Reports
+                    </h3>
+                    <p className="text-xs text-purple-200/70">
+                        Download a CSV of all bug reports submitted by users.
+                    </p>
+                </div>
+                <button 
+                    onClick={handleDownloadBugReports}
+                    className="bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/50 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                >
+                    <Upload className="w-4 h-4" /> 
+                    Download CSV
+                </button>
+            </div>
+        </div>
+      </section>
+      )}
+
       {/* Data Management Section */}
       {isAdmin && (
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
@@ -521,14 +601,6 @@ export function Settings() {
                     >
                         {isClearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         Clear Local Data & Reset
-                    </button>
-
-                    <button 
-                        onClick={handleDownloadBugReports}
-                        className="bg-blue-900/20 hover:bg-blue-900/40 text-blue-500 border border-blue-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition"
-                    >
-                        <Upload className="w-4 h-4" /> {/* Reusing Upload icon for download, or import Download */}
-                        Download Bug Reports (CSV)
                     </button>
                 </div>
             </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useLocation, useSearchParams } from 'react-router-dom';
+import { useParams, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -566,6 +566,7 @@ function PlaylistDetail({ id }: { id: string }) {
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [hostName, setHostName] = useState<string>('');
+    const [hostProfileId, setHostProfileId] = useState<string | null>(null);
 
     const removeCommentParam = useCallback(() => {
         if (searchParams.has('comment')) {
@@ -614,8 +615,19 @@ function PlaylistDetail({ id }: { id: string }) {
                     setRequest({ id: reqSnap.docs[0].id, ...r });
                     
                     if (r.hostEmail) {
-                        setHostName(r.hostEmail.split('@')[0]);
+                       setHostName(r.hostEmail.split('@')[0]);
+                       // Try to find profile by email to get name/alias
+                       const qProfile = query(collection(db, 'profiles'), where('email', '==', r.hostEmail));
+                       getDocs(qProfile).then(snap => {
+                           if (!snap.empty) {
+                               const profileDoc = snap.docs[0];
+                               const profile = profileDoc.data();
+                               setHostName(profile.displayName || r.hostEmail!.split('@')[0]);
+                               setHostProfileId(profileDoc.id);
+                           }
+                       }).catch(e => console.error("Error fetching host profile:", e));
                     }
+
                 }
                 
                 const qSub = query(collection(db, 'submissions'), where('playlistId', '==', id));
@@ -887,7 +899,15 @@ function PlaylistDetail({ id }: { id: string }) {
                     </div>
                     <div className="flex-1 w-full">
                         <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">{playlist.title}</h1>
-                        <p className="text-gray-400 text-sm mb-4">Hosted by {hostName || 'Unknown'}</p>
+                        <p className="text-gray-400 text-sm mb-4">
+                            Hosted by {hostProfileId ? (
+                                <Link to={`/profile/${hostProfileId}`} className="text-blue-400 hover:underline">
+                                    {hostName || 'Unknown'}
+                                </Link>
+                            ) : (
+                                <span className="text-blue-400">{hostName || 'Unknown'}</span>
+                            )}
+                        </p>
                         <p className={`text-gray-300 whitespace-pre-wrap ${isDescriptionExpanded ? '' : 'line-clamp-3'}`}>
                             {playlist.description}
                         </p>

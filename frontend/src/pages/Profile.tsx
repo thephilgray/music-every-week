@@ -74,7 +74,15 @@ export function Profile() {
                 return;
             }
 
-            // 2. Try Legacy Gun Pub Key
+            // 2. Try Alias lookup
+            const qAlias = query(collection(db, 'profiles'), where('alias', '==', targetUid));
+            const aliasSnap = await getDocs(qAlias);
+            if (!aliasSnap.empty) {
+                setResolvedProfileUid(aliasSnap.docs[0].id);
+                return;
+            }
+
+            // 3. Try Legacy Gun Pub Key
             const qLegacy = query(collection(db, 'profiles'), where('migratedFromGunPub', '==', targetUid));
             const legacySnap = await getDocs(qLegacy);
             if (!legacySnap.empty) {
@@ -119,9 +127,13 @@ export function Profile() {
       useEffect(() => {
           if (!resolvedProfileUid) {
               setProfile(null);
-              setSubmissions([]); // Clear derived state if needed, though separate states handle data
+              setSubmissions([]); // Clear derived state if needed
               setRequests([]);
-              setLoading(false);
+              
+              // Only set loading to false if there is NO targetUid being resolved
+              if (!targetUid && !authParticipantEmail) {
+                  setLoading(false);
+              }
               return;
           }
   

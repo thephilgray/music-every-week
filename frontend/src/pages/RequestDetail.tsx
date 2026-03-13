@@ -44,6 +44,7 @@ export function RequestDetail() {
 
   const [request, setRequest] = useState<FileRequest | null>(null);
   const [hostName, setHostName] = useState<string>('');
+  const [hostProfileId, setHostProfileId] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [resolvedArtistNames, setResolvedArtistNames] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -152,10 +153,13 @@ export function RequestDetail() {
               const q = query(collection(db, 'profiles'), where('email', '==', data.hostEmail));
               const querySnapshot = await getDocs(q);
               if (!querySnapshot.empty) {
-                  const profile = querySnapshot.docs[0].data();
+                  const profileDoc = querySnapshot.docs[0];
+                  const profile = profileDoc.data();
                   setHostName(profile.displayName || data.hostEmail.split('@')[0]);
+                  setHostProfileId(profileDoc.id); // Store UID
               } else {
                   setHostName(data.hostEmail.split('@')[0]);
+                  setHostProfileId(null);
               }
           }
         } else {
@@ -672,7 +676,13 @@ const computedVisibleSubmissions = useMemo(() => {
                     </div>
                     
                     <div className="text-gray-400 text-sm mb-2 font-medium">
-                        Hosted by <span className="text-blue-400">{hostName || 'Loading...'}</span>
+                        Hosted by {hostProfileId ? (
+                            <Link to={`/profile/${hostProfileId}`} className="text-blue-400 hover:underline">
+                                {hostName || 'Loading...'}
+                            </Link>
+                        ) : (
+                            <span className="text-blue-400">{hostName || 'Loading...'}</span>
+                        )}
                     </div>
 
                     <div className="relative">

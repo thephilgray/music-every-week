@@ -248,73 +248,6 @@ export function RequestDetail() {
     loadRequest();
   }, [loadRequest]);
 
-  // Scroll to submission logic
-  useEffect(() => {
-    if (submissions.length === 0) return;
-
-    const params = new URLSearchParams(location.search);
-    const submissionId = params.get('submission');
-
-    if (submissionId) {
-        // Wait a tick for rendering
-        const timer = setTimeout(() => {
-            const element = document.getElementById(`submission-${submissionId}`);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Also expand it
-                setExpandedSubmissionId(submissionId);
-                scrolledRef.current = true;
-                
-                // Clear the comment/submission params after successful scroll
-                removeCommentParam();
-                if (params.has('submission')) {
-                    const newParams = new URLSearchParams(window.location.search);
-                    newParams.delete('submission');
-                    setSearchParams(newParams, { replace: true });
-                }
-            }
-        }, 100);
-        return () => clearTimeout(timer);
-    }
-  }, [submissions, location.search, removeCommentParam, setSearchParams]);
-
-  // Handle scrolling when a submission is expanded to prevent layout shifts from pushing it out of view
-  useEffect(() => {
-    if (expandedSubmissionId) {
-      const timer = setTimeout(() => {
-        const element = document.getElementById(`submission-${expandedSubmissionId}`);
-        if (element) {
-          // Use 'nearest' to avoid jumping if it's already mostly in view, 
-          // but 'smooth' to make it feel natural
-          element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 50); // Very short delay to allow layout shift to happen
-      return () => clearTimeout(timer);
-    }
-  }, [expandedSubmissionId]);
-
-  useEffect(() => {
-    if (!id) return;
-
-    const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
-    
-    const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
-      const counts: Record<string, number> = {};
-      commentsSnap.docs.forEach(commentDoc => {
-        const commentData = commentDoc.data();
-        if (commentData.submissionId) {
-          counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
-        }
-      });
-      setSubmissionCommentCounts(counts);
-    }, (err) => {
-      console.error("Error fetching submission comment counts:", err);
-      setSubmissionCommentCounts({}); // Clear counts on error
-    });
-
-    return () => unsubscribe();
-  }, [id]);
-
   useEffect(() => {
       loadSubmissions();
   }, [loadSubmissions]);
@@ -443,6 +376,8 @@ export function RequestDetail() {
 const computedVisibleSubmissions = useMemo(() => {
     let filtered = submissions;
     const followedUids = authProfile?.following || [];
+    const params = new URLSearchParams(location.search);
+    const targetSubmissionId = params.get('submission');
 
     // Always apply global AI filter if enabled in settings
     if (settings?.content?.filterAI) {
@@ -463,25 +398,26 @@ const computedVisibleSubmissions = useMemo(() => {
             filtered = filtered.filter(s => 
                 s.title.toLowerCase().includes(term) ||
                 (s.byline && s.byline.toLowerCase().includes(term)) ||
-                (s.uploaderEmail && s.uploaderEmail.toLowerCase().includes(term))
+                (s.uploaderEmail && s.uploaderEmail.toLowerCase().includes(term)) ||
+                s.id === targetSubmissionId // Bypass search filter for target
             );
         }
 
         if (filterByFragile) {
-            filtered = filtered.filter(s => s.fragile);
+            filtered = filtered.filter(s => s.fragile || s.id === targetSubmissionId);
         }
 
-        if (filterByUnlistened) filtered = filtered.filter(s => s.id && !listenedTracks.has(s.id));
+        if (filterByUnlistened) filtered = filtered.filter(s => (s.id && !listenedTracks.has(s.id)) || s.id === targetSubmissionId);
         
         if (filterByFollowing && user?.uid) {
             filtered = filtered.filter(s => {
                 const uploaderUid = s.uploaderUid || s.originalUploaderPub;
-                return uploaderUid && followedUids.includes(uploaderUid);
+                return (uploaderUid && followedUids.includes(uploaderUid)) || s.id === targetSubmissionId;
             });
         }
 
           if (filterByFeedbackFocus.length > 0) {
-              filtered = filtered.filter(s => filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
+              filtered = filtered.filter(s => s.id === targetSubmissionId || filterByFeedbackFocus.some(f => s.feedbackFocus?.includes(f)));
           }
 
           // Apply sorting
@@ -520,7 +456,7 @@ const computedVisibleSubmissions = useMemo(() => {
       }
 
       // Apply locking logic to the filtered and sorted list
-      const visibleAfterLocking = filtered.filter(sub => {
+      let visibleAfterLocking = filtered.filter(sub => {
           if (isOwner || isAdmin) return true; // Owner/Admin sees all
           if (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) return true; // User sees their own submission
           
@@ -533,10 +469,110 @@ const computedVisibleSubmissions = useMemo(() => {
           return hasSubmitted && previewCount > 0 && previewTrackIds.includes(sub.id!);
       });
 
+      // Ensure target submission is visible even if locked or otherwise filtered
+      if (targetSubmissionId && !visibleAfterLocking.some(s => s.id === targetSubmissionId)) {
+          const targetSub = submissions.find(s => s.id === targetSubmissionId);
+          if (targetSub) {
+              visibleAfterLocking.push(targetSub);
+          }
+      }
+
       return visibleAfterLocking;
-  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByUnlistened, filterByFollowing, filterByFeedbackFocus, sortBy, submissionCommentCounts, listenedTracks, isOwner, isAdmin, user?.uid, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds, authProfile?.following]);
+  }, [submissions, settings, debouncedSearchTerm, filterByAI, filterByFragile, filterByUnlistened, filterByFollowing, filterByFeedbackFocus, sortBy, submissionCommentCounts, listenedTracks, isOwner, isAdmin, user?.uid, participantEmail, isPlaylistLive, hasSubmitted, request?.previewTrackCount, previewTrackIds, authProfile?.following, location.search]);
 
   const visibleSubmissions = computedVisibleSubmissions;
+
+  // Scroll to submission logic
+  useEffect(() => {
+    if (submissions.length === 0 || !id) return;
+    if (scrolledRef.current) return;
+
+    const params = new URLSearchParams(location.search);
+    const submissionId = params.get('submission');
+
+    if (submissionId) {
+        // Use a longer timeout on initial load to ensure rendering is complete
+        const timeout = 500;
+        const timer = setTimeout(() => {
+            const element = document.getElementById(`submission-${submissionId}`);
+            if (element) {
+                // Mark as scrolled immediately to prevent other effects from fighting
+                scrolledRef.current = true;
+                
+                // Ensure it's expanded first so children (comments) can render
+                setExpandedSubmissionId(submissionId);
+                
+                // If there's a comment, we might want to wait for it, 
+                // but scrolling to the submission card is a good first step.
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Clear the comment/submission params after successful scroll
+                // We do this in one go to avoid multiple re-renders
+                const newParams = new URLSearchParams(window.location.search);
+                let changed = false;
+                if (newParams.has('comment')) {
+                    const cId = newParams.get('comment');
+                    if (cId) setHighlightCommentIdState(cId);
+                    newParams.delete('comment');
+                    changed = true;
+                }
+                if (newParams.has('submission')) {
+                    newParams.delete('submission');
+                    changed = true;
+                }
+                
+                if (changed) {
+                    setSearchParams(newParams, { replace: true });
+                }
+            }
+        }, timeout);
+        return () => clearTimeout(timer);
+    }
+  }, [submissions, visibleSubmissions, location.search, setSearchParams, id]);
+
+  // Handle scrolling when a submission is expanded to prevent layout shifts from pushing it out of view
+  useEffect(() => {
+    if (expandedSubmissionId) {
+      // Check if we are currently handling a deep link scroll
+      const params = new URLSearchParams(location.search);
+      if (params.has('submission') || params.has('comment')) return;
+      // Also skip if we just finished a deep link scroll (to avoid "nearest" fighting "center")
+      if (scrolledRef.current && (params.get('submission') === null)) {
+          // Reset scrolledRef after a delay so subsequent manual expands still work?
+          // Actually, scrolledRef is for the INITIAL deeplink.
+      }
+
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`submission-${expandedSubmissionId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100); 
+      return () => clearTimeout(timer);
+    }
+  }, [expandedSubmissionId, location.search]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const qComments = query(collection(db, 'comments'), where('requestId', '==', id));
+    
+    const unsubscribe = onSnapshot(qComments, (commentsSnap) => {
+      const counts: Record<string, number> = {};
+      commentsSnap.docs.forEach(commentDoc => {
+        const commentData = commentDoc.data();
+        if (commentData.submissionId) {
+          counts[commentData.submissionId] = (counts[commentData.submissionId] || 0) + 1;
+        }
+      });
+      setSubmissionCommentCounts(counts);
+    }, (err) => {
+      console.error("Error fetching submission comment counts:", err);
+      setSubmissionCommentCounts({}); // Clear counts on error
+    });
+
+    return () => unsubscribe();
+  }, [id]);
 
   // Scroll to current track on load
   useEffect(() => {

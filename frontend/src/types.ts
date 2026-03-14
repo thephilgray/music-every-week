@@ -128,6 +128,27 @@ export interface Notification {
   }[];
 }
 
+export interface WatchParty {
+  id?: string;
+  status: 'scheduled' | 'live' | 'paused' | 'ended';
+  playlist: string[]; // Array of Submission IDs
+  currentIndex: number;
+  trackStartTime: number | FieldValue; 
+  serverOffset?: number; 
+  hostPub: string; // The user hosting the party
+}
+
+export interface WatchPartyMessage {
+  id?: string;
+  uid: string;
+  displayName: string;
+  text: string;
+  createdAt: number | FieldValue;
+  // If true, this message is permanently attached to the track's comments
+  isAttachedToTrack?: boolean; 
+  trackId?: string; // The submission ID this comment references
+}
+
 export interface Playlist {
   id: string;
   title: string;

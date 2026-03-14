@@ -93,5 +93,17 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isSignedIn();
     }
+
+    match /watchParties/{partyId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && 
+        (resource.data.hostPub == request.auth.uid || isAdmin());
+
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+      }
+    }
   }
 }

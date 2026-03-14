@@ -59,10 +59,13 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
-    match /comments/{commentId} {
+    match /{path=**}/comments/{commentId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn();
+      allow delete: if isSignedIn(); // Add delete permission for comments
     }
+
+
 
     match /notifications/{notificationId} {
       allow read: if isSignedIn(); 
@@ -97,12 +100,26 @@ service cloud.firestore {
     match /watchParties/{partyId} {
       allow read: if true;
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && 
+      allow delete: if isSignedIn() && 
         (resource.data.hostPub == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && 
+        (
+          resource.data.hostPub == request.auth.uid || 
+          isAdmin() || 
+          (
+            resource.data.isRadioMode == true &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentIndex', 'status', 'trackStartTime', 'pausedOffset'])
+          )
+        );
 
       match /messages/{messageId} {
         allow read: if true;
         allow create: if isSignedIn();
+      }
+
+      match /presence/{uid} {
+        allow read: if true;
+        allow write: if isSignedIn() && request.auth.uid == uid;
       }
     }
   }

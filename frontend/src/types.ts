@@ -135,7 +135,12 @@ export interface WatchParty {
   currentIndex: number;
   trackStartTime: number | FieldValue; 
   serverOffset?: number; 
+  pausedOffset?: number; // accumulated playback time in ms when paused
   hostPub: string; // The user hosting the party
+  isRadioMode?: boolean;
+  name?: string; // Inherited from source playlist/request
+  requestId?: string; // Source request ID (if applicable)
+  playlistId?: string; // Source playlist ID (if applicable)
 }
 
 export interface WatchPartyMessage {
@@ -147,6 +152,8 @@ export interface WatchPartyMessage {
   // If true, this message is permanently attached to the track's comments
   isAttachedToTrack?: boolean; 
   trackId?: string; // The submission ID this comment references
+  isSystem?: boolean; // True for joined/left messages
+  systemType?: 'join' | 'leave'; 
 }
 
 export interface Playlist {

@@ -15,6 +15,9 @@ import { LandingPage } from './pages/LandingPage';
 import { ScrollToTop } from './components/ScrollToTop';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { TermsOfService } from './pages/TermsOfService';
+import { WatchParty } from './pages/WatchParty';
+import { PartyHub } from './pages/PartyHub';
+import { LiveSessions } from './pages/LiveSessions';
 
 // Auth Guard
 import { AuthGuard } from './components/AuthGuard';
@@ -26,36 +29,39 @@ import { FinishSignIn } from './pages/FinishSignIn';
 function App() {
   return (
     <ToastProvider>
-        <ScrollToTop />
-        <IdleMonitor />
-        <AuthProvider>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<LandingPage />} />
-            <Route path="/finish-sign-in" element={<FinishSignIn />} />
-            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/terms-of-service" element={<TermsOfService />} />
-            
-            {/* Main App Routes (Protected by Participant Auth) */}
-            <Route element={<AuthGuard require="participant" />}>
-              <Route element={<AppLayout />}>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/feed" element={<Community />} />
-                  <Route path="/request/:id" element={<RequestDetail />} />
-                  <Route path="/inbox" element={<Inbox />} />
-                  <Route path="/creator" element={<CreatorTools />} />
-                  <Route path="/directory" element={<Directory />} />
-                  <Route path="/playlists" element={<Playlists />} />
-                  <Route path="/playlists/:id" element={<Playlists />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/profile/:pub" element={<Profile />} />
-                  <Route path="/settings" element={<Settings />} />
-                  {/* Catch all for app routes */}
-                  <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
+      <ScrollToTop />
+      <IdleMonitor />
+      <AuthProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<LandingPage />} />
+          <Route path="/finish-sign-in" element={<FinishSignIn />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
+
+          {/* Main App Routes (Protected by Participant Auth) */}
+          <Route element={<AuthGuard require="participant" />}>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/feed" element={<Community />} />
+              <Route path="/request/:id" element={<RequestDetail />} />
+              <Route path="/inbox" element={<Inbox />} />
+              <Route path="/creator" element={<CreatorTools />} />
+              <Route path="/directory" element={<Directory />} />
+              <Route path="/playlists" element={<Playlists />} />
+              <Route path="/playlists/:id" element={<Playlists />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/profile/:pub" element={<Profile />} />
+              <Route path="/party" element={<PartyHub />} />
+              <Route path="/party/:id" element={<WatchParty />} />
+              <Route path="/live" element={<LiveSessions />} />
+              <Route path="/settings" element={<Settings />} />
+              {/* Catch all for app routes */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
-          </Routes>
-        </AuthProvider>
+          </Route>
+        </Routes>
+      </AuthProvider>
     </ToastProvider>
   );
 }

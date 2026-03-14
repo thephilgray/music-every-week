@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Home, Inbox, Layers, Users, User, Settings, X, ListMusic, Bug, Globe } from 'lucide-react';
+import { Home, Inbox, Layers, Users, User, Settings, X, ListMusic, Bug, Globe, Radio } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
@@ -13,7 +13,7 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, participantEmail, settings } = useAuth();
+  const { user, profile, participantEmail, settings, isAdmin } = useAuth();
   
   const [notifDocs, setNotifDocs] = useState<Record<string, any>>({});
   const [accessibleRequestIds, setAccessibleRequestIds] = useState<Set<string>>(new Set());
@@ -167,11 +167,13 @@ export function Sidebar({ onClose }: SidebarProps) {
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: ListMusic, label: 'Playlists', path: '/playlists' },
+    { icon: Radio, label: 'Live', path: '/live' },
     { icon: Globe, label: 'Community', path: '/feed', badge: communityUnreadCount },
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     { icon: Users, label: 'Directory', path: '/directory' },
     { icon: Layers, label: 'Creator Tools', path: '/creator' },
     { icon: User, label: 'Profile', path: '/profile' },
+    ...(isAdmin ? [{ icon: ListMusic, label: 'Party Hub', path: '/party' }] : []),
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'; // Removed useEffect
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ContextBar } from './ContextBar';
 import { Player } from './Player';
@@ -8,6 +8,9 @@ import { FloatingScrollToTop } from '../ui/FloatingScrollToTop';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  const isWatchPartyRoute = location.pathname.startsWith('/party/') && location.pathname !== '/party';
 
   return (
     <div className="flex h-[100dvh] bg-black overflow-hidden relative">
@@ -37,14 +40,14 @@ export function AppLayout() {
         {/* Removed Connection Status Banner */}
         
         {/* Scrollable Stage */}
-        <main className="flex-1 overflow-y-auto bg-black p-4 md:p-8 pb-32 relative w-full">
+        <main className={`flex-1 overflow-x-hidden overflow-y-auto bg-black relative w-full ${isWatchPartyRoute ? '' : 'p-4 md:p-8 pb-32'}`}>
           <Outlet />
         </main>
         
         <FloatingScrollToTop />
         
-        {/* Sticky Player */}
-        <Player />
+        {/* Sticky Player - Hidden during Watch Party */}
+        {!isWatchPartyRoute && <Player />}
       </div>
     </div>
   );

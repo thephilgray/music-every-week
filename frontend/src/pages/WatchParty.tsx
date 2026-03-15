@@ -11,7 +11,7 @@ import { fixUrl } from '../lib/url';
 import { doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, collection, query, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import type { Submission } from '../types';
+import type { Submission, UserProfile } from '../types';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Users } from 'lucide-react';
 
@@ -120,6 +120,96 @@ export function WatchParty() {
         reqId = requestAnimationFrame(updateProgress);
         return () => cancelAnimationFrame(reqId);
     }, [currentTrack]);
+
+    // Handle Media Session
+    useEffect(() => {
+        if (!currentTrack || !('mediaSession' in navigator) || !party) return;
+
+        let isMounted = true;
+        
+        const updateMediaSession = async () => {
+             const artworkUrl = currentTrack.artworkUrl || '/mewlogo.png';
+             let artistName = currentTrack.byline;
+
+             // Resolve actual name if byline is missing, just like CollaboratorList does
+             if (!artistName) {
+                 const uid = currentTrack.uploaderUid || currentTrack.originalUploaderPub;
+                 if (uid) {
+                     try {
+                         const docRef = doc(db, 'profiles', uid);
+                         const docSnap = await getDoc(docRef);
+                         if (docSnap.exists() && isMounted) {
+                             const data = docSnap.data() as UserProfile;
+                             artistName = data.displayName || data.alias || uid.substring(0, 8);
+                         } else {
+                             artistName = uid.substring(0, 8);
+                         }
+                     } catch (e) {
+                         artistName = uid.substring(0, 8);
+                     }
+                 } else if (currentTrack.uploaderEmail) {
+                     artistName = currentTrack.uploaderEmail.split('@')[0];
+                 } else {
+                     artistName = 'Unknown Artist';
+                 }
+             }
+
+             if (!isMounted) return;
+
+             navigator.mediaSession.metadata = new MediaMetadata({
+                 title: currentTrack.title,
+                 artist: artistName,
+                 artwork: [{ src: fixUrl(artworkUrl), sizes: '512x512', type: 'image/jpeg' }]
+             });
+
+             const isHostOrAdmin = user && (user.uid === party.hostPub || isAdmin);
+             
+             // Only bind action handlers if they have permission to actually change the state
+             if (isHostOrAdmin) {
+                 const partyRef = doc(db, 'watchParties', party.id!);
+                 
+                 navigator.mediaSession.setActionHandler('play', () => {
+                     updateDoc(partyRef, { status: 'live', trackStartTime: serverTimestamp() });
+                 });
+                 
+                 navigator.mediaSession.setActionHandler('pause', () => {
+                     const currentOffsetSeconds = calculateOffset();
+                     updateDoc(partyRef, { status: 'paused', pausedOffset: Math.floor(currentOffsetSeconds * 1000) });
+                 });
+                 
+                 navigator.mediaSession.setActionHandler('nexttrack', () => {
+                     if (currentIndex < party.playlist.length - 1) {
+                         updateDoc(partyRef, { status: 'live', currentIndex: currentIndex + 1, trackStartTime: serverTimestamp(), pausedOffset: 0 });
+                     }
+                 });
+                 
+                 navigator.mediaSession.setActionHandler('previoustrack', () => {
+                     if (currentIndex > 0) {
+                         updateDoc(partyRef, { status: 'live', currentIndex: currentIndex - 1, trackStartTime: serverTimestamp(), pausedOffset: 0 });
+                     } else if (audioRef.current) {
+                         // Restart track
+                         updateDoc(partyRef, { status: 'live', trackStartTime: serverTimestamp(), pausedOffset: 0 });
+                     }
+                 });
+             } else {
+                 // Clear handlers for listeners so lock screen buttons don't do anything
+                 navigator.mediaSession.setActionHandler('play', null);
+                 navigator.mediaSession.setActionHandler('pause', null);
+                 navigator.mediaSession.setActionHandler('nexttrack', null);
+                 navigator.mediaSession.setActionHandler('previoustrack', null);
+             }
+        };
+
+        updateMediaSession();
+
+        return () => { isMounted = false; };
+    }, [currentTrack, party?.id, party?.hostPub, currentIndex, user?.uid, isAdmin, calculateOffset]);
+
+    // Update Playback State for Media Session
+    useEffect(() => {
+        if (!('mediaSession' in navigator)) return;
+        navigator.mediaSession.playbackState = status === 'live' ? 'playing' : 'paused';
+    }, [status]);
 
     const handleTrackEnded = async () => {
         console.log("Track ended in player");

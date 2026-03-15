@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Home, Inbox, Layers, Users, User, Settings, X, ListMusic, Bug, Globe, Radio } from 'lucide-react';
+import { Home, Inbox, Layers, Users, Settings, X, ListMusic, Bug, Globe, Radio } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
@@ -172,7 +172,6 @@ export function Sidebar({ onClose }: SidebarProps) {
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     { icon: Users, label: 'Directory', path: '/directory' },
     { icon: Layers, label: 'Creator Tools', path: '/creator' },
-    { icon: User, label: 'Profile', path: '/profile' },
     ...(isAdmin ? [{ icon: ListMusic, label: 'Party Hub', path: '/party' }] : []),
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];

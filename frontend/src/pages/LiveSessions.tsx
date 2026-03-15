@@ -169,7 +169,7 @@ export function LiveSessions() {
                 </div>
                 <h1 className="text-4xl font-bold text-white mb-4">Live Sessions</h1>
                 <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-                    Tune in to community watch parties happening right now. Chat, listen, and discover new music together.
+                    Tune in to community watch parties happening right now. Chat, listen, and share creative feedback together.
                 </p>
             </div>
 

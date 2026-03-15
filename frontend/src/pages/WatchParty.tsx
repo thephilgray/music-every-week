@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useWatchPartySync } from '../hooks/useWatchPartySync';
 import { WatchPartyChat } from '../components/WatchPartyChat';
 import { WatchPartyAdmin } from '../components/WatchPartyAdmin';
 import { Waveform } from '../components/ui/Waveform';
 import { SongDetailsModal } from '../components/SongDetailsModal';
+import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { ArrowLeft, Loader2, Play, AlertCircle, RefreshCcw, Info } from 'lucide-react';
 import { fixUrl } from '../lib/url';
 import { doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, collection, query, onSnapshot, runTransaction } from 'firebase/firestore';
@@ -417,18 +418,17 @@ return (
                                 </div>
                             )}
 
-                            {currentTrack.linkProfile ? (
-                                <Link 
-                                    to={`/profile/${currentTrack.originalUploaderPub}`} 
-                                    className="text-3xl md:text-4xl font-bold text-white text-center mb-1 line-clamp-1 hover:text-blue-400 transition-colors"
-                                >
-                                    {currentTrack.byline || 'Unknown Artist'}
-                                </Link>
-                            ) : (
-                                <h1 className="text-3xl md:text-4xl font-bold text-white text-center mb-1 line-clamp-1">
-                                    {currentTrack.byline || 'Unknown Artist'}
-                                </h1>
-                            )}
+                            <div className="flex justify-center w-full mb-1">
+                                <CollaboratorList 
+                                    uploaderPub={currentTrack.originalUploaderPub}
+                                    uploaderEmail={currentTrack.uploaderEmail}
+                                    byline={currentTrack.byline}
+                                    collaborators={currentTrack.collaborators as any}
+                                    proxyFor={currentTrack.proxyFor}
+                                    linkProfile={currentTrack.linkProfile}
+                                    className="text-3xl md:text-4xl font-bold text-white text-center line-clamp-1"
+                                />
+                            </div>
                             <h2 className="text-xl md:text-2xl font-medium text-gray-400 text-center mb-8 line-clamp-1">
                                 {currentTrack.title}
                             </h2>

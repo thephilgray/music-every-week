@@ -3,6 +3,7 @@ import { doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Play, Pause, SkipForward, GripVertical } from 'lucide-react';
+import { CollaboratorList } from './ui/CollaboratorList';
 import type { WatchParty, Submission } from '../types';
 
 interface WatchPartyAdminProps {
@@ -179,9 +180,20 @@ export function WatchPartyAdmin({ party, calculateOffset }: WatchPartyAdminProps
                     <p className={`font-medium truncate ${isPlaying ? 'text-blue-400' : 'text-white'}`}>
                       {track ? track.title : 'Loading...'}
                     </p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {track ? track.byline || 'Unknown Artist' : trackId}
-                    </p>
+                    <div className="text-xs text-gray-400 truncate">
+                      {track ? (
+                        <CollaboratorList 
+                            uploaderPub={track.originalUploaderPub}
+                            uploaderEmail={track.uploaderEmail}
+                            byline={track.byline}
+                            collaborators={track.collaborators as any}
+                            proxyFor={track.proxyFor}
+                            linkProfile={true}
+                        />
+                      ) : (
+                        trackId
+                      )}
+                    </div>
                   </div>
                 </div>
                 {isPlaying && (

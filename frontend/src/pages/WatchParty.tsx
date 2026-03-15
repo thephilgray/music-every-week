@@ -31,6 +31,7 @@ export function WatchParty() {
     const [showDetails, setShowDetails] = useState(false);
     const [hasInteracted, setHasInteracted] = useState(false);
     const hasJoinedRef = useRef(false);
+    const playingIndexRef = useRef(currentIndex);
 
     // Fetch the current track details when the index or party changes
     useEffect(() => {
@@ -73,6 +74,7 @@ export function WatchParty() {
             const url = fixUrl(currentTrack.audioUrl);
             if (url && audio.src !== url) {
                 audio.src = url;
+                playingIndexRef.current = currentIndex;
             }
 
             // Apply Volume Normalization
@@ -215,6 +217,8 @@ export function WatchParty() {
         console.log("Track ended in player");
         if (!party || !user) return;
         
+        const finishedIndex = playingIndexRef.current;
+
         // Hostless Radio Mode logic
         if (party.isRadioMode) {
             console.log("Radio Mode active. Attempting distributed client-side advancement...");
@@ -229,7 +233,7 @@ export function WatchParty() {
                     
                     // Critical section: If the index has already been updated by another viewer 
                     // who finished milliseconds before us, abort our update.
-                    if (currentData.currentIndex !== party.currentIndex) {
+                    if (currentData.currentIndex !== finishedIndex) {
                          console.log("Another viewer already advanced the track. Aborting.");
                          return; // Let the onSnapshot listener naturally catch us up
                     }
@@ -262,7 +266,7 @@ export function WatchParty() {
         }
 
         console.log("Host advancing track...");
-        const nextIndex = party.currentIndex + 1;
+        const nextIndex = finishedIndex + 1;
         const partyRef = doc(db, 'watchParties', party.id!);
 
         if (nextIndex >= party.playlist.length) {

@@ -166,8 +166,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('player_queue', JSON.stringify(stripLargeFieldsFromQueue(queue)));
         localStorage.setItem('player_context', JSON.stringify(context));
     } catch (e) {
-        console.error("Failed to save player state to localStorage:", e);
-        // If it still fails, we might need to clear or further reduce
+        if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+            console.warn("Player state exceeds localStorage quota. Attempting recovery by clearing queue...");
+            try {
+                // Try saving only the current track if full state fails
+                localStorage.removeItem('player_queue');
+                localStorage.setItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
+                localStorage.setItem('player_context', JSON.stringify(context));
+            } catch (innerError) {
+                console.error("Failed to recover from localStorage quota error:", innerError);
+            }
+        } else {
+            console.error("Failed to save player state:", e);
+        }
     }
   }, [currentTrack, queue, context]);
 

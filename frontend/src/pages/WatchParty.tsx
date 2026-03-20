@@ -585,6 +585,9 @@ return (
                     partyId={id || ''} 
                     currentTrackId={currentTrack?.id} 
                     requestId={currentTrack?.requestId}
+                    currentTrackTitle={currentTrack?.title}
+                    currentTrackArtist={currentTrack?.byline || currentTrack?.uploaderEmail?.split('@')[0] || 'Unknown Artist'}
+                    currentTrackTime={calculateOffset()}
                 />
             </div>
             {/* Modals */}

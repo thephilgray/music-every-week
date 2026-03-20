@@ -156,9 +156,10 @@ export async function uploadToR2(file: File): Promise<UploadResult> {
   }
 
   // 3. Return Public URL
+  const encodedKey = key.split('/').map(encodeURIComponent).join('/');
   const publicUrl = PUBLIC_R2_DOMAIN 
-    ? `${PUBLIC_R2_DOMAIN}/${key}` 
-    : `https://pub-r2.dev/${key}`; 
+    ? `${PUBLIC_R2_DOMAIN}/${encodedKey}` 
+    : `https://pub-r2.dev/${encodedKey}`; 
 
   return { url: publicUrl, key };
 }

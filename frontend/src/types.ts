@@ -154,6 +154,9 @@ export interface WatchPartyMessage {
   trackId?: string; // The submission ID this comment references
   isSystem?: boolean; // True for joined/left messages
   systemType?: 'join' | 'leave'; 
+  trackTitle?: string;
+  trackArtist?: string;
+  trackTime?: number; // Playback position in seconds
 }
 
 export interface Playlist {

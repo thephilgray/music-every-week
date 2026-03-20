@@ -333,12 +333,12 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
     setLoading(true);
           console.log("EditRequest: Save process started, setLoading(true).");
     
-        let finalPendingEmails = [...pendingEmails];
+        let finalPendingEmails = [...pendingEmails].map(e => e.toLowerCase());
         // Process any lingering email input for request
         if (emailInput.trim()) {
             const lingering = emailInput
                 .split(/[\s,]+/)
-                .map(s => s.trim())
+                .map(s => s.trim().toLowerCase())
                 .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !finalPendingEmails.includes(s));
             if (lingering.length > 0) {
                 finalPendingEmails = Array.from(new Set([...finalPendingEmails, ...lingering]));
@@ -347,12 +347,12 @@ export function EditRequest({ request, onClose, onUpdate }: EditRequestProps) {
             }
         }
     
-        let finalPlaylistEmails = [...playlistEmails];
+        let finalPlaylistEmails = [...playlistEmails].map(e => e.toLowerCase());
         // Process any lingering email input for playlist
         if (separatePlaylistAccess && playlistEmailInput.trim()) {
             const lingeringPlaylist = playlistEmailInput
                 .split(/[\s,]+/)
-                .map(s => s.trim())
+                .map(s => s.trim().toLowerCase())
                 .filter(s => s.length > 5 && s.includes('@') && !s.includes(' ') && !finalPlaylistEmails.includes(s));
             if (lingeringPlaylist.length > 0) {
                 finalPlaylistEmails = Array.from(new Set([...finalPlaylistEmails, ...lingeringPlaylist]));

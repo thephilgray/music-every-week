@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, onSnapshot, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Send, Hash, MessageSquare } from 'lucide-react';
@@ -9,10 +9,13 @@ interface WatchPartyChatProps {
     partyId: string;
     currentTrackId?: string;
     requestId?: string;
+    currentTrackTitle?: string;
+    currentTrackArtist?: string;
+    currentTrackTime?: number;
     className?: string;
 }
 
-export function WatchPartyChat({ partyId, currentTrackId, requestId, className = "" }: WatchPartyChatProps) {
+export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrackTitle, currentTrackArtist, currentTrackTime, className = "" }: WatchPartyChatProps) {
     const { user, profile } = useAuth();
     const [messages, setMessages] = useState<WatchPartyMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
@@ -21,19 +24,41 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, className =
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (!partyId) return;
+        if (!partyId) {
+            console.log("[WatchPartyChat] No partyId provided, returning.");
+            return;
+        }
+
+        console.log("[WatchPartyChat] Starting listener for partyId:", partyId);
 
         const q = query(
-            collection(db, 'watchParties', partyId, 'messages'),
-            orderBy('createdAt', 'asc')
+            collection(db, 'watchParties', partyId, 'messages')
+            // Temporarily removing orderBy to diagnose if a missing index is causing the local issue
+            // orderBy('createdAt', 'asc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
+            console.log(`[WatchPartyChat] received snapshot. size: ${snapshot.size}, fromCache: ${snapshot.metadata.fromCache}, hasPendingWrites: ${snapshot.metadata.hasPendingWrites}`);
+            
             const fetchedMessages: WatchPartyMessage[] = [];
             snapshot.forEach((doc) => {
-                fetchedMessages.push({ id: doc.id, ...doc.data() } as WatchPartyMessage);
+                const data = doc.data({ serverTimestamps: 'estimate' });
+                fetchedMessages.push({ id: doc.id, ...data } as WatchPartyMessage);
             });
+            
+            // Client-side sort to bypass missing index requirement
+            fetchedMessages.sort((a, b) => {
+                const aTime = (a.createdAt as any)?.toMillis?.() || Date.now();
+                const bTime = (b.createdAt as any)?.toMillis?.() || Date.now();
+                return aTime - bTime;
+            });
+
             setMessages(fetchedMessages);
+        }, (err) => {
+            console.error("[WatchPartyChat] Error in onSnapshot:", err);
+            if (err.code === 'permission-denied') {
+                console.error("[WatchPartyChat] Permission denied. Check your Firestore rules.");
+            }
         });
 
         return () => unsubscribe();
@@ -53,6 +78,7 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, className =
         setNewMessage(''); // optimistic clear
 
         try {
+            console.log("[WatchPartyChat] Attempting to send message to party:", partyId);
             const batch = writeBatch(db);
             const partyMessageRef = doc(collection(db, 'watchParties', partyId, 'messages'));
             const timestamp = serverTimestamp();
@@ -63,7 +89,10 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, className =
                 text,
                 createdAt: timestamp,
                 isAttachedToTrack: attachToTrack && !!currentTrackId,
-                trackId: currentTrackId
+                trackId: currentTrackId,
+                trackTitle: currentTrackTitle,
+                trackArtist: currentTrackArtist,
+                trackTime: currentTrackTime
             };
 
             batch.set(partyMessageRef, messageData);
@@ -86,11 +115,11 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, className =
 
             await batch.commit();
 
-            // Reset the checkbox to prevent accidental spam
-            setAttachToTrack(false);
+            console.log("[WatchPartyChat] Message batch committed successfully.");
             
         } catch (error) {
-            console.error('Error sending message:', error);
+            console.error('[WatchPartyChat] Error sending message:', error);
+            alert("Failed to send message: " + (error instanceof Error ? error.message : String(error)));
             // Revert clear
             setNewMessage(text);
         } finally {
@@ -123,21 +152,46 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, className =
                                 </div>
                             ) : (
                                 <>
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="font-medium text-blue-400 text-sm">{msg.displayName}</span>
-                                        <span className="text-xs text-gray-500">
-                                            {msg.createdAt && typeof msg.createdAt === 'object' && 'toMillis' in msg.createdAt ? 
-                                                new Date((msg.createdAt as any).toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
-                                                ''}
-                                        </span>
-                                    </div>
-                                    <div className="text-gray-300 text-sm mt-0.5 break-words flex items-center gap-2">
-                                        <span>{msg.text}</span>
-                                        {msg.isAttachedToTrack && (
-                                            <span title="Attached to track comments">
-                                                <Hash className="w-3 h-3 text-yellow-500/50" />
+                                    <div className="flex flex-col gap-0.5">
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="font-medium text-blue-400 text-sm leading-none">{msg.displayName}</span>
+                                            <span className="text-[10px] text-gray-500 tabular-nums leading-none">
+                                                {msg.createdAt ? (
+                                                    (msg.createdAt as any).toMillis ? 
+                                                        new Date((msg.createdAt as any).toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
+                                                        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                ) : (
+                                                    <span className="text-blue-500/50 animate-pulse">Sending...</span>
+                                                )}
                                             </span>
+                                        </div>
+                                        
+                                        {(msg.trackTitle || msg.trackTime !== undefined) && (
+                                            <div className="flex items-center gap-1.5 text-[9px] text-gray-600 mt-0.5">
+                                                {msg.trackTime !== undefined && (
+                                                    <span className="px-1 py-0.25 bg-gray-800/50 rounded text-gray-400 font-mono">
+                                                        {Math.floor(msg.trackTime / 60)}:{(Math.floor(msg.trackTime % 60)).toString().padStart(2, '0')}
+                                                    </span>
+                                                )}
+                                                {msg.trackTitle && (
+                                                    <span className="truncate italic flex items-center gap-1" title={`${msg.trackTitle}${msg.trackArtist ? ` by ${msg.trackArtist}` : ''}`}>
+                                                        <span className="truncate">{msg.trackTitle}</span>
+                                                        {msg.trackArtist && (
+                                                            <span className="opacity-60 truncate">by {msg.trackArtist}</span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
+
+                                        <div className="text-gray-300 text-sm mt-1 break-words flex items-center gap-2">
+                                            <span>{msg.text}</span>
+                                            {msg.isAttachedToTrack && (
+                                                <span title="Attached to permanent track comments">
+                                                    <Hash className="w-3 h-3 text-yellow-500/20" />
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </>
                             )}

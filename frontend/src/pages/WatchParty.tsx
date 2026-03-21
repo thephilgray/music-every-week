@@ -454,7 +454,7 @@ return (
             {/* Left Column: Stage / Player */}
             <div className="flex-1 flex flex-col relative h-[40vh] md:h-full overflow-hidden shrink-0">
                 {/* Header Overlay */}
-                <div className="absolute top-0 inset-x-0 p-4 z-20 bg-gradient-to-b from-black/80 to-transparent flex items-center gap-4">
+                <div className="absolute top-0 inset-x-0 p-4 z-10 bg-gradient-to-b from-black/80 to-transparent flex items-center gap-4">
                     <button 
                         onClick={() => navigate(-1)}
                         className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white backdrop-blur-sm transition-all"

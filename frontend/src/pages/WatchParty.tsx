@@ -345,7 +345,8 @@ export function WatchParty() {
                 uid: user.uid,
                 displayName: name,
                 avatarUrl: profile.avatarUrl || null,
-                lastActive: serverTimestamp()
+                lastActive: serverTimestamp(),
+                active: true
             });
 
             // System Join Message

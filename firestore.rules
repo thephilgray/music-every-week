@@ -108,7 +108,7 @@ service cloud.firestore {
           isAdmin() || 
           (
             resource.data.isRadioMode == true &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentIndex', 'status', 'trackStartTime', 'pausedOffset'])
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentIndex', 'status', 'trackStartTime', 'pausedOffset', 'playlist'])
           )
         );
 

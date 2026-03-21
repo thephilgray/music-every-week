@@ -14,6 +14,7 @@ interface WatchPartyAdminProps {
 export function WatchPartyAdmin({ party, calculateOffset }: WatchPartyAdminProps) {
   const { user, isAdmin } = useAuth();
   const [tracks, setTracks] = useState<(Submission | null)[]>([]);
+  const isHostOrAdmin = user && (user.uid === party.hostPub || isAdmin);
 
   // Fetch track details for playlist
   useEffect(() => {
@@ -38,7 +39,7 @@ export function WatchPartyAdmin({ party, calculateOffset }: WatchPartyAdminProps
     fetchTracks();
   }, [party.playlist]);
 
-  const isHostOrAdmin = user && (user.uid === party.hostPub || isAdmin);
+
 
   const handlePlay = async () => {
     if (!party.id) return;
@@ -130,7 +131,15 @@ export function WatchPartyAdmin({ party, calculateOffset }: WatchPartyAdminProps
     <div className="w-full max-w-2xl mx-auto mt-8 bg-gray-900 border border-gray-800 rounded-xl p-6">
       {isHostOrAdmin && (
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-white">DJ Controls</h3>
+          <div className="flex flex-col">
+            <h3 className="text-xl font-bold text-white">DJ Controls</h3>
+            {party.requestId && (
+                <div className="flex items-center gap-1.5 text-[10px] text-blue-400/80 font-medium">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    SYNCED TO REQUEST
+                </div>
+            )}
+          </div>
           <div className="flex gap-3">
              {party.status !== 'live' ? (
                <button onClick={handlePlay} className="p-3 bg-blue-600 hover:bg-blue-500 rounded-full text-white transition shadow-lg">

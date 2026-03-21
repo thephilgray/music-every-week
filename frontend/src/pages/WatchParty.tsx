@@ -8,7 +8,7 @@ import { SongDetailsModal } from '../components/SongDetailsModal';
 import { CollaboratorList } from '../components/ui/CollaboratorList';
 import { ArrowLeft, Loader2, Play, AlertCircle, RefreshCcw, Info } from 'lucide-react';
 import { fixUrl } from '../lib/url';
-import { doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, collection, query, onSnapshot, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, collection, query, onSnapshot, runTransaction, where, arrayUnion } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Submission, UserProfile } from '../types';
@@ -32,6 +32,44 @@ export function WatchParty() {
     const [hasInteracted, setHasInteracted] = useState(false);
     const hasJoinedRef = useRef(false);
     const playingIndexRef = useRef(currentIndex);
+
+    // Dynamic Request Sync: Auto-append new submissions if the party was created from a request
+    useEffect(() => {
+        if (!party?.id || !party?.requestId) return;
+
+        const isHostOrAdmin = user && (user.uid === party.hostPub || isAdmin);
+        
+        // Only run sync if:
+        // 1. User is the Host/Admin (always sync)
+        // 2. OR it's a Radio Mode party (anyone can keep it fresh)
+        if (!isHostOrAdmin && !party.isRadioMode) return;
+
+        console.log("[WatchParty] Dynamic Sync active for Request:", party.requestId);
+
+        const q = query(
+            collection(db, 'submissions'),
+            where('requestId', '==', party.requestId)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const newTrackIds: string[] = [];
+            snapshot.forEach((doc) => {
+                if (!party.playlist.includes(doc.id)) {
+                    newTrackIds.push(doc.id);
+                }
+            });
+
+            if (newTrackIds.length > 0) {
+                console.log("[WatchParty] Found new submissions, auto-adding:", newTrackIds);
+                updateDoc(doc(db, 'watchParties', party.id!), {
+                    playlist: arrayUnion(...newTrackIds)
+                }).catch(err => console.error("Error auto-syncing submissions:", err));
+            }
+        });
+
+        return () => unsubscribe();
+    }, [party?.id, party?.requestId, party?.playlist, party?.isRadioMode, user, isAdmin]);
+
 
     // Fetch the current track details when the index or party changes
     useEffect(() => {
@@ -378,6 +416,8 @@ export function WatchParty() {
         </div>
     );
 }
+
+
 
 if (!hasInteracted) {
     return (

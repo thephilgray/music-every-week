@@ -116,7 +116,7 @@ export function CollaboratorList({
       const displayName = proxyFor?.alias || byline || name;
 
       const content = (
-          <span className="flex items-center gap-1">
+          <span className={`flex items-center gap-1 ${className.includes('text-center') ? 'justify-center' : ''}`}>
               {displayName}
               {proxyFor && isAdmin && (
                   <span title="Admin Proxy Submission">
@@ -192,7 +192,7 @@ export function CollaboratorList({
 
   return (
       <div className={className}>
-          <span className="flex items-center gap-1 flex-wrap">
+          <span className={`flex items-center gap-1 flex-wrap ${className.includes('text-center') ? 'justify-center' : ''}`}>
               {linkProfile && uidToUse ? (
                   <Link to={`/profile/${uidToUse}`} className="hover:text-white hover:underline ml-1 relative z-10" onClick={e => e.stopPropagation()}>
                       <span className="flex items-center gap-1">

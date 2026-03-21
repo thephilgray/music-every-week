@@ -32,6 +32,7 @@ export function WatchParty() {
     const [hasInteracted, setHasInteracted] = useState(false);
     const hasJoinedRef = useRef(false);
     const playingIndexRef = useRef(currentIndex);
+    const [isStageCollapsed, setIsStageCollapsed] = useState(false);
 
     // Dynamic Request Sync: Auto-append new submissions if the party was created from a request
     useEffect(() => {
@@ -391,7 +392,7 @@ export function WatchParty() {
         return () => unsub();
     }, [id]);
 
-    const activeUsers = Object.values(presenceMap);
+    const activeUsers = Object.values(presenceMap).filter((p: any) => p.active);
 
     if (loading) {
         return (
@@ -442,7 +443,7 @@ if (!hasInteracted) {
 }
 
 return (
-        <div className="flex flex-col md:flex-row h-full w-full bg-black">
+        <div className="flex flex-col md:flex-row h-full w-full bg-black overflow-hidden md:overflow-visible">
             {/* Audio Element Hidden */}
             <audio 
                 ref={audioRef} 
@@ -451,176 +452,141 @@ return (
                 onError={() => setAudioError(true)}
             />
 
-            {/* Left Column: Stage / Player */}
-            <div className="flex-1 flex flex-col relative h-[40vh] md:h-full overflow-hidden shrink-0">
-                {/* Header Overlay */}
-                <div className="absolute top-0 inset-x-0 p-4 z-10 bg-gradient-to-b from-black/80 to-transparent flex items-center gap-4">
-                    <button 
-                        onClick={() => navigate(-1)}
-                        className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white backdrop-blur-sm transition-all"
-                    >
-                        <ArrowLeft className="w-5 h-5" />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            {status === 'live' && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-                            <span className="text-white font-semibold uppercase tracking-wider text-sm">
-                                {status === 'live' ? 'LIVE NOW' : status}
-                            </span>
+            {/* Top Stage / Player Area */}
+            <div className={`flex flex-col sticky top-0 md:relative ${isStageCollapsed ? 'h-[72px]' : 'h-[60vh] md:h-full'} overflow-visible shrink-0 z-30 bg-black shadow-xl transition-all duration-300 border-b md:border-b-0 border-gray-800 md:flex-1`}>
+                
+                {/* Header Overlay (Shared between full and mini) */}
+                <div className="absolute top-0 inset-x-0 p-4 z-20 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between pointer-events-none">
+                    <div className="flex items-center gap-4 pointer-events-auto">
+                        <button 
+                            onClick={() => navigate(-1)}
+                            className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white backdrop-blur-sm transition-all"
+                            title="Back"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        
+                        {isStageCollapsed && currentTrack && (
+                            <div className="animate-in fade-in slide-in-from-left-4 max-w-[150px] sm:max-w-xs">
+                                <p className="text-sm font-bold text-white leading-tight truncate">{currentTrack.title}</p>
+                                <p className="text-[10px] text-gray-400 leading-tight truncate">{currentTrack.byline || currentTrack.uploaderEmail?.split('@')[0]}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2 pointer-events-auto">
+
+                        <div className="relative">
+                            <button 
+                                onClick={() => setShowViewers(!showViewers)}
+                                className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white backdrop-blur-sm transition-all flex items-center gap-2 px-3"
+                            >
+                                <Users className="w-4 h-4" />
+                                <span className="text-xs font-bold">{activeUsers.length}</span>
+                            </button>
+
+                            {/* Viewers Popover */}
+                            {showViewers && (
+                                <div className="absolute top-full right-0 mt-3 w-64 bg-gray-900 border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden transform origin-top-right transition-all">
+                                    <div className="p-3 border-b border-gray-800 font-semibold text-white">
+                                        Viewers ({activeUsers.length})
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                        {activeUsers.map((u: any) => (
+                                            <div key={u.uid} className="flex items-center gap-3 p-3 hover:bg-gray-800 transition">
+                                                <img 
+                                                    src={fixUrl(u.avatarUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.uid}`} 
+                                                    className="w-8 h-8 rounded-full object-cover shrink-0" 
+                                                />
+                                                <span className="text-gray-300 text-sm truncate">{u.displayName}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-                    
-                    {/* Presence Header */}
-                    <div className="ml-auto flex items-center gap-2 relative">
-                        <div 
-                            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
-                            onClick={() => setShowViewers(!showViewers)}
-                        >
-                            <div className="flex -space-x-3 mr-2">
-                                {activeUsers.slice(0, 5).map((u) => (
-                                    <img 
-                                        key={u.uid} 
-                                        src={fixUrl(u.avatarUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.uid}`} 
-                                        title={u.displayName}
-                                        className="w-8 h-8 rounded-full border border-gray-900 object-cover"
-                                    />
-                                ))}
-                            </div>
-                            <div className="flex items-center gap-1.5 text-gray-300 text-sm font-medium bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                                <Users className="w-4 h-4" />
-                                {activeUsers.length} 
-                                <span className="hidden sm:inline">Watching</span>
-                            </div>
-                        </div>
+                </div>
 
-                        {/* Viewers Popover */}
-                        {showViewers && (
-                            <div className="absolute top-full right-0 mt-3 w-64 bg-gray-900 border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden transform origin-top-right transition-all">
-                                <div className="p-3 border-b border-gray-800 font-semibold text-white flex items-center gap-2">
-                                    <Users className="w-4 h-4 text-blue-500" />
-                                    Active Viewers ({activeUsers.length})
-                                </div>
-                                <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                    {activeUsers.map(u => (
-                                        <div key={u.uid} className="flex items-center gap-3 p-3 hover:bg-gray-800 transition border-b border-gray-800/50 last:border-0">
-                                            <img 
-                                                src={fixUrl(u.avatarUrl) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.uid}`} 
-                                                className="w-8 h-8 rounded-full border border-gray-700 object-cover shrink-0" 
-                                            />
-                                            <span className="text-gray-300 text-sm font-medium truncate">{u.displayName}</span>
+                {/* Main Visualizer Stage content - only truly visible when expanded */}
+                <div className={`flex-1 flex flex-col items-center relative overflow-y-auto custom-scrollbar pt-16 md:pt-24 transition-opacity duration-300 ${isStageCollapsed ? 'md:opacity-100 opacity-0 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
+                    <div className="max-w-2xl w-full mx-auto flex flex-col items-center p-4">
+                        {currentTrack ? (
+                            <>
+                                {currentTrack.artworkUrl ? (
+                                    <div 
+                                        className="w-40 h-40 md:w-64 md:h-64 rounded-xl overflow-hidden shadow-2xl mb-6 md:mb-8 relative group cursor-pointer border border-gray-800/50 hover:border-blue-500/50 transition-colors shrink-0"
+                                        onClick={() => setShowDetails(true)}
+                                    >
+                                        <img src={fixUrl(currentTrack.artworkUrl)} alt={currentTrack.title} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                            <Info className="w-10 h-10 text-white" />
+                                            <span className="text-white text-sm">View Details</span>
                                         </div>
-                                    ))}
+                                    </div>
+                                ) : (
+                                    <div 
+                                        className="w-40 h-40 md:w-64 md:h-64 rounded-xl bg-gray-900 flex items-center justify-center shadow-2xl mb-6 md:mb-8 relative group cursor-pointer border border-gray-800 shrink-0"
+                                        onClick={() => setShowDetails(true)}
+                                    >
+                                        <img src="/mewlogo.png" className="w-24 h-24 opacity-80" />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                            <Info className="w-10 h-10 text-white" />
+                                            <span className="text-white text-sm">View Details</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="text-center w-full flex flex-col items-center gap-1">
+                                    <div className="w-full">
+                                        <CollaboratorList 
+                                            uploaderPub={currentTrack.originalUploaderPub}
+                                            uploaderEmail={currentTrack.uploaderEmail}
+                                            byline={currentTrack.byline}
+                                            collaborators={currentTrack.collaborators as any}
+                                            proxyFor={currentTrack.proxyFor}
+                                            linkProfile={true}
+                                            className="text-3xl md:text-5xl font-extrabold text-white text-center w-full block leading-none"
+                                        />
+                                    </div>
+                                    <h2 className="text-lg md:text-xl font-medium text-gray-500 uppercase tracking-widest mt-2">{currentTrack.title}</h2>
                                 </div>
+
+                                {/* Waveform Visualizer */}
+                                <div className="w-full h-24 bg-gray-900/40 rounded-xl flex items-center justify-center p-4">
+                                     {currentTrack.waveform ? (
+                                         <Waveform data={currentTrack.waveform} progress={localProgress} interactive={false} height="h-16" />
+                                     ) : (
+                                         <div className="text-gray-600 animate-pulse text-sm">Generating visualization...</div>
+                                     )}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="text-center text-gray-500">
+                                <Play className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                <p>Waiting for the host to play a track...</p>
+                            </div>
+                        )}
+
+                        {/* DJ Controls Area */}
+                        {party && (
+                            <div className="w-full mt-12 pb-12">
+                                <WatchPartyAdmin party={party} calculateOffset={calculateOffset} />
+                            </div>
+                        )}
+
+                        {audioError && (
+                            <div className="fixed bottom-24 left-4 right-4 md:relative md:bottom-0 md:left-0 md:right-0 mt-8 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 text-red-500 z-50 cursor-pointer hover:bg-red-500/20 transition-colors" onClick={() => { setAudioError(false); audioRef.current?.play().catch(e => console.error(e)); }}>
+                                <RefreshCcw className="w-5 h-5 shrink-0" />
+                                <p className="text-sm font-medium">Autoplay blocked. Tap to sync audio.</p>
                             </div>
                         )}
                     </div>
                 </div>
-
-                {/* Stage Center Content */}
-                <div className="flex-1 overflow-y-auto w-full relative z-10 pt-20 custom-scrollbar">
-                    <div className="flex flex-col items-center justify-center p-4 md:p-8 min-h-full max-w-2xl mx-auto">
-                        {currentTrack ? (
-                        <>
-                             {currentTrack.artworkUrl ? (
-                                <div 
-                                    className="w-48 h-48 md:w-64 md:h-64 rounded-xl overflow-hidden shadow-2xl mb-8 relative group cursor-pointer border border-gray-800/50 hover:border-blue-500/50 transition-colors"
-                                    onClick={() => setShowDetails(true)}
-                                >
-                                    <img 
-                                        src={fixUrl(currentTrack.artworkUrl)} 
-                                        alt={currentTrack.title}
-                                        className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                                       <Info className="w-10 h-10 text-white drop-shadow-lg" />
-                                       <span className="text-white font-medium text-sm">View Details</span>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div 
-                                    className="w-48 h-48 md:w-64 md:h-64 rounded-xl bg-gray-900 flex items-center justify-center shadow-2xl mb-8 relative group cursor-pointer border border-gray-800 hover:border-blue-500/50 transition-colors"
-                                    onClick={() => setShowDetails(true)}
-                                >
-                                   <div className="relative">
-                                     <div className="absolute inset-0 bg-blue-500/20 blur-[30px] rounded-full group-hover:bg-blue-500/30 transition-colors" />
-                                     <img src="/mewlogo.png" className="w-24 h-24 opacity-80 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10 relative group-hover:scale-110 transition-transform" />
-                                   </div>
-                                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 z-20 rounded-xl">
-                                       <Info className="w-10 h-10 text-white drop-shadow-lg" />
-                                       <span className="text-white font-medium text-sm">View Details</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex justify-center w-full mb-1">
-                                <CollaboratorList 
-                                    uploaderPub={currentTrack.originalUploaderPub}
-                                    uploaderEmail={currentTrack.uploaderEmail}
-                                    byline={currentTrack.byline}
-                                    collaborators={currentTrack.collaborators as any}
-                                    proxyFor={currentTrack.proxyFor}
-                                    linkProfile={currentTrack.linkProfile}
-                                    className="text-3xl md:text-4xl font-bold text-white text-center line-clamp-1"
-                                />
-                            </div>
-                            <h2 className="text-xl md:text-2xl font-medium text-gray-400 text-center mb-8 line-clamp-1">
-                                {currentTrack.title}
-                            </h2>
-                            
-                            {/* Visualizer Block */}
-                            <div className="w-full relative">
-                                {currentTrack.waveform ? (
-                                    <Waveform 
-                                        data={currentTrack.waveform} 
-                                        progress={localProgress} 
-                                        interactive={false} // Disable scrubbing for sync
-                                        height="h-16"
-                                        color="bg-gray-800/50"
-                                    />
-                                ) : (
-                                    <div className="h-16 w-full flex items-center justify-center bg-gray-900/50 rounded-lg">
-                                        <div className="flex gap-1 items-center">
-                                            {[...Array(20)].map((_,i) => (
-                                                <div 
-                                                    key={i} 
-                                                    className="w-1 bg-blue-500/50 rounded-full animate-pulse"
-                                                    style={{ height: `${Math.max(10, Math.random() * 40)}px`, animationDelay: `${i * 0.1}s` }}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    ) : (
-                        <div className="text-center text-gray-500">
-                             {status === 'scheduled' ? (
-                                 <div className="flex flex-col items-center">
-                                     <div className="w-16 h-16 rounded-full bg-gray-900 flex items-center justify-center mb-4">
-                                         <Play className="w-6 h-6 text-gray-400 ml-1" />
-                                     </div>
-                                     <p>The host hasn't started the playlist yet.</p>
-                                 </div>
-                             ) : (
-                                 <p>Waiting for the host to select a track...</p>
-                             )}
-                        </div>
-                    )}
-
-                    {audioError && (
-                        <div className="mt-8 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 text-red-500 max-w-sm cursor-pointer hover:bg-red-500/20 transition-colors" onClick={() => { setAudioError(false); audioRef.current?.play().catch(e => console.error(e)); }}>
-                            <RefreshCcw className="w-5 h-5 shrink-0" />
-                            <p className="text-sm">Browser autoplay blocked. Click here to enable audio syncing.</p>
-                        </div>
-                    )}
-
-                    <WatchPartyAdmin party={party} calculateOffset={calculateOffset} />
-                    </div>
-                </div>
             </div>
 
-            {/* Right Column: Chat Appears below on mobile, right on desktop */}
-            <div className="md:w-80 lg:w-96 flex-1 md:flex-none border-t md:border-t-0 md:border-l border-gray-800">
+            {/* Chat Column / Bottom area */}
+            <div className="md:w-80 lg:w-96 flex-1 md:flex-none border-t md:border-t-0 md:border-l border-gray-800 bg-gray-950 flex flex-col min-h-0">
                 <WatchPartyChat 
                     partyId={id || ''} 
                     currentTrackId={currentTrack?.id} 
@@ -628,8 +594,12 @@ return (
                     currentTrackTitle={currentTrack?.title}
                     currentTrackArtist={currentTrack?.byline || currentTrack?.uploaderEmail?.split('@')[0] || 'Unknown Artist'}
                     currentTrackTime={calculateOffset()}
+                    isStageCollapsed={isStageCollapsed}
+                    onToggleStage={() => setIsStageCollapsed(!isStageCollapsed)}
+                    className="flex-1"
                 />
             </div>
+
             {/* Modals */}
             {showDetails && currentTrack && (
                 <SongDetailsModal

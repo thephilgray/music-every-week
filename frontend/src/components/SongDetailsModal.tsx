@@ -50,12 +50,13 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
                             className="w-full h-full object-cover"
                             iconClassName="w-16 h-16 text-gray-600"
                        />
-                       <button 
-                           onClick={onClose} 
-                           className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition backdrop-blur-sm"
-                       >
-                           <X className="w-5 h-5" />
-                       </button>
+                        <button 
+                            onClick={onClose} 
+                            className="absolute top-2 right-2 p-4 bg-black/60 hover:bg-black/80 text-white rounded-full transition backdrop-blur-md z-50 group"
+                            title="Close"
+                        >
+                            <X className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                        </button>
                        
                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-900 to-transparent p-6 pt-20">
                            <h3 className="text-2xl md:text-3xl font-bold text-white mb-1 shadow-black drop-shadow-md">{currentTrack.title}</h3>

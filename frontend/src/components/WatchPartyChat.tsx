@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, onSnapshot, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Send, Hash, MessageSquare } from 'lucide-react';
+import { Send, Hash, MessageSquare, Maximize2, Minimize2 } from 'lucide-react';
 import type { WatchPartyMessage } from '../types';
 
 interface WatchPartyChatProps {
@@ -13,9 +13,17 @@ interface WatchPartyChatProps {
     currentTrackArtist?: string;
     currentTrackTime?: number;
     className?: string;
+    isStageCollapsed?: boolean;
+    onToggleStage?: () => void;
 }
 
-export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrackTitle, currentTrackArtist, currentTrackTime, className = "" }: WatchPartyChatProps) {
+export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrackTitle,
+    currentTrackArtist,
+    currentTrackTime,
+    className = '',
+    isStageCollapsed,
+    onToggleStage
+}: WatchPartyChatProps) {
     const { user, profile } = useAuth();
     const [messages, setMessages] = useState<WatchPartyMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
@@ -130,9 +138,31 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrac
     return (
         <div className={`flex flex-col h-full bg-gray-900 border-l border-gray-800 ${className}`}>
             {/* Header */}
-            <div className="p-4 border-b border-gray-800 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-gray-400" />
-                <h3 className="font-semibold text-gray-200">Live Chat</h3>
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-gray-400" />
+                    <h3 className="font-semibold text-gray-200">Live Chat</h3>
+                </div>
+                
+                {onToggleStage && (
+                    <button 
+                        onClick={onToggleStage}
+                        className="md:hidden p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors flex items-center gap-2 text-xs font-medium"
+                        title={isStageCollapsed ? "Show Player" : "Focus Chat"}
+                    >
+                        {isStageCollapsed ? (
+                            <>
+                                <Maximize2 className="w-4 h-4" />
+                                <span>Expand Player</span>
+                            </>
+                        ) : (
+                            <>
+                                <Minimize2 className="w-4 h-4" />
+                                <span>Focus Chat</span>
+                            </>
+                        )}
+                    </button>
+                )}
             </div>
 
             {/* Messages Area */}
@@ -165,9 +195,9 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrac
                                                 )}
                                             </span>
                                         </div>
-                                        
-                                        {(msg.trackTitle || msg.trackTime !== undefined) && (
-                                            <div className="flex items-center gap-1.5 text-[9px] text-gray-600 mt-0.5">
+                                        {/* Metadata Row: Hidden on mobile */}
+                                        {(msg.trackTime !== undefined || msg.trackTitle) && (
+                                            <div className="hidden md:flex items-center gap-1.5 text-[9px] text-gray-600 mt-0.5">
                                                 {msg.trackTime !== undefined && (
                                                     <span className="px-1 py-0.25 bg-gray-800/50 rounded text-gray-400 font-mono">
                                                         {Math.floor(msg.trackTime / 60)}:{(Math.floor(msg.trackTime % 60)).toString().padStart(2, '0')}

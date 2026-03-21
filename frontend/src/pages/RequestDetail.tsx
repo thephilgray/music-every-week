@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock, Upload, Play, Pause, Edit, Lock, Copy, Check, AlertTriangle, Loader2, Shuffle, Filter } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
@@ -252,6 +252,56 @@ export function RequestDetail() {
       loadSubmissions();
   }, [loadSubmissions]);
 
+  // Extension Link Redemption
+  const extensionCode = searchParams.get('extension');
+  useEffect(() => {
+    if (!extensionCode || !id) return;
+    
+    // Determine the key to use for the participants map
+    // We prioritize UID if logged in, otherwise use participantEmail if available
+    const participantKey = user?.uid || participantEmail?.toLowerCase();
+    if (!participantKey) return;
+
+    const redeemExtension = async () => {
+        try {
+            const q = query(collection(db, 'extension_codes'), where('code', '==', extensionCode));
+            const snap = await getDocs(q);
+            
+            if (snap.empty) {
+                console.error("Invalid extension code.");
+                return;
+            }
+            
+            const data = snap.docs[0].data();
+            if (data.requestId !== id) {
+                console.error("Extension code is for a different request.");
+                return;
+            }
+            
+            // Redeem! Update the request document.
+            await updateDoc(doc(db, 'requests', id), {
+                [`participants.${participantKey}.extensionHours`]: data.hours,
+                [`participants.${participantKey}.status`]: 'accepted' // Ensure they're accepted
+            });
+            
+            toast(`Extension applied! +${data.hours}h granted.`, { type: 'success' });
+            
+            // Clear param from URL
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('extension');
+            setSearchParams(newParams, { replace: true });
+            
+            // Refresh request data
+            loadRequest();
+        } catch (e) {
+            console.error("Failed to redeem extension", e);
+            toast("Failed to apply extension link.", { type: 'error' });
+        }
+    };
+
+    redeemExtension();
+  }, [extensionCode, id, user?.uid, participantEmail, searchParams, setSearchParams, loadRequest, toast]);
+
   // Determine Access & Roles
   const isOwner = useMemo(() => {
      if (!request || !participantEmail) return false;
@@ -261,8 +311,19 @@ export function RequestDetail() {
       if (!request || !participantEmail) return false;
       if (isOwner) return true;
       if (isAdmin) return true;
-      return request.accessList?.some(email => email.toLowerCase() === participantEmail.toLowerCase());
-  }, [request, participantEmail, isOwner, isAdmin]);
+      
+      // Check access list (emails)
+      const inAccessList = request.accessList?.some(email => email.toLowerCase() === participantEmail.toLowerCase());
+      if (inAccessList) return true;
+
+      // Check participants map (UID or Email)
+      const participantKey = user?.uid || participantEmail.toLowerCase();
+      if (request.participants && (request.participants[participantKey] || request.participants[participantEmail.toLowerCase()] || request.participants[participantEmail])) {
+          return true;
+      }
+
+      return false;
+  }, [request, participantEmail, isOwner, isAdmin, user?.uid]);
 
   const userSubmission = useMemo(() => {
       if (!participantEmail) return undefined;
@@ -274,17 +335,44 @@ export function RequestDetail() {
   // Deadline Logic
   const now = Date.now();
   const deadlineTime = getTimestampAsNumber(request?.deadline);
-  const isPastDeadline = deadlineTime > 0 && now > deadlineTime;
+
+  // Extension Logic
+  const userExtensionHours = useMemo(() => {
+      if (!request?.participants) return 0;
+      
+      // 1. Try by current user UID
+      if (user?.uid && request.participants[user.uid]) {
+          return request.participants[user.uid].extensionHours || 0;
+      }
+      
+      // 2. Try by participantEmail
+      if (participantEmail) {
+          const p = Object.values(request.participants).find(
+              p => p.email?.toLowerCase() === participantEmail.toLowerCase()
+          );
+          if (p) return p.extensionHours || 0;
+          
+          // Also check if the email itself or normalized email is a key
+          if (request.participants[participantEmail]) return request.participants[participantEmail].extensionHours || 0;
+          const normalizedEmail = participantEmail.toLowerCase();
+          if (request.participants[normalizedEmail]) return request.participants[normalizedEmail].extensionHours || 0;
+      }
+      
+      return 0;
+  }, [request?.participants, user?.uid, participantEmail]);
+
+  const effectiveDeadlineTime = deadlineTime > 0 ? deadlineTime + (userExtensionHours * 60 * 60 * 1000) : 0;
+  const isPastEffectiveDeadline = effectiveDeadlineTime > 0 && now > effectiveDeadlineTime;
 
   // Countdown Timer
   useEffect(() => {
-    if (!request?.deadline || isPastDeadline) {
+    if (!request?.deadline || isPastEffectiveDeadline) {
         setTimeLeft('');
         return;
     }
 
     const updateTimer = () => {
-        const remaining = deadlineTime - Date.now();
+        const remaining = effectiveDeadlineTime - Date.now();
         if (remaining <= 0) {
             setTimeLeft('CLOSED');
             setTimerColor('text-red-500');
@@ -314,7 +402,7 @@ export function RequestDetail() {
     updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, [request?.deadline, deadlineTime, isPastDeadline]);
+  }, [request?.deadline, effectiveDeadlineTime, isPastEffectiveDeadline]);
 
   // Playlist Live Logic
   const playlistLiveTime = getTimestampAsNumber(request?.playlistLiveDate);
@@ -764,13 +852,14 @@ const computedVisibleSubmissions = useMemo(() => {
                         {request.deadline && (
                             <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4">
                                 <div className="flex items-center gap-2">
-                                    <Clock className={`w-4 h-4 ${isPastDeadline ? 'text-red-500' : 'text-gray-400'}`} />
-                                    <span className={isPastDeadline ? 'text-red-500' : ''}>
-                                        Due: {new Date(request.deadline).toLocaleDateString()} {new Date(request.deadline).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}
-                                        {isPastDeadline && <span className="text-red-500 ml-2 font-bold">CLOSED</span>}
+                                    <Clock className={`w-4 h-4 ${isPastEffectiveDeadline ? 'text-red-500' : 'text-gray-400'}`} />
+                                    <span className={isPastEffectiveDeadline ? 'text-red-500' : ''}>
+                                        Due: {new Date(effectiveDeadlineTime).toLocaleDateString()} {new Date(effectiveDeadlineTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}
+                                        {userExtensionHours > 0 && <span className="text-green-500 ml-2 font-medium">(+{userExtensionHours}h extension applied)</span>}
+                                        {isPastEffectiveDeadline && <span className="text-red-500 ml-2 font-bold">CLOSED</span>}
                                     </span>
                                 </div>
-                                {timeLeft && !isPastDeadline && (
+                                {timeLeft && !isPastEffectiveDeadline && (
                                     <div className={`${timerColor} font-mono font-bold`}>
                                         ({timeLeft} remaining)
                                     </div>
@@ -783,11 +872,11 @@ const computedVisibleSubmissions = useMemo(() => {
                     {/* Submission Button */}
                     {( (isParticipant && request.allowParticipantSubmissions !== false) || hasSubmitted || isOwner ) && (
                     <button 
-                        onClick={() => !isPastDeadline && setIsSubmitModalOpen(true)}
-                        disabled={isPastDeadline}
-                        className={`w-full md:w-auto ${isPastDeadline ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition`}
+                        onClick={() => !isPastEffectiveDeadline && setIsSubmitModalOpen(true)}
+                        disabled={isPastEffectiveDeadline}
+                        className={`w-full md:w-auto ${isPastEffectiveDeadline ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition`}
                     >
-                        {isPastDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission' : 'Submit Track')}
+                        {isPastEffectiveDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission' : 'Submit Track')}
                         {hasSubmitted ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                     </button>
                     )}

@@ -454,7 +454,7 @@ return (
             />
 
             {/* Top Stage / Player Area */}
-            <div className={`flex flex-col sticky top-0 md:relative ${isStageCollapsed ? 'h-[72px]' : 'h-[60vh] md:h-full'} overflow-visible shrink-0 z-30 bg-black shadow-xl transition-all duration-300 border-b md:border-b-0 border-gray-800 md:flex-1`}>
+            <div className={`flex flex-col sticky top-0 md:relative ${isStageCollapsed ? 'h-[72px]' : 'h-[55dvh] md:h-full'} overflow-visible shrink-0 z-30 bg-black shadow-xl transition-all duration-300 border-b md:border-b-0 border-gray-800 md:flex-1`}>
                 
                 {/* Header Overlay (Shared between full and mini) */}
                 <div className="absolute top-0 inset-x-0 p-4 z-20 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between pointer-events-none">

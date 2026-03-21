@@ -138,7 +138,7 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrac
     return (
         <div className={`flex flex-col h-full bg-gray-900 border-l border-gray-800 ${className}`}>
             {/* Header */}
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between min-h-[56px] h-[56px] md:h-auto shrink-0 bg-gray-900 z-10">
                 <div className="flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-gray-400" />
                     <h3 className="font-semibold text-gray-200">Live Chat</h3>

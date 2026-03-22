@@ -163,6 +163,19 @@ export function WatchParty() {
 
             // Sync Time
             const offset = calculateOffset();
+
+            // STALENESS GUARD: If we are in Radio Mode and the current track is clearly finished,
+            // advance the track immediately instead of waiting for onEnded (which might not fire if stalled).
+            const isStale = party?.isRadioMode && (
+                (audio.duration && offset > audio.duration + 2) || 
+                (offset > 3600) // 1-hour fallback if metadata never loads
+            );
+
+            if (isStale) {
+                console.log("[WatchParty] Track detected as stale. Advancing...");
+                handleTrackEnded();
+                return;
+            }
             
             // Allow a small buffer before forcing a hard seek to prevent stuttering
             const driftMs = Math.abs(audio.currentTime - offset) * 1000;
@@ -173,7 +186,13 @@ export function WatchParty() {
                 if (offset === 0 && isAtEnd) {
                     console.log("[WatchParty] Skipping seek to 0 because track is at end and update might be pending.");
                 } else {
+                    // Sync immediately. Browsers handle seeking before metadata sufficiently now.
                     audio.currentTime = offset;
+                    
+                    // If we were supposed to be playing, ensure we try to play again after seeking
+                    if (audio.paused && hasInteracted) {
+                        audio.play().catch(e => console.error("Re-play after seek failed:", e));
+                    }
                 }
             }
 
@@ -193,7 +212,7 @@ export function WatchParty() {
                 audio.pause();
             }
         }
-    }, [currentTrack, status, calculateOffset, isGlobalPlaying, pauseGlobalPlayer, currentIndex]);
+    }, [currentTrack, status, calculateOffset, isGlobalPlaying, pauseGlobalPlayer, currentIndex, hasInteracted]);
 
     // Local progress for smooth waveform updates without React state lag
     useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { WatchParty } from '../types';
@@ -36,7 +36,7 @@ export function useWatchPartySync(partyId: string | undefined) {
     return () => unsubscribe();
   }, [partyId]);
 
-  const calculateOffset = () => {
+  const calculateOffset = useCallback(() => {
     if (!party) return 0;
     
     const pausedMs = party.pausedOffset || 0;
@@ -60,7 +60,7 @@ export function useWatchPartySync(partyId: string | undefined) {
     const totalOffsetMs = elapsedTimeSinceResumeMs + pausedMs;
     
     return totalOffsetMs / 1000; // Return seconds for the audio player
-  };
+  }, [party]);
 
   return {
     party,

@@ -29,6 +29,7 @@ export function WatchParty() {
     const [presenceMap, setPresenceMap] = useState<Record<string, any>>({});
     const [showViewers, setShowViewers] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
+    const [showLyrics, setShowLyrics] = useState(false);
     const [hasInteracted, setHasInteracted] = useState(false);
     const hasJoinedRef = useRef(false);
     const playingIndexRef = useRef(currentIndex);
@@ -99,6 +100,11 @@ export function WatchParty() {
         fetchCurrentTrack();
     }, [party?.playlist, currentIndex]);
 
+    // Reset UI states when track changes
+    useEffect(() => {
+        setShowLyrics(false);
+    }, [currentTrack?.id]);
+
     // Manage Sync playback
     useEffect(() => {
         // Pause the global persistent player so we don't have overlapping audio
@@ -130,14 +136,26 @@ export function WatchParty() {
             // Allow a small buffer before forcing a hard seek to prevent stuttering
             const driftMs = Math.abs(audio.currentTime - offset) * 1000;
             if (driftMs > 1000) { 
-                audio.currentTime = offset;
+                // BUG FIX: Prevent seeking to 0 if the track has naturally ended and the next track 
+                // index/timestamp update is still propagating.
+                const isAtEnd = audio.currentTime > 0 && Math.abs(audio.currentTime - audio.duration) < 0.5;
+                if (offset === 0 && isAtEnd) {
+                    console.log("[WatchParty] Skipping seek to 0 because track is at end and update might be pending.");
+                } else {
+                    audio.currentTime = offset;
+                }
             }
 
             if (audio.paused && hasInteracted) {
-                audio.play().catch(e => {
-                    console.error("Autoplay prevented:", e);
-                    setAudioError(true);
-                });
+                // Only call play if we are not at the end of the current track 
+                // or if the offset is clearly not 0 (meaning we are mid-track)
+                const isAtEnd = audio.currentTime > 0 && Math.abs(audio.currentTime - audio.duration) < 0.1;
+                if (!(isAtEnd && offset === 0)) {
+                    audio.play().catch(e => {
+                        console.error("Autoplay prevented:", e);
+                        setAudioError(true);
+                    });
+                }
             }
         } else if (status === 'paused' || status === 'scheduled' || status === 'ended') {
             if (!audio.paused) {
@@ -553,13 +571,55 @@ return (
                                     <h2 className="text-lg md:text-xl font-medium text-gray-500 uppercase tracking-widest mt-2">{currentTrack.title}</h2>
                                 </div>
 
-                                {/* Waveform Visualizer */}
+                                 {/* Waveform Visualizer */}
                                 <div className="w-full h-24 bg-gray-900/40 rounded-xl flex items-center justify-center p-4">
                                      {currentTrack.waveform ? (
                                          <Waveform data={currentTrack.waveform} progress={localProgress} interactive={false} height="h-16" />
                                      ) : (
                                          <div className="text-gray-600 animate-pulse text-sm">Generating visualization...</div>
                                      )}
+                                </div>
+
+                                {/* Feedback & Lyrics */}
+                                <div className="w-full max-w-xl mx-auto mt-6 space-y-6">
+                                    {/* Feedback Tags */}
+                                    {(currentTrack.stage || currentTrack.usesAI || (currentTrack.feedbackFocus && currentTrack.feedbackFocus.length > 0)) && (
+                                        <div className="flex flex-wrap gap-2 justify-center">
+                                            {currentTrack.usesAI && (
+                                                <span className="px-3 py-1 rounded-full bg-purple-900/30 border border-purple-800 text-purple-300 text-[10px] font-bold uppercase tracking-wider">
+                                                    Uses AI
+                                                </span>
+                                            )}
+                                            {currentTrack.stage && (
+                                                <span className="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800 text-blue-300 text-[10px] font-bold uppercase tracking-wider">
+                                                    {currentTrack.stage}
+                                                </span>
+                                            )}
+                                            {currentTrack.feedbackFocus?.map((focus, i) => (
+                                                <span key={i} className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-medium uppercase tracking-wider">
+                                                    {focus}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Lyrics Toggle */}
+                                    {currentTrack.lyrics && (
+                                        <div className="flex flex-col items-center">
+                                            <button 
+                                                onClick={() => setShowLyrics(!showLyrics)}
+                                                className="text-gray-500 hover:text-white text-xs font-bold uppercase tracking-widest flex items-center gap-2 transition-colors py-2 group"
+                                            >
+                                                <div className={`w-1.5 h-1.5 rounded-full bg-blue-500 transition-transform ${showLyrics ? 'scale-110' : 'scale-0'}`} />
+                                                {showLyrics ? 'Hide Lyrics & Notes' : 'Show Lyrics & Notes'}
+                                            </button>
+                                            {showLyrics && (
+                                                <div className="w-full bg-gray-950/50 backdrop-blur-sm p-4 rounded-xl border border-gray-800 text-gray-300 whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2 duration-300">
+                                                    {currentTrack.lyrics}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         ) : (

@@ -189,6 +189,9 @@ export interface MewEvent {
   type: 'session_start' | 'deadline' | 'stream' | 'workshop' | 'show' | 'social' | 'release' | 'community';
   isOfficial: boolean;
   flyerUrl?: string;
+  time?: string;
+  timezone?: string;
+  fullDateTime?: string | null;
   submittedBy?: string; // User UID
   submittedByEmail?: string;
   interestedUsers?: string[]; // Array of UIDs

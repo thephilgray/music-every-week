@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, MapPin, Plus, Info, Image as ImageIcon, Loader2, Upload, Edit, Trash2, CalendarCheck, MessageSquare, Send, User } from 'lucide-react';
+import { Calendar, MapPin, Plus, Info, Image as ImageIcon, Loader2, Upload, Edit, Trash2, CalendarCheck, MessageSquare, Send, User, Clock } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion, arrayRemove, where, limit } from 'firebase/firestore';
 import type { MewEvent, Comment } from '../types';
@@ -26,6 +26,7 @@ export function EventsCalendar() {
     const [newType, setNewType] = useState<MewEvent['type']>('community');
     const [newFlyer, setNewFlyer] = useState('');
     const [newFlyerFile, setNewFlyerFile] = useState<File | null>(null);
+    const [newTime, setNewTime] = useState('');
 
     const fetchEvents = useCallback(async (quiet = false) => {
         if (!quiet) setLoading(true);
@@ -59,6 +60,12 @@ export function EventsCalendar() {
                 flyerUrl = uploadRes.url;
             }
 
+            let fullDateTime: string | null = null;
+            if (newTime) {
+                // ISO strings are UTC. We create a local date from the inputs, then convert to ISO.
+                fullDateTime = new Date(`${newDate}T${newTime}`).toISOString();
+            }
+
             await addDoc(collection(db, 'events'), {
                 title: newTitle,
                 description: newDesc,
@@ -66,6 +73,8 @@ export function EventsCalendar() {
                 location: newLoc,
                 type: newType,
                 flyerUrl: flyerUrl,
+                time: newTime || null,
+                fullDateTime,
                 isOfficial: false,
                 submittedBy: user.uid,
                 submittedByEmail: user.email,
@@ -105,6 +114,11 @@ export function EventsCalendar() {
                 flyerUrl = newFlyer;
             }
 
+            let fullDateTime: string | null = null;
+            if (newTime) {
+                fullDateTime = new Date(`${newDate}T${newTime}`).toISOString();
+            }
+
             const { id, ...eventData } = editingEvent;
             await updateDoc(doc(db, 'events', editingEvent.id), {
                 ...eventData,
@@ -114,6 +128,8 @@ export function EventsCalendar() {
                 location: newLoc,
                 type: newType,
                 flyerUrl: flyerUrl,
+                time: newTime || null,
+                fullDateTime,
                 updatedAt: serverTimestamp()
             });
             
@@ -137,6 +153,7 @@ export function EventsCalendar() {
         setNewType(event.type);
         setNewFlyer(event.flyerUrl || '');
         setNewFlyerFile(null);
+        setNewTime(event.time || '');
     };
 
     const handleDelete = async (eventId: string) => {
@@ -306,6 +323,21 @@ export function EventsCalendar() {
                                 </div>
                             </div>
 
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-bold text-gray-400 uppercase tracking-wider ml-1">Time (Optional)</label>
+                                <div className="flex items-center gap-4">
+                                    <input 
+                                        type="time"
+                                        value={newTime}
+                                        onChange={e => setNewTime(e.target.value)}
+                                        className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors"
+                                    />
+                                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-tight max-w-[120px]">
+                                        Automatically converted for other timezones
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-gray-400 uppercase tracking-wider ml-1">Location / Link</label>
                                 <input 
@@ -418,6 +450,21 @@ export function EventsCalendar() {
                                 </div>
                             </div>
 
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-bold text-gray-400 uppercase tracking-wider ml-1">Time (Optional)</label>
+                                <div className="flex items-center gap-4">
+                                    <input 
+                                        type="time"
+                                        value={newTime}
+                                        onChange={e => setNewTime(e.target.value)}
+                                        className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors"
+                                    />
+                                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-tight max-w-[120px]">
+                                        Automatically converted for other timezones
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-gray-400 uppercase tracking-wider ml-1">Location / Link</label>
                                 <input 
@@ -452,7 +499,7 @@ export function EventsCalendar() {
                                         />
                                         <div className="flex items-center gap-2 text-sm text-gray-400 group-hover/upload:text-blue-400 transition">
                                             <Upload className="w-4 h-4" />
-                                            <span>{newFlyerFile ? newFlyerFile.name : (editingEvent.flyerUrl ? 'Change Flyer' : 'Upload File')}</span>
+                                            <span>{newFlyerFile ? newFlyerFile.name : (editingEvent?.flyerUrl ? 'Change Flyer' : 'Upload File')}</span>
                                         </div>
                                     </div>
                                     <input 
@@ -515,6 +562,38 @@ function LinkifiedText({ text }: { text: string }) {
             )}
         </>
     );
+}
+
+function formatEventTime(time: string, timezone?: string | null, fullDateTime?: string | null) {
+    if (fullDateTime) {
+        try {
+            return new Intl.DateTimeFormat('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+                timeZoneName: 'short'
+            }).format(new Date(fullDateTime));
+        } catch (err) {
+            console.error("Error formatting fullDateTime:", err);
+        }
+    }
+    
+    if (!time) return '';
+    try {
+        const [h, m] = time.split(':');
+        const date = new Date();
+        date.setHours(parseInt(h), parseInt(m), 0, 0);
+        
+        return new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: timezone || undefined,
+            timeZoneName: 'short'
+        }).format(date);
+    } catch (err) {
+        return time;
+    }
 }
 
 function EventComments({ eventId, eventTitle }: { eventId: string, eventTitle: string }) {
@@ -667,16 +746,24 @@ function EventRow({ event, getTypeColor, isPast, onEdit, onDelete, onFlyerClick,
                         <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-600 text-white rounded shadow-lg shadow-blue-900/20">MEW Official</span>
                     )}
                 </div>
-                <h4 className="text-lg font-bold text-white mb-1 group-hover:text-blue-400 transition truncate">{event.title}</h4>
+                <h4 className="text-lg font-bold text-white mb-1 group-hover:text-blue-400 transition leading-snug">{event.title}</h4>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400">
+                    {event.time && (
+                        <div className="flex items-center gap-1.5 text-blue-400/90 font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                            <Clock className="w-3" />
+                            <span className="text-[10px] uppercase tracking-wider">{formatEventTime(event.time || '', event.timezone, event.fullDateTime)}</span>
+                        </div>
+                    )}
                     {event.location && (
-                        <div className="flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-gray-600" />
-                            <span className="truncate max-w-[200px]">{event.location}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <MapPin className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />
+                            <span className="text-gray-400 break-words">
+                                <LinkifiedText text={event.location} />
+                            </span>
                         </div>
                     )}
                     <div className="w-full sm:w-auto">
-                        <p className={`italic ${isExpanded ? '' : 'line-clamp-1'}`}>
+                        <p className={`italic whitespace-pre-wrap ${isExpanded ? '' : 'line-clamp-1'}`}>
                             <LinkifiedText text={event.description} />
                         </p>
                         {event.description.length > 60 && (

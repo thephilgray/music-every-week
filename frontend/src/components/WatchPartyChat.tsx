@@ -29,6 +29,7 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrac
     const [newMessage, setNewMessage] = useState('');
     const [attachToTrack, setAttachToTrack] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -74,8 +75,31 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrac
 
     // Auto-scroll to bottom
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        const scrollToBottom = () => {
+            if (scrollContainerRef.current) {
+                // By targeting the container directly, we prevent the whole page from scrolling on mobile
+                scrollContainerRef.current.scrollTo({
+                    top: scrollContainerRef.current.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        };
+
+        // Delay slightly to ensure new messages are painted or layout shifts (like keyboard or stage collapse) are complete
+        const timer = setTimeout(scrollToBottom, 100);
+        
+        // Also fire when visual viewport resizes (e.g., mobile keyboard taking up screen)
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', scrollToBottom);
+        }
+
+        return () => {
+            clearTimeout(timer);
+            if (window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', scrollToBottom);
+            }
+        };
+    }, [messages, isStageCollapsed]);
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -166,7 +190,7 @@ export function WatchPartyChat({ partyId, currentTrackId, requestId, currentTrac
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.length === 0 ? (
                     <div className="text-center text-gray-500 mt-10">
                         No messages yet. Say hello!

@@ -65,8 +65,6 @@ service cloud.firestore {
       allow delete: if isSignedIn(); // Add delete permission for comments
     }
 
-
-
     match /notifications/{notificationId} {
       allow read: if isSignedIn(); 
       allow write: if isSignedIn();
@@ -121,6 +119,12 @@ service cloud.firestore {
         allow read: if true;
         allow write: if isSignedIn() && request.auth.uid == uid;
       }
+    }
+
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && (resource == null || resource.data.submittedBy == request.auth.uid));
     }
   }
 }

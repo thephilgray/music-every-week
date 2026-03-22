@@ -100,8 +100,10 @@ export interface Comment {
       displayName?: string;
       avatarUrl?: string;
   };
-  requestId?: string;
   submissionId?: string;
+  requestId?: string;
+  eventId?: string;
+  eventTitle?: string;
   reactions?: Record<string, 'heart' | '+1'>; // user UID or Email -> reaction type
   usesAI?: boolean;
 }
@@ -176,4 +178,19 @@ export interface Playlist {
   accessList?: string[];
   accessMode?: 'public' | 'private';
   requestId?: string;
+}
+
+export interface MewEvent {
+  id?: string;
+  title: string;
+  description: string;
+  date: string; // ISO string 
+  location?: string;
+  type: 'session_start' | 'deadline' | 'stream' | 'workshop' | 'show' | 'social' | 'release' | 'community';
+  isOfficial: boolean;
+  flyerUrl?: string;
+  submittedBy?: string; // User UID
+  submittedByEmail?: string;
+  interestedUsers?: string[]; // Array of UIDs
+  createdAt: number | FieldValue;
 }

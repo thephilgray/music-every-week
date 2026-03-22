@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, Music } from 'lucide-react';
+import { User, Music, Calendar } from 'lucide-react';
 import { fixUrl } from '../lib/url';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -9,17 +9,22 @@ import { formatCommentDate } from '../lib/utils';
 
 export interface FeedItemData {
     id: string;
-    type: 'comment' | 'submission';
+    type: 'comment' | 'submission' | 'event';
     text: string;
-    authorUid?: string; // Changed from authorPub
-    authorEmail?: string; // Add email support
-    authorName?: string; // Add direct name support (byline)
-    submissionId: string;
-    requestId: string;
-    submissionTitle: string;
-    requestTitle: string;
+    authorUid?: string;
+    authorEmail?: string;
+    authorName?: string;
+    submissionId?: string;
+    requestId?: string;
+    submissionTitle?: string;
+    requestTitle?: string;
+    eventId?: string;
+    eventTitle?: string;
     createdAt: number;
     usesAI?: boolean;
+    eventType?: string;
+    eventDate?: string;
+    eventLocation?: string;
 }
 
 interface FeedItemRowProps {
@@ -122,7 +127,8 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
                             </span>
                         )}
                         <span className="text-gray-500">
-                            {item.type === 'submission' ? 'uploaded a track' : 'commented on'}
+                            {item.type === 'submission' ? 'uploaded a track' : 
+                             item.type === 'comment' ? 'commented on' : 'posted an event'}
                         </span>
                     </div>
                     <span className="text-xs text-gray-600 whitespace-nowrap self-end md:self-auto">
@@ -136,27 +142,63 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
                             <Music className="w-4 h-4" />
                         </div>
                     )}
-                    <p className="text-gray-300 text-sm line-clamp-3 italic">{item.text.replace('Submitted a new track: ', '')}</p>
+                    {item.type === 'event' && (
+                        <div className="w-8 h-8 bg-green-900/20 rounded flex items-center justify-center text-green-500 flex-shrink-0">
+                            <Calendar className="w-4 h-4" />
+                        </div>
+                    )}
+                    <p className="text-gray-300 text-sm line-clamp-3 italic">
+                        {item.type === 'event' 
+                            ? `Upcoming: ${item.text}` 
+                            : item.text.replace('Submitted a new track: ', '')}
+                    </p>
                 </div>
 
                 <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs text-gray-500 mt-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <Music className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{item.submissionTitle}</span>
-                        <span className="flex-shrink-0">in</span>
-                        <Link to={`/request/${item.requestId}`} className="text-blue-400 hover:underline truncate max-w-[150px]">
-                            {item.requestTitle}
-                        </Link>
-                    </div>
+                    {item.eventId ? (
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">Commented on event: <span className="text-blue-400 font-bold">{item.eventTitle}</span></span>
+                        </div>
+                    ) : item.type !== 'event' ? (
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Music className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{item.submissionTitle}</span>
+                            <span className="flex-shrink-0">in</span>
+                            <Link to={`/request/${item.requestId}`} className="text-blue-400 hover:underline truncate max-w-[150px]">
+                                {item.requestTitle}
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{item.eventDate}</span>
+                            {item.eventLocation && (
+                                <>
+                                    <span className="flex-shrink-0">•</span>
+                                    <span className="truncate">{item.eventLocation}</span>
+                                </>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="md:flex-1" />
                     
-                    <Link 
-                        to={`/request/${item.requestId}?submission=${item.submissionId}${item.type === 'comment' ? `&comment=${item.id}` : ''}`}
-                        className="flex items-center gap-1 text-gray-400 hover:text-white transition self-end md:self-auto"
-                    >
-                        {item.type === 'submission' ? 'View Track' : 'View Thread'}
-                    </Link>
+                    {item.type === 'event' || item.eventId ? (
+                        <Link 
+                            to="/feed?tab=events"
+                            className="flex items-center gap-1 text-gray-400 hover:text-white transition self-end md:self-auto"
+                        >
+                            View Calendar
+                        </Link>
+                    ) : (
+                        <Link 
+                            to={`/request/${item.requestId}?submission=${item.submissionId}${item.type === 'comment' ? `&comment=${item.id}` : ''}`}
+                            className="flex items-center gap-1 text-gray-400 hover:text-white transition self-end md:self-auto"
+                        >
+                            {item.type === 'submission' ? 'View Track' : 'View Thread'}
+                        </Link>
+                    )}
                 </div>
             </div>
         </div>

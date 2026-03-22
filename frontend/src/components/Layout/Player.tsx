@@ -26,8 +26,13 @@ export function Player() { // Removed props
 
 
   // Auto-expand on track change
+  const isInitialMount = React.useRef(true);
   useEffect(() => {
       if (currentTrack) {
+          if (isInitialMount.current) {
+              isInitialMount.current = false;
+              return;
+          }
           setIsMinimized(false);
       }
   }, [currentTrack?.id]);

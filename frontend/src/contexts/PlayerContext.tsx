@@ -150,15 +150,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stripLargeFields = (track: Submission | null): Submission | null => {
         if (!track) return null;
-        const { waveform, ...rest } = track;
+        // Keep essential fields for playback and display, strip the rest for storage
+        const { 
+            waveform, 
+            lyrics, 
+            collaborators, 
+            feedbackFocus, 
+            stage, 
+            ...rest 
+        } = track;
         return rest as Submission;
     };
     
     const stripLargeFieldsFromQueue = (q: Submission[]): Submission[] => {
-        return q.map(t => {
-            const { waveform, ...rest } = t;
-            return rest as Submission;
-        });
+        return q.map(t => stripLargeFields(t) as Submission);
     };
 
     try {

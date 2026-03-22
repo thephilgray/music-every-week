@@ -20,7 +20,7 @@ export function WatchParty() {
     const navigate = useNavigate();
     const { party, loading, error, calculateOffset, status, currentIndex } = useWatchPartySync(id);
     const { pause: pauseGlobalPlayer, isPlaying: isGlobalPlaying } = usePlayer();
-    const { user, isAdmin, profile } = useAuth();
+    const { user, isAdmin, profile, addPoints } = useAuth();
 
     const [currentTrack, setCurrentTrack] = useState<Submission | null>(null);
     const [audioError, setAudioError] = useState(false);
@@ -117,6 +117,24 @@ export function WatchParty() {
             pausedOffset: 0
         }).catch(err => console.error("Error auto-starting Radio Mode:", err));
     }, [party?.isRadioMode, status, hasInteracted, party?.id, party?.playlist]);
+
+    // Participation Points Logic: Award 5 points after 1 minute of active participation
+    useEffect(() => {
+        if (!id || !user || !hasInteracted || !addPoints) return;
+
+        const sessionKey = `points_awarded_${id}`;
+        if (sessionStorage.getItem(sessionKey)) return;
+
+        const PARTICIPATION_THRESHOLD_MS = 60000; // 1 minute
+
+        const timer = setTimeout(() => {
+            console.log("[WatchParty] Participation threshold reached. Awarding points...");
+            addPoints(5);
+            sessionStorage.setItem(sessionKey, 'true');
+        }, PARTICIPATION_THRESHOLD_MS);
+
+        return () => clearTimeout(timer);
+    }, [id, user, hasInteracted, addPoints]);
 
     // Manage Sync playback
     useEffect(() => {

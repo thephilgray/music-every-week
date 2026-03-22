@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, addDoc, orderBy, onSnapshot, getCountFromServer, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, orderBy, onSnapshot, getCountFromServer, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Loader2, Plus, ListMusic, Play, Settings, FolderOpen, Trash2 } from 'lucide-react';
 import type { Playlist, WatchParty, FileRequest } from '../types';
 
@@ -165,10 +165,10 @@ export function PartyHub() {
 
             // Create the watch party document
             const partyPayload: Partial<WatchParty> = {
-                status: 'scheduled',
+                status: isRadioMode ? 'live' : 'scheduled',
                 playlist: trackIds,
                 currentIndex: 0,
-                trackStartTime: 0,
+                trackStartTime: isRadioMode ? serverTimestamp() : 0,
                 hostPub: user!.uid,
                 isRadioMode: isRadioMode,
                 name: partyName

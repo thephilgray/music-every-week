@@ -105,6 +105,19 @@ export function WatchParty() {
         setShowLyrics(false);
     }, [currentTrack?.id]);
 
+    // Radio Mode Auto-Start: If we are in radio mode and it's not yet live, anyone can start it.
+    useEffect(() => {
+        if (!party || !party.isRadioMode || status !== 'scheduled' || !hasInteracted || party.playlist.length === 0) return;
+        
+        console.log("[WatchParty] Auto-starting Radio Mode session...");
+        const partyRef = doc(db, 'watchParties', party.id!);
+        updateDoc(partyRef, {
+            status: 'live',
+            trackStartTime: serverTimestamp(),
+            pausedOffset: 0
+        }).catch(err => console.error("Error auto-starting Radio Mode:", err));
+    }, [party?.isRadioMode, status, hasInteracted, party?.id, party?.playlist]);
+
     // Manage Sync playback
     useEffect(() => {
         // Pause the global persistent player so we don't have overlapping audio
@@ -162,7 +175,7 @@ export function WatchParty() {
                 audio.pause();
             }
         }
-    }, [currentTrack, status, calculateOffset, isGlobalPlaying, pauseGlobalPlayer]);
+    }, [currentTrack, status, calculateOffset, isGlobalPlaying, pauseGlobalPlayer, currentIndex]);
 
     // Local progress for smooth waveform updates without React state lag
     useEffect(() => {

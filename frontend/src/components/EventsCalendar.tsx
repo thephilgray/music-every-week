@@ -203,8 +203,9 @@ export function EventsCalendar() {
         }
     };
 
-    const upcomingEvents = events.filter(e => new Date(e.date).getTime() > Date.now() - (24 * 60 * 60 * 1000));
-    const pastEvents = events.filter(e => new Date(e.date).getTime() <= Date.now() - (24 * 60 * 60 * 1000)).reverse();
+    const getEventTimestamp = (e: MewEvent) => e.fullDateTime ? new Date(e.fullDateTime).getTime() : new Date(`${e.date}T12:00:00`).getTime();
+    const upcomingEvents = events.filter(e => getEventTimestamp(e) > Date.now() - (24 * 60 * 60 * 1000));
+    const pastEvents = events.filter(e => getEventTimestamp(e) <= Date.now() - (24 * 60 * 60 * 1000)).reverse();
 
     return (
         <div className="space-y-8 pb-20">
@@ -713,7 +714,7 @@ function EventRow({ event, getTypeColor, isPast, onEdit, onDelete, onFlyerClick,
     const [isHovering, setIsHovering] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const [showComments, setShowComments] = useState(false);
-    const date = new Date(event.date);
+    const date = event.fullDateTime ? new Date(event.fullDateTime) : new Date(`${event.date}T12:00:00`);
 
     const isInterested = user && event.interestedUsers?.includes(user.uid);
     const interestCount = event.interestedUsers?.length || 0;

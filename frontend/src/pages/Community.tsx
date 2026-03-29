@@ -270,7 +270,9 @@ export function Community() {
                     authorEmail: data.submittedByEmail,
                     authorName: data.submittedByEmail?.split('@')[0] || 'Unknown',
                     createdAt: getTimestampAsNumber(data.createdAt),
-                    eventDate: new Date(data.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    eventDate: data.fullDateTime 
+                        ? new Date(data.fullDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : new Date(`${data.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
                     eventLocation: data.location,
                     eventType: data.type
                 } as FeedItemData;

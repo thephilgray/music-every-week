@@ -362,68 +362,89 @@ export function CreatorTools() {
                   const uploaderUid = subData.uploaderUid; 
                   const uploaderEmail = subData.uploaderEmail?.toLowerCase();
 
-                  let participantToUpdate: ParticipantRow | undefined;
-                  let effectiveParticipantKey: string | undefined;
-                  let keyToDeleteIfReplaced: string | undefined; 
-
-                  // --- Lookup priority: 1. Uploader UID, 2. Email resolved to UID, 3. Direct Email ---
-
-                  // Try by uploaderUid (most reliable)
-                  if (uploaderUid) {
-                      if (rows.has(uploaderUid)) {
-                          participantToUpdate = rows.get(uploaderUid);
-                          effectiveParticipantKey = uploaderUid;
-                      } else if (uploaderEmail && rows.has(uploaderEmail)) {
-                          // Found by email, but we have a UID. Mark for re-keying.
-                          participantToUpdate = rows.get(uploaderEmail);
-                          keyToDeleteIfReplaced = uploaderEmail;
-                          effectiveParticipantKey = uploaderUid; // New effective key
-                      }
+                  const peopleToCredit: { uid?: string, email?: string }[] = [];
+                  if (uploaderUid || uploaderEmail) {
+                      peopleToCredit.push({ uid: uploaderUid, email: uploaderEmail });
                   }
-
-                  // If not found by UID, or UID was missing, try by email (resolved to UID first, then direct email key)
-                  if (!participantToUpdate && uploaderEmail) {
-                      const resolvedUidFromEmail = emailToUidMap.get(uploaderEmail);
-                      if (resolvedUidFromEmail && rows.has(resolvedUidFromEmail)) {
-                          participantToUpdate = rows.get(resolvedUidFromEmail);
-                          effectiveParticipantKey = resolvedUidFromEmail;
-                      } else if (rows.has(uploaderEmail)) {
-                          participantToUpdate = rows.get(uploaderEmail);
-                          effectiveParticipantKey = uploaderEmail;
+                  
+                  if (subData.collaborators) {
+                      let collabs = subData.collaborators;
+                      if (typeof collabs === 'string') {
+                          try { collabs = JSON.parse(collabs); } catch(e) {}
                       }
-                  }
-
-
-                  if (participantToUpdate && effectiveParticipantKey) {
-                      if (participantToUpdate.status !== 'submitted') {
-                           // If we found the participant by an old key (e.g., email or GunPub)
-                           // but now have a definitive Firebase UID from the submission (uploaderUid)
-                           // and the current key in rows is *not* the uploaderUid, re-key the entry.
-                          if (uploaderUid && keyToDeleteIfReplaced) { 
-                              rows.delete(keyToDeleteIfReplaced); // Remove old entry
-                              rows.set(uploaderUid, { ...participantToUpdate, id: uploaderUid, type: 'user', status: 'submitted' });
-                          } else {
-                              // Otherwise, just update the status of the existing entry
-                              rows.set(effectiveParticipantKey, { ...participantToUpdate, status: 'submitted' });
-                          }
-                      }
-                  } 
-                  // Fallback: If no existing row found, but a submission exists, create a new 'submitted' entry.
-                  // This handles cases where a submitter was never in accessList or request.participants initially.
-                  else if (effectiveParticipantKey || uploaderUid || uploaderEmail) {
-                      const finalId = uploaderUid || uploaderEmail || 'unknown';
-                      if (!rows.has(finalId)) {
-                          rows.set(finalId, {
-                              id: finalId,
-                              name: userProfileLookup.get(finalId)?.displayName || uploaderEmail || 'Unknown User', 
-                              contact: uploaderEmail || finalId,
-                              status: 'submitted',
-                              type: uploaderUid ? 'user' : 'email',
-                              extensionHours: 0,
-                              hasPass: false
+                      if (typeof collabs === 'object' && collabs !== null) {
+                          Object.keys(collabs).forEach(k => {
+                              if (k !== '_' && k !== '#' && !k.startsWith('_') && !k.startsWith('#') && k !== uploaderUid) {
+                                  peopleToCredit.push({ uid: k, email: userProfileLookup.get(k)?.email?.toLowerCase() });
+                              }
                           });
                       }
                   }
+
+                  peopleToCredit.forEach(({ uid: currentUid, email: currentEmail }) => {
+                      let participantToUpdate: ParticipantRow | undefined;
+                      let effectiveParticipantKey: string | undefined;
+                      let keyToDeleteIfReplaced: string | undefined; 
+
+                      // --- Lookup priority: 1. Uploader UID, 2. Email resolved to UID, 3. Direct Email ---
+
+                      // Try by currentUid (most reliable)
+                      if (currentUid) {
+                          if (rows.has(currentUid)) {
+                              participantToUpdate = rows.get(currentUid);
+                              effectiveParticipantKey = currentUid;
+                          } else if (currentEmail && rows.has(currentEmail)) {
+                              // Found by email, but we have a UID. Mark for re-keying.
+                              participantToUpdate = rows.get(currentEmail);
+                              keyToDeleteIfReplaced = currentEmail;
+                              effectiveParticipantKey = currentUid; // New effective key
+                          }
+                      }
+
+                      // If not found by UID, or UID was missing, try by email (resolved to UID first, then direct email key)
+                      if (!participantToUpdate && currentEmail) {
+                          const resolvedUidFromEmail = emailToUidMap.get(currentEmail);
+                          if (resolvedUidFromEmail && rows.has(resolvedUidFromEmail)) {
+                              participantToUpdate = rows.get(resolvedUidFromEmail);
+                              effectiveParticipantKey = resolvedUidFromEmail;
+                          } else if (rows.has(currentEmail)) {
+                              participantToUpdate = rows.get(currentEmail);
+                              effectiveParticipantKey = currentEmail;
+                          }
+                      }
+
+                      if (participantToUpdate && effectiveParticipantKey) {
+                          if (participantToUpdate.status !== 'submitted') {
+                               // If we found the participant by an old key (e.g., email or GunPub)
+                               // but now have a definitive Firebase UID from the submission (uploaderUid)
+                               // and the current key in rows is *not* the uploaderUid, re-key the entry.
+                              if (currentUid && keyToDeleteIfReplaced) { 
+                                  rows.delete(keyToDeleteIfReplaced); // Remove old entry
+                                  rows.set(currentUid, { ...participantToUpdate, id: currentUid, type: 'user', status: 'submitted' });
+                              } else {
+                                  // Otherwise, just update the status of the existing entry
+                                  rows.set(effectiveParticipantKey, { ...participantToUpdate, status: 'submitted' });
+                              }
+                          }
+                      } 
+                      // Fallback: If no existing row found, but a submission exists, create a new 'submitted' entry.
+                      // This handles cases where a submitter was never in accessList or request.participants initially.
+                      else if (effectiveParticipantKey || currentUid || currentEmail) {
+                          const finalId = currentUid || currentEmail || 'unknown';
+                          if (!rows.has(finalId)) {
+                              const profile = userProfileLookup.get(finalId);
+                              rows.set(finalId, {
+                                  id: finalId,
+                                  name: profile?.displayName || profile?.alias || currentEmail || 'Unknown User', 
+                                  contact: profile?.email || currentEmail || finalId,
+                                  status: 'submitted',
+                                  type: currentUid ? 'user' : 'email',
+                                  extensionHours: 0,
+                                  hasPass: false
+                              });
+                          }
+                      }
+                  });
               });
           }
 

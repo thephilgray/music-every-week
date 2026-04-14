@@ -7,7 +7,7 @@ import { EditRequest } from '../components/EditRequest';
 import { SubmitTrack } from '../components/SubmitTrack'; 
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import type { FileRequest, Submission, UserProfile } from '../types';
-import { getTimestampAsNumber } from '../lib/utils';
+import { getTimestampAsNumber, copyToClipboard } from '../lib/utils';
 import { db } from '../lib/firebase'; 
 import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc, deleteDoc, orderBy } from 'firebase/firestore'; 
 
@@ -589,8 +589,12 @@ export function CreatorTools() {
           });
 
           const url = `${window.location.origin}/request/${selectedRequest.id}?extension=${code}`;
-          navigator.clipboard.writeText(url);
-          success(`Extension link (+${hours}h) copied to clipboard!`);
+          const copied = await copyToClipboard(url);
+          if (copied) {
+              success(`Extension link (+${hours}h) copied to clipboard!`);
+          } else {
+              success(`Link generated! (Copy failed, please copy manually): ${url}`);
+          }
       } catch (e) {
           console.error("Error generating extension link:", e);
           error("Failed to generate extension link.");

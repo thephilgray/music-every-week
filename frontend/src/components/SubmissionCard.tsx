@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Pause, Lock, FileText, MessageSquare, ListPlus, FileAudio, Heart, CheckCircle2 } from 'lucide-react';
+import { Play, Pause, Lock, FileText, MessageSquare, ListPlus, FileAudio, Heart, CheckCircle2, Edit } from 'lucide-react';
 import { ArtworkDisplay } from './ui/ArtworkDisplay';
 import { Waveform } from './ui/Waveform';
 import { CollaboratorList } from './ui/CollaboratorList';
@@ -23,6 +23,8 @@ interface SubmissionCardProps {
     highlightCommentId?: string;
     index?: number;
     isListened?: boolean;
+    isAdmin?: boolean;
+    onEdit?: () => void;
 }
 
 export function SubmissionCard({ 
@@ -40,7 +42,9 @@ export function SubmissionCard({
     isMySubmission = false,
     highlightCommentId,
     index,
-    isListened = false
+    isListened = false,
+    isAdmin = false,
+    onEdit
 }: SubmissionCardProps) {
     const [showLyrics, setShowLyrics] = useState(false);
     const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -165,6 +169,16 @@ export function SubmissionCard({
                                 title="Lyrics / Notes"
                             >
                                 <FileText className="w-4 h-4" />
+                            </button>
+                        )}
+
+                        {(isAdmin || isMySubmission) && onEdit && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                                className="p-2 rounded-full transition text-gray-400 hover:text-white"
+                                title="Edit Submission"
+                            >
+                                <Edit className="w-4 h-4" />
                             </button>
                         )}
 

@@ -10,7 +10,7 @@ import { SubmitTrack } from '../components/SubmitTrack';
 import { EditRequest } from '../components/EditRequest'; // Added import
 import { SubmissionCard } from '../components/SubmissionCard';
 import { fixUrl } from '../lib/url';
-import { seededRandom, getTimestampAsNumber } from '../lib/utils'; // Added imports
+import { seededRandom, getTimestampAsNumber, copyToClipboard } from '../lib/utils'; // Added imports
 import { FilterPopover } from '../components/ui/FilterPopover'; // Added import
 import { useListenedTracks } from '../hooks/useListenedTracks'; // Added import
 import type { FileRequest, Submission } from '../types';
@@ -56,6 +56,7 @@ export function RequestDetail() {
   const [submissionCommentCounts, setSubmissionCommentCounts] = useState<Record<string, number>>({});
   
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [submissionToEdit, setSubmissionToEdit] = useState<Submission | null>(null);
   const [isEditRequestOpen, setIsEditRequestOpen] = useState(false); // Added state
   const [isFilterModalForced, setIsFilterModalForced] = useState(false); // Added state
   const [timeLeft, setTimeLeft] = useState<string>('');
@@ -723,11 +724,13 @@ const computedVisibleSubmissions = useMemo(() => {
     }
   }, [visibleSubmissions, request, participantEmail, play, removeCommentParam]);
 
-  const copyLink = () => {
+  const copyLink = async () => {
       const url = window.location.href;
-      navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const copied = await copyToClipboard(url);
+      if (copied) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+      }
   };
 
   const handleSubmissionSuccess = () => {
@@ -872,12 +875,17 @@ const computedVisibleSubmissions = useMemo(() => {
                     {/* Submission Button */}
                     {( (isParticipant && request.allowParticipantSubmissions !== false) || hasSubmitted || isOwner ) && (
                     <button 
-                        onClick={() => !isPastEffectiveDeadline && setIsSubmitModalOpen(true)}
-                        disabled={isPastEffectiveDeadline}
-                        className={`w-full md:w-auto ${isPastEffectiveDeadline ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition`}
+                        onClick={() => {
+                            if (!isPastEffectiveDeadline || isAdmin) {
+                                setSubmissionToEdit(null);
+                                setIsSubmitModalOpen(true);
+                            }
+                        }}
+                        disabled={isPastEffectiveDeadline && !isAdmin}
+                        className={`w-full md:w-auto ${isPastEffectiveDeadline && !isAdmin ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition`}
                     >
-                        {isPastEffectiveDeadline ? 'Submission Closed' : (hasSubmitted ? 'Edit Submission' : 'Submit Track')}
-                        {hasSubmitted ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                        {(isPastEffectiveDeadline && !isAdmin) ? 'Submission Closed' : ((hasSubmitted && !isAdmin) ? 'Edit Submission' : 'Submit Track')}
+                        {(hasSubmitted && !isAdmin) ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                     </button>
                     )}
                 </div>
@@ -998,6 +1006,11 @@ const computedVisibleSubmissions = useMemo(() => {
                                     currentUserEmail={participantEmail}
                                     requestId={id}
                                     isMySubmission={isMySubmission}
+                                    isAdmin={isAdmin}
+                                    onEdit={() => {
+                                        setSubmissionToEdit(sub);
+                                        setIsSubmitModalOpen(true);
+                                    }}
                                     highlightCommentId={highlightCommentIdState || new URLSearchParams(location.search).get('comment') || undefined}
                                     isListened={sub.id ? listenedTracks.has(sub.id) : false}
                                 />
@@ -1012,8 +1025,11 @@ const computedVisibleSubmissions = useMemo(() => {
                 <SubmitTrack 
                     requestId={request.id!}
                     participants={request.participants}
-                    existingSubmission={userSubmission}
-                    onClose={() => setIsSubmitModalOpen(false)}
+                    existingSubmission={submissionToEdit || (!isAdmin ? userSubmission : undefined)}
+                    onClose={() => {
+                        setIsSubmitModalOpen(false);
+                        setSubmissionToEdit(null);
+                    }}
                     onSuccess={handleSubmissionSuccess}
                     accessMode={request.accessMode}
                 />

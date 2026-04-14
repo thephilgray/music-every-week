@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { Tooltip } from './ui/Tooltip';
 import { db } from '../lib/firebase';
 import { collection, serverTimestamp, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
-import { getTimestampAsNumber } from '../lib/utils';
+import { getTimestampAsNumber, copyToClipboard } from '../lib/utils';
 
 export function CreateRequest() {
   const { user } = useAuth(); // Use Auth Context
@@ -89,10 +89,12 @@ export function CreateRequest() {
     }
   };
 
-  const copyLink = () => {
-      navigator.clipboard.writeText(inviteLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const copyLink = async () => {
+      const copied = await copyToClipboard(inviteLink);
+      if (copied) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+      }
   };
 
   const resetForm = () => {

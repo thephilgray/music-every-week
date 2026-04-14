@@ -70,3 +70,38 @@ export function formatCommentDate(timestamp: number): string {
         return `${date.toLocaleDateString()} at ${timeStr}`; // "10/10/2023 at 10:30 AM"
     }
 }
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+    // 1. Try modern API first
+    if (navigator.clipboard) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (err) {
+            console.warn('Modern clipboard API failed, trying fallback:', err);
+        }
+    }
+
+    // 2. Fallback to execCommand('copy')
+    try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        
+        // Ensure it's not visible but part of the document for execCommand
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        return successful;
+    } catch (err) {
+        console.error('Final clipboard fallback failed:', err);
+        return false;
+    }
+}
+

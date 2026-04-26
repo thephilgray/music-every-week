@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, Link as LinkIcon, Loader2, Trash2 } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, Link as LinkIcon, Loader2, Trash2, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import JSZip from 'jszip';
 import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
 import { EditRequest } from '../components/EditRequest';
@@ -44,6 +45,7 @@ export function CreatorTools() {
   const [submissionsByUid, setSubmissionsByUid] = useState<Submission[]>([]);
   const [submissionsByEmail, setSubmissionsByEmail] = useState<Submission[]>([]);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+  const [selectedRequestSubmissions, setSelectedRequestSubmissions] = useState<Submission[]>([]);
 
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [isEditSubmissionOpen, setIsEditSubmissionOpen] = useState(false);
@@ -53,6 +55,8 @@ export function CreatorTools() {
   const [showDeleteSubmissionConfirm, setShowDeleteSubmissionConfirm] = useState(false);
 
   const [isActionLoading, setActionLoading] = useState(false);
+  const [zipProgress, setZipProgress] = useState<number | null>(null);
+  const [zipStatusText, setZipStatusText] = useState<string>('');
 
   // Fetch comments count for selected submission
   useEffect(() => {
@@ -355,9 +359,12 @@ export function CreatorTools() {
                   where('requestId', '==', selectedRequest.id)
               );
               const submissionSnapshot = await getDocs(submissionsQuery);
+              const fetchedSubmissions: Submission[] = [];
               submissionSnapshot.forEach(subDoc => {
                   const subData = subDoc.data();
                   if (subData.deleted) return; // Filter deleted submissions manually
+                  
+                  fetchedSubmissions.push({ id: subDoc.id, ...subData, createdAt: getTimestampAsNumber(subData.createdAt) } as Submission);
 
                   const uploaderUid = subData.uploaderUid; 
                   const uploaderEmail = subData.uploaderEmail?.toLowerCase();
@@ -446,6 +453,7 @@ export function CreatorTools() {
                       }
                   });
               });
+              setSelectedRequestSubmissions(fetchedSubmissions);
           }
 
           // Fetch Profiles (aliases) for any remaining 'Loading...' user participants
@@ -661,10 +669,25 @@ export function CreatorTools() {
       }
   };
 
-  if (isActionLoading) {
+  if (isActionLoading || zipProgress !== null) {
     return (
         <div className="flex justify-center items-center h-[calc(100vh-theme(spacing.16))] text-gray-500">
-            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            {zipProgress !== null ? (
+                <div className="flex flex-col items-center gap-4 w-full max-w-md px-6 bg-gray-900 border border-gray-800 p-8 rounded-xl shadow-2xl">
+                    <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-2" />
+                    <div className="text-white font-medium text-center">{zipStatusText}</div>
+                    <div className="w-full bg-gray-800 rounded-full h-4 overflow-hidden border border-gray-700">
+                        <div 
+                            className="bg-blue-500 h-full transition-all duration-300 ease-out flex items-center justify-center text-[10px] font-bold text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                            style={{ width: `${zipProgress}%` }}
+                        >
+                            {zipProgress > 5 ? `${zipProgress}%` : ''}
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            )}
         </div>
     );
   }
@@ -804,6 +827,80 @@ export function CreatorTools() {
                                 >
                                     +48h All
                                 </button>
+                                <button 
+                                    onClick={async () => {
+                                        if (selectedRequestSubmissions.length === 0) {
+                                            error("No submissions to download.");
+                                            return;
+                                        }
+                                        
+                                        setZipProgress(0);
+                                        setZipStatusText("Starting download...");
+                                        try {
+                                            const zip = new JSZip();
+                                            const folderName = selectedRequest.title.replace(/[/\\?%*:|"<>]/g, '-');
+                                            const folder = zip.folder(folderName);
+                                            
+                                            let successCount = 0;
+                                            const total = selectedRequestSubmissions.length;
+                                            
+                                            // Process sequentially to avoid browser limits
+                                            for (let i = 0; i < total; i++) {
+                                                const sub = selectedRequestSubmissions[i];
+                                                if (!sub.audioUrl) continue;
+                                                
+                                                setZipStatusText(`Downloading ${i + 1} of ${total}: ${sub.title}...`);
+                                                
+                                                try {
+                                                    const response = await fetch(sub.audioUrl);
+                                                    const blob = await response.blob();
+                                                    const extension = sub.audioUrl.split('?')[0].split('.').pop() || 'mp3';
+                                                    const artist = sub.byline || sub.uploaderEmail?.split('@')[0] || 'Anonymous';
+                                                    const filename = `${artist} - ${sub.title}.${extension}`.replace(/[/\\?%*:|"<>]/g, '-');
+                                                    folder?.file(filename, blob);
+                                                    successCount++;
+                                                } catch (err) {
+                                                    console.error("Failed to fetch audio for zip:", sub.title, err);
+                                                }
+                                                
+                                                // Fetching takes up first 90% of the progress bar
+                                                setZipProgress(Math.round(((i + 1) / total) * 90));
+                                            }
+                                            
+                                            if (successCount === 0) {
+                                                error("Failed to download any audio files.");
+                                                setZipProgress(null);
+                                                return;
+                                            }
+
+                                            setZipStatusText("Compressing files into ZIP...");
+                                            const content = await zip.generateAsync({ type: "blob" }, (metadata) => {
+                                                // Compression takes up the final 10%
+                                                setZipProgress(90 + Math.round(metadata.percent * 0.1));
+                                            });
+                                            
+                                            const url = window.URL.createObjectURL(content);
+                                            const a = document.createElement('a');
+                                            a.style.display = 'none';
+                                            a.href = url;
+                                            a.download = `${folderName}.zip`;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            window.URL.revokeObjectURL(url);
+                                            success(`Zip downloaded successfully with ${successCount} tracks.`);
+                                        } catch (err) {
+                                            console.error("Error creating zip:", err);
+                                            error("Failed to create zip file.");
+                                        } finally {
+                                            setZipProgress(null);
+                                            setZipStatusText('');
+                                        }
+                                    }}
+                                    className="px-3 py-1.5 flex items-center gap-1 bg-green-900/30 text-green-400 border border-green-800 rounded text-xs hover:bg-green-900/50 transition"
+                                    title="Download all submissions as a Zip file"
+                                >
+                                    <Archive className="w-3 h-3" /> Download ZIP
+                                </button>
                             </div>
                             <select
                                 value={filterStatus}
@@ -922,6 +1019,34 @@ export function CreatorTools() {
                                 >
                                     <Trash2 className="w-5 h-5" />
                                 </button>
+                                {isAdmin && selectedSubmission.audioUrl && (
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const response = await fetch(selectedSubmission.audioUrl);
+                                                const blob = await response.blob();
+                                                const url = window.URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.style.display = 'none';
+                                                a.href = url;
+                                                // Try to construct a nice filename
+                                                const extension = selectedSubmission.audioUrl.split('?')[0].split('.').pop() || 'mp3';
+                                                a.download = `${selectedSubmission.title} - ${selectedSubmission.byline || 'Anonymous'}.${extension}`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                window.URL.revokeObjectURL(url);
+                                            } catch (err) {
+                                                console.error('Failed to download audio:', err);
+                                                // Fallback to opening in a new tab if fetch fails due to CORS
+                                                window.open(selectedSubmission.audioUrl, '_blank');
+                                            }
+                                        }}
+                                        className="p-1.5 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded transition"
+                                        title="Download Track"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                    </button>
+                                )}
                             </div>
                             <p className="text-gray-400 text-sm font-medium">
                                 {selectedSubmission.title}

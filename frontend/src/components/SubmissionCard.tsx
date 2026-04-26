@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Pause, Lock, FileText, MessageSquare, ListPlus, FileAudio, Heart, CheckCircle2, Edit } from 'lucide-react';
+import { Play, Pause, Lock, FileText, MessageSquare, ListPlus, FileAudio, Heart, CheckCircle2, Edit, Download } from 'lucide-react';
 import { ArtworkDisplay } from './ui/ArtworkDisplay';
 import { Waveform } from './ui/Waveform';
 import { CollaboratorList } from './ui/CollaboratorList';
@@ -179,6 +179,34 @@ export function SubmissionCard({
                                 title="Edit Submission"
                             >
                                 <Edit className="w-4 h-4" />
+                            </button>
+                        )}
+
+                        {isAdmin && submission.audioUrl && (
+                            <button
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                        const response = await fetch(submission.audioUrl);
+                                        const blob = await response.blob();
+                                        const url = window.URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.style.display = 'none';
+                                        a.href = url;
+                                        const extension = submission.audioUrl.split('?')[0].split('.').pop() || 'mp3';
+                                        a.download = `${submission.title} - ${submission.byline || submission.uploaderEmail?.split('@')[0] || 'Anonymous'}.${extension}`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        window.URL.revokeObjectURL(url);
+                                    } catch (err) {
+                                        console.error('Failed to download audio:', err);
+                                        window.open(submission.audioUrl, '_blank');
+                                    }
+                                }}
+                                className="p-2 rounded-full transition text-blue-400 hover:text-blue-300 hover:bg-gray-800"
+                                title="Download Track"
+                            >
+                                <Download className="w-4 h-4" />
                             </button>
                         )}
 

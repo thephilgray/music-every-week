@@ -15,6 +15,7 @@ export function CreatePrompt() {
   const { success, error } = useToast();
   
   const [step, setStep] = useState<1 | 2>(1);
+  const [stepTransitioning, setStepTransitioning] = useState(false);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
@@ -134,6 +135,16 @@ export function CreatePrompt() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
+    if (step === 1) {
+        if (!title.trim() || !desc.trim() || !deadline) {
+            error("Please fill out Title, Description, and Deadline before continuing.");
+            return;
+        }
+        setStep(2);
+        setStepTransitioning(true);
+        setTimeout(() => setStepTransitioning(false), 500);
+        return;
+    }
 
     if (!user?.uid || !user?.email) {
       error("Authentication required to create a prompt.");
@@ -388,12 +399,15 @@ export function CreatePrompt() {
                 <div className="flex justify-end pt-4 border-t border-gray-700">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                        e.preventDefault();
                         if (!title.trim() || !desc.trim() || !deadline) {
                             error("Please fill out Title, Description, and Deadline before continuing.");
                             return;
                         }
                         setStep(2);
+                        setStepTransitioning(true);
+                        setTimeout(() => setStepTransitioning(false), 500);
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded font-semibold flex items-center gap-2 transition text-sm shadow-md"
                   >
@@ -647,7 +661,7 @@ export function CreatePrompt() {
                   </button>
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || stepTransitioning}
                     className={`flex-1 py-2.5 rounded font-semibold transition text-sm shadow-md ${loading ? 'bg-gray-600 cursor-not-allowed text-gray-300' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                   >
                     {loading ? 'Creating Prompt...' : 'Create Prompt'}

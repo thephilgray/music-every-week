@@ -24,6 +24,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
   const navigate = useNavigate();
   
   const [step, setStep] = useState<1 | 2>(1);
+  const [stepTransitioning, setStepTransitioning] = useState(false);
   const [title, setTitle] = useState(request.title);
   const [desc, setDesc] = useState(request.description);
   
@@ -300,6 +301,16 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (step === 1) {
+        if (!title.trim() || !desc.trim()) {
+            error("Title and Description are required.");
+            return;
+        }
+        setStep(2);
+        setStepTransitioning(true);
+        setTimeout(() => setStepTransitioning(false), 500);
+        return;
+    }
     if (!title.trim() || !desc.trim()) {
         error("Title and Description are required.");
         return;
@@ -596,12 +607,15 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                     </button>
                     <button
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
                           if (!title.trim() || !desc.trim()) {
                             error("Please enter a title and description.");
                             return;
                           }
                           setStep(2);
+                          setStepTransitioning(true);
+                          setTimeout(() => setStepTransitioning(false), 500);
                         }}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded font-semibold flex items-center gap-2 text-sm shadow-md transition"
                     >
@@ -901,7 +915,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                         </button>
                         <button 
                             type="submit" 
-                            disabled={loading || isDeleting}
+                            disabled={loading || isDeleting || stepTransitioning}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50"
                         >
                             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

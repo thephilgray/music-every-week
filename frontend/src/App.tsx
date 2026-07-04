@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/Layout/AppLayout';
 import { Home } from './pages/Home';
 import { Inbox } from './pages/Inbox';
-import { RequestDetail } from './pages/RequestDetail';
+import { PromptDetail } from './pages/PromptDetail';
 import { CreatorTools } from './pages/CreatorTools';
 import { Directory } from './pages/Directory';
 import { Profile } from './pages/Profile';
@@ -44,7 +44,7 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Home />} />
               <Route path="/feed" element={<Community />} />
-              <Route path="/request/:id" element={<RequestDetail />} />
+              <Route path="/request/:id" element={<PromptDetail />} />
               <Route path="/inbox" element={<Inbox />} />
               <Route path="/creator" element={<CreatorTools />} />
               <Route path="/directory" element={<Directory />} />

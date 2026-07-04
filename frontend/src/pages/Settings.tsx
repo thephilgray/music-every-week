@@ -449,10 +449,10 @@ export function Settings() {
             <div className="flex items-center justify-between border-t border-gray-800 pt-4 gap-x-4">
                 <div>
                     <h3 className="text-white font-medium mb-1 flex items-center gap-2">
-                        Host Requests
+                        Host Prompts
                     </h3>
                     <p className="text-xs text-gray-400">
-                        Enable the ability to create new requests and invite others.
+                        Enable the ability to create new prompts and invite others.
                     </p>
                 </div>
                 <button 
@@ -503,8 +503,8 @@ export function Settings() {
         <div className="space-y-6">
             <div className="flex items-center justify-between gap-x-4">
                 <div>
-                    <label className="text-white font-medium block">Show Hosted Requests on Profile</label>
-                    <p className="text-gray-400 text-xs">List your hosted requests on your public profile page.</p>
+                    <label className="text-white font-medium block">Show Hosted Prompts on Profile</label>
+                    <p className="text-gray-400 text-xs">List your hosted prompts on your public profile page.</p>
                 </div>
                 <button 
                     onClick={handleToggleRequestsVisibility}

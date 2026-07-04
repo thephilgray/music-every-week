@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-import { CreateRequest } from '../components/CreateRequest';
-import { RequestList } from '../components/RequestList';
+import { CreatePrompt } from '../components/CreatePrompt';
+import { PromptList } from '../components/PromptList';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, onSnapshot, where } from 'firebase/firestore';
-import type { FileRequest } from '../types';
+import type { Prompt } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 
 export function Home() {
   const { user, isAdmin, isHost, participantEmail } = useAuth(); 
   const [showCreate, setShowCreate] = useState(false);
-  const [requests, setRequests] = useState<FileRequest[]>([]);
+  const [requests, setRequests] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function Home() {
     const uid = user?.uid;
 
     const unsubs: (() => void)[] = [];
-    const resultsMap = new Map<string, FileRequest>();
+    const resultsMap = new Map<string, Prompt>();
 
     const updateState = () => {
         const sorted = Array.from(resultsMap.values())
@@ -40,7 +40,7 @@ export function Home() {
     if (uid) {
         const qOwner = query(collection(db, 'requests'), where('ownerPub', '==', uid));
         unsubs.push(onSnapshot(qOwner, (snap) => {
-            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as FileRequest));
+            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as Prompt));
             updateState();
         }, (err) => console.error("Owner query error:", err)));
     }
@@ -49,7 +49,7 @@ export function Home() {
     if (email) {
         const qInvited = query(collection(db, 'requests'), where('accessList', 'array-contains', email));
         unsubs.push(onSnapshot(qInvited, (snap) => {
-            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as FileRequest));
+            snap.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as Prompt));
             updateState();
         }, (err) => console.error("Invited query error:", err)));
     }
@@ -84,7 +84,7 @@ export function Home() {
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-center sm:text-left">
            <div className="flex items-center justify-center sm:justify-start gap-3">
-               <h1 className="text-3xl font-bold text-white mb-2">Active Requests</h1>
+               <h1 className="text-3xl font-bold text-white mb-2">Active Prompts</h1>
            </div>
            <p className="text-gray-400">Submit tracks, listen, and provide feedback</p>
         </div>
@@ -95,18 +95,18 @@ export function Home() {
         >
           <Plus className={`w-5 h-5 transition-transform ${showCreate ? 'rotate-45' : ''}`} />
           <span className="md:hidden">{showCreate ? 'Cancel' : 'New'}</span>
-          <span className="hidden md:inline">{showCreate ? 'Cancel' : 'New Request'}</span>
+          <span className="hidden md:inline">{showCreate ? 'Cancel' : 'New Prompt'}</span>
         </button>
         )}
       </div>
 
       {showCreate && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl animate-in fade-in slide-in-from-top-4">
-           <CreateRequest />
+           <CreatePrompt />
         </div>
       )}
 
-      <RequestList 
+      <PromptList 
           requests={requests} 
           loading={loading} 
           filter="active" 

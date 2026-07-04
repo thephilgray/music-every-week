@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fixUrl } from '../lib/url';
-import type { FileRequest } from '../types';
+import type { Prompt } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
 import { Clock } from 'lucide-react';
 
-interface RequestCardProps {
-  request: FileRequest;
+interface PromptCardProps {
+  request: Prompt;
   isClosed: boolean;
   hideStatus?: boolean;
 }
 
-export function RequestCard({ request, isClosed, hideStatus }: RequestCardProps) {
+export function PromptCard({ request, isClosed, hideStatus }: PromptCardProps) {
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [timerColor, setTimerColor] = useState<string>('text-blue-400');
 

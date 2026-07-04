@@ -62,7 +62,10 @@ export interface FileRequest {
   previewTrackCount?: number; // Number of tracks visible to submitters before deadline
   deleted?: boolean;
   updatedAt?: number | FieldValue; // Changed type
+  sessionId?: string; // Linked session ID
 }
+
+export type Prompt = FileRequest;
 
 export interface Submission {
   id?: string;
@@ -196,4 +199,17 @@ export interface MewEvent {
   submittedByEmail?: string;
   interestedUsers?: string[]; // Array of UIDs
   createdAt: number | FieldValue;
+}
+
+export interface Session {
+  id?: string;
+  name: string;           // e.g. "Fall 2025"
+  description?: string;
+  ownerPub: string;       // Firebase UID
+  ownerEmail: string;
+  createdAt: number | FieldValue;
+  promptIds?: string[];   // ordered list of prompt IDs in this session
+  artworkUrl?: string;
+  startDate?: string;     // ISO date
+  cadence?: string;       // e.g. "biweekly"
 }

@@ -474,10 +474,10 @@ export function Profile() {
       try {
           // Update requests collection
           await updateDoc(doc(db, 'requests', req.id), { hiddenFromProfile: newValue, updatedAt: serverTimestamp() });
-          success("Request visibility updated.");
+          success("Prompt visibility updated.");
       } catch (err) {
           console.error("Failed to toggle request visibility:", err);
-          error("Failed to update request visibility.");
+          error("Failed to update prompt visibility.");
       }
   };
 
@@ -625,7 +625,7 @@ export function Profile() {
                         </div>
                         <div className="flex flex-col items-center md:items-start">
                             <span className="text-white font-bold text-lg">{visibleRequests.length}</span>
-                            <span>Requests</span>
+                            <span>Prompts</span>
                         </div>
                         <div className="flex flex-col items-center md:items-start ml-4 pl-4 border-l border-gray-800">
                             <span className="text-blue-400 font-bold text-lg">{profile.points || 0}</span>
@@ -655,7 +655,7 @@ export function Profile() {
                 onClick={() => setActiveTab('requests')}
                 className={`pb-4 text-sm font-medium transition relative ${activeTab === 'requests' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
             >
-                Hosted Requests
+                Hosted Prompts
                 {activeTab === 'requests' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
             </button>
         </div>
@@ -720,7 +720,7 @@ export function Profile() {
                  {visibleRequests.length === 0 && (
                     <div className="py-12 text-center text-gray-500 border border-gray-800 border-dashed rounded-lg">
                         <List className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                        No requests hosted yet.
+                        No prompts hosted yet.
                     </div>
                 )}
                 {visibleRequests.map(req => {

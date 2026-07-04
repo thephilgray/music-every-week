@@ -635,7 +635,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
                </>
                ) : (
                    <div className="text-gray-500 text-sm italic w-full text-center p-2 bg-gray-900 rounded">
-                       You must join this request to comment.
+                       You must join this prompt to comment.
                    </div>
                )}
            </div>

@@ -1,16 +1,16 @@
 import { useAuth } from '../contexts/AuthContext';
-import { RequestCard } from './RequestCard';
+import { PromptCard } from './PromptCard';
 import { Skeleton } from './ui/Skeleton';
-import type { FileRequest } from '../types';
+import type { Prompt } from '../types';
 import { Music } from 'lucide-react';
 
-interface RequestListProps {
-  requests: FileRequest[];
+interface PromptListProps {
+  requests: Prompt[];
   loading: boolean;
   filter?: 'active' | 'archived' | 'mine';
 }
 
-export function RequestList({ requests, loading, filter = 'active' }: RequestListProps) {
+export function PromptList({ requests, loading, filter = 'active' }: PromptListProps) {
   const { user, participantEmail, isAdmin } = useAuth();
 
   // Filter Logic based on deadline and status
@@ -47,7 +47,7 @@ export function RequestList({ requests, loading, filter = 'active' }: RequestLis
       return (
           <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800">
               <Music className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-500">No {filter} requests found.</p>
+              <p className="text-gray-500">No {filter} prompts found.</p>
           </div>
       );
   }
@@ -57,7 +57,7 @@ export function RequestList({ requests, loading, filter = 'active' }: RequestLis
       {filtered.map(req => {
           const isClosed = req.deadline ? new Date(req.deadline).getTime() < Date.now() : false;
           return (
-            <RequestCard 
+            <PromptCard 
                 key={req.id} 
                 request={req} 
                 isClosed={isClosed}

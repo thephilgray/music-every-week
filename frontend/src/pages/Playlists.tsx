@@ -8,7 +8,7 @@ import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, s
 import type { Playlist, Submission, FileRequest } from '../types';
 import { getTimestampAsNumber, seededRandom } from '../lib/utils';
 import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio, GripVertical, Check } from 'lucide-react';
-import { RequestCard } from '../components/RequestCard';
+import { PromptCard } from '../components/PromptCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
 import { FilterPopover } from '../components/ui/FilterPopover';
@@ -404,7 +404,7 @@ function PlaylistList() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {hostedRequests.map(req => (
-                        <RequestCard 
+                        <PromptCard 
                             key={req.id} 
                             request={req} 
                             isClosed={false} 

@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "cd .. && vercel --prod"
+    "deploy:rules": "cd .. && npx -y firebase-tools@latest deploy --only firestore:rules",
+    "deploy:app": "cd .. && vercel --prod",
+    "deploy": "npm run deploy:rules && npm run deploy:app"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.995.0",

@@ -603,7 +603,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
         <div className="p-6 border-b border-gray-800">
             <h2 className="text-xl font-bold text-white">{existingSubmission ? 'Edit Submission' : 'Submit Track'}</h2>
             <p className="text-sm text-gray-400">
-                {existingSubmission ? 'Update your contribution details.' : 'Upload your contribution to this request.'}
+                {existingSubmission ? 'Update your contribution details.' : 'Upload your contribution to this prompt.'}
             </p>
         </div>
 

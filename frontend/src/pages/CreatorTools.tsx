@@ -4,13 +4,13 @@ import { Link } from 'react-router-dom';
 import JSZip from 'jszip';
 import { useAuth } from '../contexts/AuthContext'; 
 import { useToast } from '../contexts/ToastContext';
-import { EditRequest } from '../components/EditRequest';
+import { EditPrompt } from '../components/EditPrompt';
 import { SubmitTrack } from '../components/SubmitTrack'; 
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import type { FileRequest, Submission, UserProfile } from '../types';
+import type { Prompt, Submission, UserProfile, Session } from '../types';
 import { getTimestampAsNumber, copyToClipboard } from '../lib/utils';
 import { db } from '../lib/firebase'; 
-import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc, deleteDoc, orderBy } from 'firebase/firestore'; 
+import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, addDoc, getDoc, deleteDoc, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore'; 
 
 interface ParticipantRow {
     id: string;
@@ -28,15 +28,26 @@ export function CreatorTools() {
 
   
   // Tabs
-  const [activeTab, setActiveTab] = useState<'requests' | 'submissions'>('requests');
+  const [activeTab, setActiveTab] = useState<'sessions' | 'requests' | 'submissions'>('sessions');
+
+  // Sessions Data
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
+  const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
+  const [sessionFormName, setSessionFormName] = useState('');
+  const [sessionFormDesc, setSessionFormDesc] = useState('');
+  const [sessionFormStartDate, setSessionFormStartDate] = useState('');
+  const [sessionFormCadence, setSessionFormCadence] = useState('Bi-weekly');
+  const [addPromptToSessionId, setAddPromptToSessionId] = useState('');
 
   // Requests Data
-  const [requestsByUid, setRequestsByUid] = useState<FileRequest[]>([]);
-  const [requestsByEmail, setRequestsByEmail] = useState<FileRequest[]>([]);
-  const [requestsAll, setRequestsAll] = useState<FileRequest[]>([]); // New state for admins
-  const [myRequests, setMyRequests] = useState<FileRequest[]>([]);
+  const [requestsByUid, setRequestsByUid] = useState<Prompt[]>([]);
+  const [requestsByEmail, setRequestsByEmail] = useState<Prompt[]>([]);
+  const [requestsAll, setRequestsAll] = useState<Prompt[]>([]); // New state for admins
+  const [myRequests, setMyRequests] = useState<Prompt[]>([]);
 
-  const [selectedRequest, setSelectedRequest] = useState<FileRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<Prompt | null>(null);
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [isEditRequestOpen, setIsEditRequestOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -79,7 +90,7 @@ export function CreatorTools() {
 
   // Combine Requests
   useEffect(() => {
-      const combined = new Map<string, FileRequest>();
+      const combined = new Map<string, Prompt>();
       requestsByUid.forEach(r => combined.set(r.id!, r));
       requestsByEmail.forEach(r => combined.set(r.id!, r));
       requestsAll.forEach(r => combined.set(r.id!, r)); // Admins see everything
@@ -117,11 +128,11 @@ export function CreatorTools() {
             where('ownerPub', '==', user.uid)
         );
         unsubs.push(onSnapshot(qUid, (snapshot) => {
-            const res: FileRequest[] = [];
+            const res: Prompt[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
                 if (data.deleted) return;
-                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
+                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as Prompt);
             });
             console.log("CreatorTools: Requests by UID (snapshot.empty:", snapshot.empty, "):", res);
             setRequestsByUid(res);
@@ -137,11 +148,11 @@ export function CreatorTools() {
             where('ownerEmail', 'in', Array.from(new Set([email, normalizedEmail])))
         );
         unsubs.push(onSnapshot(qEmail, (snapshot) => {
-            const res: FileRequest[] = [];
+            const res: Prompt[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
                 if (data.deleted) return;
-                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
+                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as Prompt);
             });
             console.log("CreatorTools: Requests by Email (snapshot.empty:", snapshot.empty, "):", res);
             setRequestsByEmail(res);
@@ -155,11 +166,11 @@ export function CreatorTools() {
             orderBy('createdAt', 'desc')
         );
         unsubs.push(onSnapshot(qAll, (snapshot) => {
-            const res: FileRequest[] = [];
+            const res: Prompt[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
                 if (data.deleted) return;
-                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as FileRequest);
+                if (data.title) res.push({ id: doc.id, ...data, createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt } as Prompt);
             });
             console.log("CreatorTools: All Requests (Admin):", res.length);
             setRequestsAll(res);
@@ -214,6 +225,43 @@ export function CreatorTools() {
       return () => unsubs.forEach(u => u());
   }, [user, participantEmail]);
 
+  // Fetch Sessions
+  useEffect(() => {
+      if (!user?.uid && !isAdmin) return;
+      
+      const unsubs: (() => void)[] = [];
+      if (isAdmin) {
+          const qAll = query(collection(db, 'sessions'), orderBy('createdAt', 'desc'));
+          unsubs.push(onSnapshot(qAll, (snapshot) => {
+              const res: Session[] = [];
+              snapshot.forEach(docSnap => {
+                  res.push({ id: docSnap.id, ...docSnap.data() } as Session);
+              });
+              setSessions(res);
+          }));
+      } else if (user?.uid) {
+          const qUid = query(collection(db, 'sessions'), where('ownerPub', '==', user.uid));
+          unsubs.push(onSnapshot(qUid, (snapshot) => {
+              const res: Session[] = [];
+              snapshot.forEach(docSnap => {
+                  res.push({ id: docSnap.id, ...docSnap.data() } as Session);
+              });
+              res.sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
+              setSessions(res);
+          }));
+      }
+      return () => unsubs.forEach(u => u());
+  }, [user, isAdmin]);
+
+  // Keep selectedSession synced with sessions array
+  useEffect(() => {
+      if (!selectedSession || selectedSession.id === 'UNASSIGNED') return;
+      const updated = sessions.find(s => s.id === selectedSession.id);
+      if (updated) {
+          setSelectedSession(updated);
+      }
+  }, [sessions]);
+
   // Fetch details for selectedRequest
   useEffect(() => {
       if (!selectedRequest?.id) return;
@@ -224,7 +272,7 @@ export function CreatorTools() {
       // Subscribe to Request Document
       const unsubscribe = onSnapshot(requestDocRef, (docSnap) => {
           if (docSnap.exists()) {
-              const data = docSnap.data() as FileRequest;
+              const data = docSnap.data() as Prompt;
               setSelectedRequest(prev => {
                   if (!prev || prev.id !== reqId) return prev;
                   return {
@@ -638,10 +686,10 @@ export function CreatorTools() {
           console.log("handleDeleteRequest: Success.");
           setSelectedRequest(null);
           setShowDeleteRequestConfirm(false);
-          success("Request deleted.");
+          success("Prompt deleted.");
       } catch (e) {
           console.error("Delete request failed in catch block", e);
-          error("Failed to delete request: " + (e as Error).message);
+          error("Failed to delete prompt: " + (e as Error).message);
       } finally {
           setActionLoading(false);
       }
@@ -696,18 +744,24 @@ export function CreatorTools() {
     <div className="flex flex-col lg:flex-row h-[calc(100vh-theme(spacing.16))]">
         {
 /* Sidebar */}
-        <div className={`w-full lg:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission ? 'hidden lg:flex' : 'flex'}`}>
+        <div className={`w-full lg:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission || selectedSession ? 'hidden lg:flex' : 'flex'}`}>
             {
 /* Tabs */}
             <div className="flex border-b border-gray-800">
                 <button
-                    onClick={() => { setActiveTab('requests'); setSelectedSubmission(null); }}
-                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'requests' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    onClick={() => { setActiveTab('sessions'); setSelectedRequest(null); setSelectedSubmission(null); }}
+                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'sessions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    <List className="w-4 h-4" /> Requests
+                    <Archive className="w-4 h-4" /> Sessions
                 </button>
                 <button
-                    onClick={() => { setActiveTab('submissions'); setSelectedRequest(null); }}
+                    onClick={() => { setActiveTab('requests'); setSelectedSubmission(null); setSelectedSession(null); }}
+                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'requests' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                    <List className="w-4 h-4" /> Prompts
+                </button>
+                <button
+                    onClick={() => { setActiveTab('submissions'); setSelectedRequest(null); setSelectedSession(null); }}
                     className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'submissions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
                 >
                     <Music className="w-4 h-4" /> Submissions
@@ -717,7 +771,53 @@ export function CreatorTools() {
             {/* Sync Button - REMOVED (Migration Tool) */}
             
             <div className="p-4 space-y-1 flex-1 overflow-y-auto">
-                {activeTab === 'requests' ? (
+                {activeTab === 'sessions' ? (
+                    <div className="space-y-2">
+                        <button
+                            onClick={() => {
+                                setSessionFormName('');
+                                setSessionFormDesc('');
+                                setSessionFormStartDate('');
+                                setSessionFormCadence('Bi-weekly');
+                                setIsCreateSessionOpen(true);
+                            }}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition shadow-md mb-3"
+                        >
+                            + New Session
+                        </button>
+                        
+                        {sessions.map(sess => (
+                            <button
+                                key={sess.id}
+                                onClick={() => setSelectedSession(sess)}
+                                className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition-colors ${selectedSession?.id === sess.id 
+                                    ? 'bg-blue-900/30 text-blue-400 border border-blue-500/30'
+                                    : 'text-gray-300 hover:bg-gray-900 hover:text-white'
+                                }`}
+                            >
+                                <div className="truncate">
+                                    <div className="font-semibold truncate">{sess.name}</div>
+                                    <div className="text-xs text-gray-500">{myRequests.filter(r => r.sessionId === sess.id).length} Prompts</div>
+                                </div>
+                                <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedSession?.id === sess.id ? 'opacity-100' : ''}`} />
+                            </button>
+                        ))}
+
+                        <button
+                            onClick={() => setSelectedSession({ id: 'UNASSIGNED', name: 'Standalone Prompts', description: 'Prompts not assigned to any session group.', ownerPub: user?.uid || '', ownerEmail: user?.email || '', createdAt: 0 })}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition-colors mt-4 border-t border-gray-800/80 pt-3 ${selectedSession?.id === 'UNASSIGNED' 
+                                ? 'bg-gray-800 text-gray-200 border border-gray-700'
+                                : 'text-gray-400 hover:bg-gray-900 hover:text-gray-300'
+                            }`}
+                        >
+                            <div className="truncate">
+                                <div className="font-medium truncate">Standalone Prompts</div>
+                                <div className="text-xs text-gray-500">{myRequests.filter(r => !r.sessionId).length} Unassigned</div>
+                            </div>
+                            <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedSession?.id === 'UNASSIGNED' ? 'opacity-100' : ''}`} />
+                        </button>
+                    </div>
+                ) : activeTab === 'requests' ? (
                     <>
                         {myRequests.map(req => (
                             <button
@@ -732,7 +832,7 @@ export function CreatorTools() {
                                 <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedRequest?.id === req.id ? 'opacity-100' : ''}`} />
                             </button>
                         ))}
-                        {myRequests.length === 0 && <div className="text-gray-600 text-sm px-2 italic">No requests created.</div>}
+                        {myRequests.length === 0 && <div className="text-gray-600 text-sm px-2 italic">No prompts created.</div>}
                     </>
                 ) : (
                     <>
@@ -755,10 +855,196 @@ export function CreatorTools() {
             </div>
         </div>
 
-        {
-/* Main Content */}
-        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission ? 'block' : 'hidden lg:block'}`}>
-            {activeTab === 'requests' && selectedRequest ? (
+        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission || selectedSession ? 'block' : 'hidden lg:block'}`}>
+            {activeTab === 'sessions' && selectedSession ? (
+                <div>
+                    <button 
+                        onClick={() => setSelectedSession(null)}
+                        className="lg:hidden mb-4 flex items-center gap-2 text-gray-400 hover:text-white"
+                    >
+                        <ArrowLeft className="w-4 h-4" /> Back to Sessions
+                    </button>
+
+                    <div className="flex items-center justify-between border-b border-gray-800 pb-6 mb-6 flex-wrap gap-4">
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                                    <Archive className="w-7 h-7 text-blue-400" /> {selectedSession.name}
+                                </h1>
+                            </div>
+                            {selectedSession.description && (
+                                <p className="text-gray-400 text-sm mt-1">{selectedSession.description}</p>
+                            )}
+                            <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+                                {selectedSession.startDate && <span>Start: {new Date(selectedSession.startDate).toLocaleDateString()}</span>}
+                                {selectedSession.cadence && <span>Cadence: {selectedSession.cadence}</span>}
+                                <span>{myRequests.filter(r => selectedSession.id === 'UNASSIGNED' ? !r.sessionId : r.sessionId === selectedSession.id).length} Prompts</span>
+                            </div>
+                        </div>
+                        {selectedSession.id !== 'UNASSIGNED' && (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => {
+                                        setSessionFormName(selectedSession.name);
+                                        setSessionFormDesc(selectedSession.description || '');
+                                        setSessionFormStartDate(selectedSession.startDate || '');
+                                        setSessionFormCadence(selectedSession.cadence || 'Bi-weekly');
+                                        setIsEditSessionOpen(true);
+                                    }}
+                                    className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm flex items-center gap-1.5 transition border border-gray-700"
+                                >
+                                    <Edit className="w-4 h-4" /> Edit Session
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (confirm(`Delete session "${selectedSession.name}"? The linked prompts will become standalone.`)) {
+                                            await deleteDoc(doc(db, 'sessions', selectedSession.id!));
+                                            const linked = myRequests.filter(r => r.sessionId === selectedSession.id);
+                                            for (const r of linked) {
+                                                await updateDoc(doc(db, 'requests', r.id!), { sessionId: null });
+                                            }
+                                            setSelectedSession(null);
+                                            success("Session deleted and prompts unlinked.");
+                                        }
+                                    }}
+                                    className="bg-red-900/20 hover:bg-red-900/40 text-red-400 px-3 py-1.5 rounded text-sm flex items-center gap-1.5 transition border border-red-800/30"
+                                >
+                                    <Trash2 className="w-4 h-4" /> Delete
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Prompts in this Session */}
+                    <div className="space-y-3 mb-8">
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                            {selectedSession.id === 'UNASSIGNED' ? 'Standalone Prompts' : 'Session Prompts'}
+                        </h3>
+                        {(() => {
+                            const sessionPrompts = myRequests.filter(r => selectedSession.id === 'UNASSIGNED' ? !r.sessionId : r.sessionId === selectedSession.id);
+                            if (sessionPrompts.length === 0) {
+                                return (
+                                    <div className="p-8 text-center bg-gray-950 border border-gray-800/80 rounded-xl text-gray-500 italic">
+                                        No prompts in this group yet.
+                                    </div>
+                                );
+                            }
+                            return sessionPrompts.map(req => (
+                                <div key={req.id} className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap hover:border-gray-700 transition">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-semibold text-white text-base">{req.title}</h4>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-semibold ${req.accessMode === 'direct' ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'bg-purple-900/30 text-purple-400 border border-purple-800/50'}`}>
+                                                {req.accessMode || 'direct'}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-gray-400 mt-1 flex items-center gap-4">
+                                            <span>Deadline: {req.deadline ? new Date(req.deadline).toLocaleDateString() : 'None'}</span>
+                                            {req.participants && <span>{Object.keys(req.participants).length} Participants</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {selectedSession.id === 'UNASSIGNED' ? (
+                                            <select
+                                                onChange={async (e) => {
+                                                    const targetSessId = e.target.value;
+                                                    if (!targetSessId) return;
+                                                    try {
+                                                        await updateDoc(doc(db, 'requests', req.id!), { sessionId: targetSessId });
+                                                        await updateDoc(doc(db, 'sessions', targetSessId), { promptIds: arrayUnion(req.id!) });
+                                                        success(`Moved "${req.title}" to session!`);
+                                                    } catch (err: any) {
+                                                        error("Failed to assign: " + err.message);
+                                                    }
+                                                }}
+                                                defaultValue=""
+                                                className="bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-xs text-gray-300 focus:border-blue-500 outline-none"
+                                            >
+                                                <option value="" disabled>+ Assign to Session</option>
+                                                {sessions.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        await updateDoc(doc(db, 'requests', req.id!), { sessionId: null });
+                                                        if (selectedSession.id) {
+                                                            await updateDoc(doc(db, 'sessions', selectedSession.id), { promptIds: arrayRemove(req.id!) });
+                                                        }
+                                                        success("Removed from session");
+                                                    } catch (err: any) {
+                                                        error("Failed to remove: " + err.message);
+                                                    }
+                                                }}
+                                                className="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-red-400 px-3 py-1.5 rounded text-xs transition border border-gray-700"
+                                                title="Remove from this session (make standalone)"
+                                            >
+                                                Remove from Session
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                setSelectedRequest(req);
+                                                setActiveTab('requests');
+                                            }}
+                                            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-3 py-1.5 rounded text-xs font-medium transition border border-blue-500/30 flex items-center gap-1"
+                                        >
+                                            Manage <ChevronRight className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ));
+                        })()}
+                    </div>
+
+                    {/* Add existing prompt to session */}
+                    {selectedSession.id !== 'UNASSIGNED' && (
+                        <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 mt-6">
+                            <h4 className="text-sm font-semibold text-white mb-2">Add Existing Prompt to Session</h4>
+                            <p className="text-xs text-gray-400 mb-3">Select a prompt from your standalone or other sessions to pull into this session group.</p>
+                            <div className="flex gap-2 flex-wrap">
+                                <select
+                                    value={addPromptToSessionId}
+                                    onChange={e => setAddPromptToSessionId(e.target.value)}
+                                    className="flex-1 min-w-[200px] bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
+                                >
+                                    <option value="">-- Select a Prompt --</option>
+                                    {myRequests.filter(r => r.sessionId !== selectedSession.id).map(r => (
+                                        <option key={r.id} value={r.id!}>
+                                            {r.title} ({r.sessionId ? 'In another session' : 'Standalone'})
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={async () => {
+                                        if (!addPromptToSessionId) return;
+                                        try {
+                                            const reqToMove = myRequests.find(r => r.id === addPromptToSessionId);
+                                            if (reqToMove?.sessionId) {
+                                                await updateDoc(doc(db, 'sessions', reqToMove.sessionId), { promptIds: arrayRemove(addPromptToSessionId) });
+                                            }
+                                            await updateDoc(doc(db, 'requests', addPromptToSessionId), { sessionId: selectedSession.id });
+                                            if (selectedSession.id) {
+                                                await updateDoc(doc(db, 'sessions', selectedSession.id), { promptIds: arrayUnion(addPromptToSessionId) });
+                                            }
+                                            setAddPromptToSessionId('');
+                                            success("Prompt added to session!");
+                                        } catch (err: any) {
+                                            error("Failed to add prompt: " + err.message);
+                                        }
+                                    }}
+                                    disabled={!addPromptToSessionId}
+                                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+                                >
+                                    + Add to Session
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            ) : activeTab === 'requests' && selectedRequest ? (
                 <div>
                     <button 
                         onClick={() => setSelectedRequest(null)}
@@ -1099,14 +1385,121 @@ export function CreatorTools() {
                 </div>
             ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500">
-                    {activeTab === 'requests' ? <Users className="w-16 h-16 mb-4 opacity-20" /> : <Music className="w-16 h-16 mb-4 opacity-20" />}
-                    <p>Select a {activeTab === 'requests' ? 'request' : 'submission'} from the sidebar to manage it.</p>
+                    {activeTab === 'sessions' ? <Archive className="w-16 h-16 mb-4 opacity-20" /> : activeTab === 'requests' ? <Users className="w-16 h-16 mb-4 opacity-20" /> : <Music className="w-16 h-16 mb-4 opacity-20" />}
+                    <p>Select a {activeTab === 'sessions' ? 'session' : activeTab === 'requests' ? 'prompt' : 'submission'} from the sidebar to manage it.</p>
                 </div>
             )}
         </div>
         
+        {/* Create / Edit Session Modal */}
+        {(isCreateSessionOpen || isEditSessionOpen) && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {isEditSessionOpen ? 'Edit Session' : 'Create New Session'}
+                    </h3>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!sessionFormName.trim()) return;
+                        if (isEditSessionOpen && selectedSession?.id) {
+                            try {
+                                await updateDoc(doc(db, 'sessions', selectedSession.id), {
+                                    name: sessionFormName.trim(),
+                                    description: sessionFormDesc.trim(),
+                                    startDate: sessionFormStartDate || null,
+                                    cadence: sessionFormCadence || null,
+                                    updatedAt: serverTimestamp()
+                                });
+                                success("Session updated!");
+                                setIsEditSessionOpen(false);
+                            } catch (err: any) {
+                                error("Failed to update session: " + err.message);
+                            }
+                        } else {
+                            try {
+                                await addDoc(collection(db, 'sessions'), {
+                                    name: sessionFormName.trim(),
+                                    description: sessionFormDesc.trim(),
+                                    startDate: sessionFormStartDate || null,
+                                    cadence: sessionFormCadence || null,
+                                    ownerPub: user?.uid,
+                                    ownerEmail: user?.email?.toLowerCase(),
+                                    createdAt: serverTimestamp(),
+                                    promptIds: []
+                                });
+                                success("Session created!");
+                                setIsCreateSessionOpen(false);
+                            } catch (err: any) {
+                                error("Failed to create session: " + err.message);
+                            }
+                        }
+                    }} className="space-y-4">
+                        <div>
+                            <label className="block text-gray-400 text-sm mb-1">Session Name *</label>
+                            <input
+                                type="text"
+                                value={sessionFormName}
+                                onChange={e => setSessionFormName(e.target.value)}
+                                placeholder="e.g. Summer 2026 Songwriting"
+                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-400 text-sm mb-1">Description (Optional)</label>
+                            <textarea
+                                value={sessionFormDesc}
+                                onChange={e => setSessionFormDesc(e.target.value)}
+                                placeholder="e.g. 10 weeks of summer beat challenges..."
+                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-20 text-sm"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-gray-400 text-sm mb-1">Start Date</label>
+                                <input
+                                    type="date"
+                                    value={sessionFormStartDate}
+                                    onChange={e => setSessionFormStartDate(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-gray-400 text-sm mb-1">Cadence</label>
+                                <select
+                                    value={sessionFormCadence}
+                                    onChange={e => setSessionFormCadence(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                                >
+                                    <option value="Weekly">Weekly</option>
+                                    <option value="Bi-weekly">Bi-weekly</option>
+                                    <option value="Monthly">Monthly</option>
+                                    <option value="Custom">Custom</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
+                            <button
+                                type="button"
+                                onClick={() => { setIsCreateSessionOpen(false); setIsEditSessionOpen(false); }}
+                                className="px-4 py-2 text-gray-400 hover:text-white text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded font-semibold text-sm"
+                            >
+                                {isEditSessionOpen ? 'Save Changes' : 'Create Session'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        )}
+
         {isEditRequestOpen && selectedRequest && (
-            <EditRequest 
+            <EditPrompt 
                 request={selectedRequest}
                 onClose={() => setIsEditRequestOpen(false)}
                 onUpdate={() => {

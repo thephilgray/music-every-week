@@ -387,7 +387,7 @@ export function Community() {
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-8 gap-4 text-center sm:text-left">
             <div className="flex flex-col items-center sm:items-start">
                 <h1 className="text-3xl font-bold text-white mb-2">Community Feed</h1>
-                <p className="text-gray-400">See what's happening across all requests.</p>
+                <p className="text-gray-400">See what's happening across all prompts.</p>
             </div>
             {user?.uid && (
                 <button 

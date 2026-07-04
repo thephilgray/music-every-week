@@ -50,6 +50,11 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // --------------------------------------------------------------------------
     // AUTHENTICATED ONLY (Core App Data)
     // --------------------------------------------------------------------------

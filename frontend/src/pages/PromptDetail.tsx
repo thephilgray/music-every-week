@@ -7,15 +7,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { SubmitTrack } from '../components/SubmitTrack';
-import { EditRequest } from '../components/EditRequest'; // Added import
+import { EditPrompt } from '../components/EditPrompt'; // Added import
 import { SubmissionCard } from '../components/SubmissionCard';
 import { fixUrl } from '../lib/url';
 import { seededRandom, getTimestampAsNumber, copyToClipboard } from '../lib/utils'; // Added imports
 import { FilterPopover } from '../components/ui/FilterPopover'; // Added import
 import { useListenedTracks } from '../hooks/useListenedTracks'; // Added import
-import type { FileRequest, Submission } from '../types';
+import type { Prompt, Submission } from '../types';
 
-export function RequestDetail() {
+export function PromptDetail() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation(); // Added useLocation
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,7 +42,7 @@ export function RequestDetail() {
     }
   }, [searchParams, setSearchParams]);
 
-  const [request, setRequest] = useState<FileRequest | null>(null);
+  const [request, setRequest] = useState<Prompt | null>(null);
   const [hostName, setHostName] = useState<string>('');
   const [hostProfileId, setHostProfileId] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -150,7 +150,7 @@ export function RequestDetail() {
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists()) {
-          const data = docSnap.data() as FileRequest;
+          const data = docSnap.data() as Prompt;
           if (data.deleted) {
               setRequest(null);
               setIsLoading(false);
@@ -716,7 +716,7 @@ const computedVisibleSubmissions = useMemo(() => {
       play(shuffledSubmissions[0], shuffledSubmissions, { 
         type: 'request', 
         id: request?.id!,
-        name: request?.title || 'Request', 
+        name: request?.title || 'Prompt', 
         link: `/request/${request?.id}`,
         artworkUrl: request?.artworkUrl
       });
@@ -752,9 +752,9 @@ const computedVisibleSubmissions = useMemo(() => {
                     <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
                         <AlertTriangle className="w-8 h-8 text-yellow-500" />
                     </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">Request Not Found</h2>
+                    <h2 className="text-2xl font-bold text-white mb-2">Prompt Not Found</h2>
                     <p className="text-gray-500 mb-8 max-w-md">
-                        This request may have been deleted by the host or does not exist.
+                        This prompt may have been deleted by the host or does not exist.
                     </p>
                     <Link to="/" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center gap-2 justify-center">
                         <ArrowLeft className="w-4 h-4" /> Return Home
@@ -788,7 +788,7 @@ const computedVisibleSubmissions = useMemo(() => {
   return (
         <div className="max-w-5xl mx-auto p-2 md:p-8">
             <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6">
-                <ArrowLeft className="w-4 h-4" /> Back to Requests
+                <ArrowLeft className="w-4 h-4" /> Back to Prompts
             </Link>
 
             {/* Header / Banner */}
@@ -818,7 +818,7 @@ const computedVisibleSubmissions = useMemo(() => {
                                     <button 
                                         onClick={() => setIsEditRequestOpen(true)}
                                         className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition"
-                                        title="Edit Request"
+                                        title="Edit Prompt"
                                     >
                                         <Edit className="w-5 h-5" />
                                     </button>
@@ -1037,7 +1037,7 @@ const computedVisibleSubmissions = useMemo(() => {
 
             {/* Edit Request Modal */}
             {isEditRequestOpen && request && (
-                <EditRequest 
+                <EditPrompt 
                     request={request}
                     onClose={() => setIsEditRequestOpen(false)}
                     onUpdate={() => {

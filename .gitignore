@@ -4,9 +4,6 @@ bin/
 *.js.map
 *.ts.map
 .DS_Store
-.pulumi/
-PEM
-pub
 *.log
 
 # Environment Variables
@@ -15,9 +12,6 @@ pub
 .env.*
 !.env.example
 
-# GunDB
-radata/*
-*.private.md
-
-infrastructure/relay/radata/
+# Vercel & Private Notes
 .vercel
+*.private.md

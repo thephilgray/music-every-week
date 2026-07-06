@@ -266,7 +266,7 @@ const updateNotificationState = useCallback(async (
       } else if (n.type === 'submission' || n.type === 'comment' || n.type === 'mention') {
           // Fallback if no link, try to construct one
            if (n.requestId) {
-              navigate(`/request/${n.requestId}`);
+              navigate(`/prompt/${n.requestId}`);
            }
       }
   };

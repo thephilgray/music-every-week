@@ -5,9 +5,11 @@ import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, orderBy, onSnapshot, getCountFromServer, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Loader2, Plus, ListMusic, Play, Settings, FolderOpen, Trash2 } from 'lucide-react';
 import type { Playlist, WatchParty, FileRequest } from '../types';
+import { useGlobalFeatures } from '../hooks/useGlobalFeatures';
 
 export function PartyHub() {
     const { user, isAdmin } = useAuth();
+    const { features } = useGlobalFeatures();
     const navigate = useNavigate();
 
     const [adminPlaylists, setAdminPlaylists] = useState<Playlist[]>([]);
@@ -210,6 +212,15 @@ export function PartyHub() {
          return (
              <div className="flex justify-center items-center py-20">
                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+             </div>
+         );
+    }
+
+    if (!features.live) {
+         return (
+             <div className="max-w-4xl mx-auto py-20 px-4 text-center">
+                 <h1 className="text-2xl font-bold text-white mb-2">Party Hub Disabled</h1>
+                 <p className="text-gray-400">This feature is currently disabled by the community administrator.</p>
              </div>
          );
     }

@@ -644,7 +644,7 @@ export function CreatorTools() {
               createdBy: user.uid
           });
 
-          const url = `${window.location.origin}/request/${selectedRequest.id}?extension=${code}`;
+          const url = `${window.location.origin}/prompt/${selectedRequest.id}?extension=${code}`;
           const copied = await copyToClipboard(url);
           if (copied) {
               success(`Extension link (+${hours}h) copied to clipboard!`);
@@ -1058,23 +1058,23 @@ export function CreatorTools() {
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold text-white">{selectedRequest.title}</h1>
                                 <Link 
-                                    to={`/request/${selectedRequest.id}`}
+                                    to={`/prompt/${selectedRequest.id}`}
                                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Open Request Page"
+                                    title="Open Prompt Page"
                                 >
                                     <ExternalLink className="w-5 h-5" />
                                 </Link>
                                 <button 
                                     onClick={() => setIsEditRequestOpen(true)}
                                     className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Edit Request"
+                                    title="Edit Prompt"
                                 >
                                     <Edit className="w-5 h-5" />
                                 </button>
                                 <button 
                                     onClick={() => setShowDeleteRequestConfirm(true)}
                                     className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
-                                    title="Delete Request"
+                                    title="Delete Prompt"
                                 >
                                     <Trash2 className="w-5 h-5" />
                                 </button>
@@ -1366,10 +1366,10 @@ export function CreatorTools() {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase font-bold">Request</label>
+                                    <label className="text-xs text-gray-500 uppercase font-bold">Prompt</label>
                                     <p>
-                                        <Link to={`/request/${selectedSubmission.requestId}`} className="text-blue-400 hover:underline flex items-center gap-1">
-                                            View Request <ExternalLink className="w-3 h-3" />
+                                        <Link to={`/prompt/${selectedSubmission.requestId}`} className="text-blue-400 hover:underline flex items-center gap-1">
+                                            View Prompt <ExternalLink className="w-3 h-3" />
                                         </Link>
                                     </p>
                                 </div>
@@ -1524,8 +1524,8 @@ export function CreatorTools() {
 
         <ConfirmModal 
             isOpen={showDeleteRequestConfirm}
-            title="Delete Request?"
-            message="Are you sure you want to delete this request? It will be hidden from all participants and cannot be undone."
+            title="Delete Prompt?"
+            message="Are you sure you want to delete this prompt? It will be hidden from all participants and cannot be undone."
             confirmLabel="Delete Forever"
             isDestructive={true}
             onConfirm={handleDeleteRequest}

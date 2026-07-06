@@ -9,14 +9,17 @@ import { db } from '../lib/firebase';
 import { collection, query, orderBy, limit, getDocs, doc, getDoc, startAfter, type QueryDocumentSnapshot, type DocumentData, where, updateDoc, serverTimestamp } from 'firebase/firestore';
 import type { Submission, Comment } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
+import { useGlobalFeatures } from '../hooks/useGlobalFeatures';
 
 export function Community() {
   const { settings, user, profile, participantEmail } = useAuth();
+  const { features } = useGlobalFeatures();
   const [feed, setFeed] = useState<FeedItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') as 'feed' | 'events') || 'feed';
+  const currentTab = !features.activityFeed && features.eventsCalendar ? 'events' : activeTab;
   const setActiveTab = (tab: 'feed' | 'events') => setSearchParams({ tab });
 
   const markAllRead = async () => {
@@ -382,6 +385,15 @@ export function Community() {
     return () => observer.disconnect();
   }, [hasMore, loading, isLoadingMore, fetchFeedBatch]);
 
+  if (!features.community || (!features.activityFeed && !features.eventsCalendar)) {
+    return (
+      <div className="max-w-4xl mx-auto py-20 px-4 text-center">
+        <h1 className="text-2xl font-bold text-white mb-2">Community Features Disabled</h1>
+        <p className="text-gray-400">This feature is currently disabled by the community administrator.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-8 gap-4 text-center sm:text-left">
@@ -402,25 +414,29 @@ export function Community() {
 
         {/* Tabs */}
         <div className="flex items-center gap-8 border-b border-gray-800 mb-8 overflow-x-auto scrollbar-hide">
+            {features.activityFeed && (
             <button 
                 onClick={() => setActiveTab('feed')}
-                className={`flex items-center gap-2 pb-4 text-sm font-bold transition-all relative min-w-max ${activeTab === 'feed' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`flex items-center gap-2 pb-4 text-sm font-bold transition-all relative min-w-max ${currentTab === 'feed' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
             >
-                <MessageSquare className={`w-4 h-4 ${activeTab === 'feed' ? 'text-blue-500' : 'text-gray-600'}`} />
+                <MessageSquare className={`w-4 h-4 ${currentTab === 'feed' ? 'text-blue-500' : 'text-gray-600'}`} />
                 Activity Feed
-                {activeTab === 'feed' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>}
+                {currentTab === 'feed' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>}
             </button>
+            )}
+            {features.eventsCalendar && (
             <button 
                 onClick={() => setActiveTab('events')}
-                className={`flex items-center gap-2 pb-4 text-sm font-bold transition-all relative min-w-max ${activeTab === 'events' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`flex items-center gap-2 pb-4 text-sm font-bold transition-all relative min-w-max ${currentTab === 'events' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
             >
-                <Calendar className={`w-4 h-4 ${activeTab === 'events' ? 'text-blue-500' : 'text-gray-600'}`} />
+                <Calendar className={`w-4 h-4 ${currentTab === 'events' ? 'text-blue-500' : 'text-gray-600'}`} />
                 Events Calendar
-                {activeTab === 'events' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>}
+                {currentTab === 'events' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>}
             </button>
+            )}
         </div>
 
-        {activeTab === 'feed' ? (
+        {currentTab === 'feed' ? (
             loading ? (
                 <div className="space-y-4">
                     {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}

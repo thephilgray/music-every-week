@@ -55,7 +55,7 @@ export function PromptCard({ request, isClosed, hideStatus }: PromptCardProps) {
   }, [request.deadline, isClosed, hideStatus]);
   
   return (
-    <Link to={`/request/${request.id}`} className="block group">
+    <Link to={`/prompt/${request.id}`} className="block group">
       <div className="flex flex-col gap-4">
         {/* Artwork Square */}
         <div 

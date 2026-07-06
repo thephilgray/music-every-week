@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
 import { db } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { BRAND_INFO } from '../../config/appConfig';
+import { useGlobalFeatures } from '../../hooks/useGlobalFeatures';
 
 interface SidebarProps {
   onClose?: () => void;
@@ -14,6 +16,7 @@ export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, participantEmail, settings, isAdmin } = useAuth();
+  const { features } = useGlobalFeatures();
   
   const [notifDocs, setNotifDocs] = useState<Record<string, any>>({});
   const [accessibleRequestIds, setAccessibleRequestIds] = useState<Set<string>>(new Set());
@@ -167,12 +170,12 @@ export function Sidebar({ onClose }: SidebarProps) {
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: ListMusic, label: 'Playlists', path: '/playlists' },
-    { icon: Radio, label: 'Live', path: '/live' },
-    { icon: Globe, label: 'Community', path: '/feed', badge: communityUnreadCount },
+    ...(features.live ? [{ icon: Radio, label: 'Live', path: '/live' }] : []),
+    ...(features.community ? [{ icon: Globe, label: 'Community', path: '/feed', badge: communityUnreadCount }] : []),
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
-    { icon: Users, label: 'Directory', path: '/directory' },
+    ...(features.directory ? [{ icon: Users, label: 'Directory', path: '/directory' }] : []),
     { icon: Layers, label: 'Creator Tools', path: '/creator' },
-    ...(isAdmin ? [{ icon: ListMusic, label: 'Party Hub', path: '/party' }] : []),
+    ...(isAdmin && features.live ? [{ icon: ListMusic, label: 'Party Hub', path: '/party' }] : []),
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
@@ -185,8 +188,8 @@ export function Sidebar({ onClose }: SidebarProps) {
     <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
       <div className="p-6 flex justify-between items-center">
         <Link to="/" className="flex items-center gap-3" onClick={onClose}>
-          <img src="/mewlogo.png" alt="MEW" className="h-8 w-auto" />
-          <span className="font-bold text-xl tracking-tight text-white">MEW</span>
+          <img src={BRAND_INFO.logoUrl} alt={BRAND_INFO.shortName} className="h-8 w-auto" />
+          <span className="font-bold text-xl tracking-tight text-white">{BRAND_INFO.shortName}</span>
         </Link>
         <button 
           onClick={onClose}

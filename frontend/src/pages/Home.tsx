@@ -4,15 +4,38 @@ import { CreatePrompt } from '../components/CreatePrompt';
 import { PromptList } from '../components/PromptList';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, onSnapshot, where } from 'firebase/firestore';
-import type { Prompt } from '../types';
+import { collection, query, onSnapshot, where, doc } from 'firebase/firestore';
+import type { Prompt, DashboardConfig, DashboardLink } from '../types';
 import { getTimestampAsNumber } from '../lib/utils';
+
+const DEFAULT_DASHBOARD_LINKS: DashboardLink[] = [
+  { label: 'Discord', url: 'https://discord.com/invite/MJRRwBddKV' },
+  { label: 'Patreon', url: 'https://www.patreon.com/MusicEveryWeek' },
+  { label: 'FAQ', url: 'https://docs.google.com/document/d/192JE_HXcs_cSJubnf1BEYyjbNr9V5YXeedK-MIJbvlo/edit?tab=t.0#heading=h.45at7kfvym83' },
+  { label: 'Ideas & Comments Box', url: 'https://forms.gle/27w4CoSfb6EpssR6A' }
+];
+
+function renderFormattedText(text: string) {
+  const parts = text.split(/(\[[^\]]+\]\([^\)]+\))/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^\[([^\]]+)\]\(([^\)]+)\)$/);
+    if (match) {
+      return (
+        <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline font-medium">
+          {match[1]}
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 export function Home() {
   const { user, isAdmin, isHost, participantEmail } = useAuth(); 
   const [showCreate, setShowCreate] = useState(false);
   const [requests, setRequests] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig>({});
 
   useEffect(() => {
     // Only fetch if we have some form of identification
@@ -54,8 +77,15 @@ export function Home() {
         }, (err) => console.error("Invited query error:", err)));
     }
 
-    // 3. (REMOVED) Public Volunteer Pools and Direct Links are NOT shown on Home by default
-    // unless you are an owner or invited. They remain accessible via direct link.
+    // 3. Load Admin Dashboard Config
+    const configRef = doc(db, 'config', 'dashboard');
+    unsubs.push(onSnapshot(configRef, (snap) => {
+        if (snap.exists()) {
+            setDashboardConfig(snap.data() as DashboardConfig);
+        } else {
+            setDashboardConfig({});
+        }
+    }, (err) => console.error("Dashboard config error:", err)));
 
     return () => unsubs.forEach(unsub => unsub());
   }, [user, participantEmail]);
@@ -64,22 +94,24 @@ export function Home() {
     <div className="max-w-5xl mx-auto space-y-4 md:space-y-8 pb-20 p-4">
       {/* Tertiary Nav */}
       <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-2 text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-800/50 pb-3 md:pb-4">
-          <a href="https://discord.com/invite/MJRRwBddKV" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors flex items-center gap-1.5">
-              Discord
-          </a>
-          <span className="text-gray-800 hidden sm:inline">•</span>
-          <a href="https://www.patreon.com/MusicEveryWeek" target="_blank" rel="noopener noreferrer" className="hover:text-orange-400 transition-colors">
-              Patreon
-          </a>
-          <span className="text-gray-800 hidden sm:inline">•</span>
-          <a href="https://docs.google.com/document/d/192JE_HXcs_cSJubnf1BEYyjbNr9V5YXeedK-MIJbvlo/edit?tab=t.0#heading=h.45at7kfvym83" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
-              FAQ
-          </a>
-          <span className="text-gray-800 hidden sm:inline">•</span>
-          <a href="https://forms.gle/27w4CoSfb6EpssR6A" target="_blank" rel="noopener noreferrer" className="hover:text-purple-400 transition-colors">
-              Ideas & Comments Box
-          </a>
+          {(dashboardConfig.links && dashboardConfig.links.length > 0 ? dashboardConfig.links : DEFAULT_DASHBOARD_LINKS).map((link, idx, arr) => (
+              <span key={idx} className="flex items-center gap-6">
+                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors flex items-center gap-1.5">
+                      {link.label}
+                  </a>
+                  {idx < arr.length - 1 && <span className="text-gray-800 hidden sm:inline">•</span>}
+              </span>
+          ))}
       </div>
+
+      {/* Custom Announcement / Content Block */}
+      {dashboardConfig.customContent && dashboardConfig.customContent.trim() !== '' && (
+          <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-xl p-4 text-sm text-purple-200 shadow-lg">
+              <p className="whitespace-pre-line leading-relaxed">
+                  {renderFormattedText(dashboardConfig.customContent)}
+              </p>
+          </div>
+      )}
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-center sm:text-left">

@@ -441,7 +441,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
               id: notifId,
               type: 'invite',
               message,
-              link: `/request/${request.id}`,
+              link: `/prompt/${request.id}`,
               fromUid: user?.uid || 'participant', 
               createdAt: Date.now(), 
               read: false,

@@ -1,16 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Save, Trash2, Shield, Loader2, Upload, AlertTriangle, Users, Music } from 'lucide-react';
+import { User, Save, Trash2, Shield, Loader2, Upload, Users, Music } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2';
 import { fixUrl } from '../lib/url';
 import { db } from '../lib/firebase';
 import { doc, updateDoc, onSnapshot, serverTimestamp, query, where, collection, getDocs, orderBy, setDoc } from 'firebase/firestore';
-import type { UserProfile } from '../types';
+import type { UserProfile, GlobalFeatureConfig } from '../types';
+import { LandingPageEditor } from '../components/LandingPageEditor';
+import { DashboardEditor } from '../components/DashboardEditor';
+import { useGlobalFeatures } from '../hooks/useGlobalFeatures';
 
 export function Settings() {
-  const { user, isAdmin, participantEmail, logout } = useAuth();
+  const { user, isAdmin, participantEmail } = useAuth();
   const { success, error } = useToast();
+  const { features } = useGlobalFeatures();
   
   const [resolvedUid, setResolvedUid] = useState<string | null>(null);
 
@@ -43,6 +47,13 @@ export function Settings() {
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const isDirty = useRef(false);
+  const [initialProfile, setInitialProfile] = useState<{
+    username: string;
+    displayName: string;
+    bio: string;
+    location: string;
+    links: {label: string, url: string}[];
+  } | null>(null);
 
   // Privacy State
   const [isVolunteer, setIsVolunteer] = useState(false);
@@ -52,25 +63,6 @@ export function Settings() {
 
   // Content Preferences
   const [filterAI, setFilterAI] = useState(false);
-
-  // Global Config (Admin Only)
-  const [normalizationEnabled, setNormalizationEnabled] = useState(true);
-
-  // Data State
-  const [isClearing, setIsClearing] = useState(false);
-
-  // Load Global Config
-  useEffect(() => {
-    if (!isAdmin) return;
-    const configRef = doc(db, 'config', 'global');
-    const unsub = onSnapshot(configRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            setNormalizationEnabled(data.playerNormalization ?? true);
-        }
-    });
-    return () => unsub();
-  }, [isAdmin]);
 
   // Load Initial Data
   useEffect(() => {
@@ -91,6 +83,13 @@ export function Settings() {
                 setCurrentAvatarUrl(data.avatarUrl || '');
                 setIsVolunteer(!!data.isVolunteer);
                 setIsHost(!!data.isHost);
+                setInitialProfile({
+                  username: data.alias || '',
+                  displayName: data.displayName || data.alias || '',
+                  bio: data.bio || '',
+                  location: data.location || '',
+                  links: data.links || []
+                });
                 
                 // Settings
                 if (data.settings?.privacy) {
@@ -135,6 +134,7 @@ export function Settings() {
       // Reset file input
       setAvatar(null);
       isDirty.current = false;
+      setInitialProfile({ username, displayName, bio, location, links });
       success('Profile updated successfully!');
     } catch (e) {
       console.error("Failed to save profile", e);
@@ -211,42 +211,20 @@ export function Settings() {
       updateSetting('filterAI', newValue, 'settings.content');
   };
 
-  const handleToggleNormalization = async () => {
-      const newValue = !normalizationEnabled;
-      setNormalizationEnabled(newValue);
+  const handleToggleGlobalFeature = async (featureKey: keyof GlobalFeatureConfig, currentValue: boolean) => {
+      const newValue = !currentValue;
       try {
           const configRef = doc(db, 'config', 'global');
           await setDoc(configRef, {
-              playerNormalization: newValue,
+              [featureKey]: newValue,
               updatedAt: serverTimestamp(),
               updatedBy: user?.uid || 'admin'
           }, { merge: true });
-          success(`Normalization ${newValue ? 'enabled' : 'disabled'} globally.`);
+          success(`Feature ${newValue ? 'enabled' : 'disabled'} globally.`);
       } catch (e) {
           console.error("Failed to update global config", e);
-          error("Failed to update global normalization setting.");
-          setNormalizationEnabled(!newValue);
+          error("Failed to update global setting.");
       }
-  };
-
-  const handleClearData = async () => {
-      if (!window.confirm("Are you sure? This will clear local browser cache and log you out.")) return; 
-      setIsClearing(true);
-      
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      try {
-          const databases = await window.indexedDB.databases();
-          for (const db of databases) {
-              if (db.name) window.indexedDB.deleteDatabase(db.name);
-          }
-      } catch (e) {
-          console.warn("Could not clear IndexedDB:", e);
-      }
-
-      await logout();
-      window.location.reload();
   };
 
   const handleDownloadBugReports = async () => {
@@ -289,6 +267,14 @@ export function Settings() {
           error("Failed to download bug reports.");
       }
   };
+
+  const hasProfileChanges = !!avatar || (initialProfile ? (
+      username !== initialProfile.username ||
+      displayName !== initialProfile.displayName ||
+      bio !== initialProfile.bio ||
+      location !== initialProfile.location ||
+      JSON.stringify(links) !== JSON.stringify(initialProfile.links)
+  ) : false);
 
   return (
     <div className="max-w-3xl mx-auto pb-4 p-2 sm:pb-20 sm:p-6">
@@ -411,8 +397,8 @@ export function Settings() {
 
             <button 
                 onClick={handleSaveProfile}
-                disabled={isSavingProfile}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSavingProfile || !hasProfileChanges}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
             >
                 {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Profile
@@ -534,11 +520,91 @@ export function Settings() {
       <section className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 sm:p-6 mb-8">
         <h2 className="text-xl font-semibold text-purple-300 mb-6 flex items-center gap-2">
             <Shield className="w-5 h-5" />
-            Admin: Global Configuration
+            Admin: Global Configuration & Features
         </h2>
         
         <div className="space-y-6">
+            {/* Feature Toggles */}
             <div className="flex items-center justify-between gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Live / Party Hub</h3>
+                    <p className="text-xs text-purple-200/70">
+                        Enable or disable live listening sessions and watch parties in the navigation.
+                    </p>
+                </div>
+                <button 
+                    onClick={() => handleToggleGlobalFeature('live', features.live)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${features.live ? 'bg-purple-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${features.live ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-purple-500/20 pt-4 gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Community Feed & Events</h3>
+                    <p className="text-xs text-purple-200/70">
+                        Enable or disable the global Community page in the navigation.
+                    </p>
+                </div>
+                <button 
+                    onClick={() => handleToggleGlobalFeature('community', features.community)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${features.community ? 'bg-purple-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${features.community ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+
+            {features.community && (
+                <>
+                <div className="flex items-center justify-between pl-6 border-l-2 border-purple-500/40 gap-x-4">
+                    <div>
+                        <h3 className="text-white font-medium mb-1 text-sm">↳ Activity Feed Tab</h3>
+                        <p className="text-xs text-purple-200/70">
+                            Show or hide the Activity Feed tab inside the Community page.
+                        </p>
+                    </div>
+                    <button 
+                        onClick={() => handleToggleGlobalFeature('activityFeed', features.activityFeed)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${features.activityFeed ? 'bg-purple-600' : 'bg-gray-600'}`}
+                    >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${features.activityFeed ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                    </button>
+                </div>
+
+                <div className="flex items-center justify-between pl-6 border-l-2 border-purple-500/40 gap-x-4">
+                    <div>
+                        <h3 className="text-white font-medium mb-1 text-sm">↳ Events Calendar Tab</h3>
+                        <p className="text-xs text-purple-200/70">
+                            Show or hide the Events Calendar tab inside the Community page.
+                        </p>
+                    </div>
+                    <button 
+                        onClick={() => handleToggleGlobalFeature('eventsCalendar', features.eventsCalendar)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${features.eventsCalendar ? 'bg-purple-600' : 'bg-gray-600'}`}
+                    >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${features.eventsCalendar ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                    </button>
+                </div>
+                </>
+            )}
+
+            <div className="flex items-center justify-between border-t border-purple-500/20 pt-4 gap-x-4">
+                <div>
+                    <h3 className="text-white font-medium mb-1">Member Directory</h3>
+                    <p className="text-xs text-purple-200/70">
+                        Enable or disable the Member Directory in the navigation.
+                    </p>
+                </div>
+                <button 
+                    onClick={() => handleToggleGlobalFeature('directory', features.directory)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${features.directory ? 'bg-purple-600' : 'bg-gray-600'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${features.directory ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-purple-500/20 pt-4 gap-x-4">
                 <div>
                     <h3 className="text-white font-medium mb-1">Global Player Normalization</h3>
                     <p className="text-xs text-purple-200/70">
@@ -547,10 +613,10 @@ export function Settings() {
                     </p>
                 </div>
                 <button 
-                    onClick={handleToggleNormalization}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${normalizationEnabled ? 'bg-purple-600' : 'bg-gray-600'}`}
+                    onClick={() => handleToggleGlobalFeature('playerNormalization', features.playerNormalization)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${features.playerNormalization ? 'bg-purple-600' : 'bg-gray-600'}`}
                 >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${normalizationEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${features.playerNormalization ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
             </div>
             
@@ -575,36 +641,17 @@ export function Settings() {
       </section>
       )}
 
-      {/* Data Management Section */}
+      {/* Admin Landing Page Editor Section */}
       {isAdmin && (
-      <section className="bg-gray-900 border border-gray-800 rounded-xl p-4 sm:p-6 mb-8">
-        <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-yellow-500" />
-            Data Management
-        </h2>
-        
-        <div className="space-y-6">
-            <div className="border-t border-gray-800 pt-6">
-                <div className="flex justify-between items-center mb-4">
-                    <p className="text-gray-400 text-xs">
-                        MEW is a "Local-First" application. This means a lot of data is stored directly in your browser. 
-                        If you are experiencing issues, clearing your local data might help. 
-                        <span className="text-red-400 block mt-1">Warning: This will log you out.</span>
-                    </p>
-                </div>
-                
-                <div className="flex gap-4">
-                    <button 
-                        onClick={handleClearData}
-                        disabled={isClearing}
-                        className="bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition"
-                    >
-                        {isClearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                        Clear Local Data & Reset
-                    </button>
-                </div>
-            </div>
-        </div>
+      <section className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 sm:p-6 mb-8">
+        <LandingPageEditor />
+      </section>
+      )}
+
+      {/* Admin Dashboard Editor Section */}
+      {isAdmin && (
+      <section className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 sm:p-6 mb-8">
+        <DashboardEditor />
       </section>
       )}
     </div>

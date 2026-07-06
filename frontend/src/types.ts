@@ -213,3 +213,35 @@ export interface Session {
   startDate?: string;     // ISO date
   cadence?: string;       // e.g. "biweekly"
 }
+
+export interface LandingCtaLink {
+  label: string;
+  url: string;
+  style: 'blue' | 'purple' | 'gray';
+}
+
+export interface LandingConfig {
+  heroTitle?: string;
+  aboutText?: string;
+  rules?: string[];
+  ctaLinks?: LandingCtaLink[];
+}
+
+export interface GlobalFeatureConfig {
+  live?: boolean;
+  community?: boolean;
+  activityFeed?: boolean;
+  eventsCalendar?: boolean;
+  directory?: boolean;
+  playerNormalization?: boolean;
+}
+
+export interface DashboardLink {
+  label: string;
+  url: string;
+}
+
+export interface DashboardConfig {
+  customContent?: string;
+  links?: DashboardLink[];
+}

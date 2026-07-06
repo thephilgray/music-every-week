@@ -77,7 +77,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-gun': ['gun', 'gun/sea', 'gun/gun'],
+          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           'vendor-utils': ['buffer', 'lucide-react'],
         }
       }

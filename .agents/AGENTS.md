@@ -2,12 +2,12 @@
 
 ## What is MEW2?
 
-MEW2 (Music Every Week v2) is a local-first music collaboration platform for a songwriting community. Hosts create **prompts** (formerly called "file requests") that participants respond to by uploading original tracks. Prompts are organized into **sessions** — typically 10–12 prompts with deadlines every other week.
+MEW2 (Music Every Week v2) is a cloud-native, collaborative music production platform for a songwriting community. Hosts create **prompts** (formerly called "file requests") that participants respond to by uploading original tracks. Prompts are organized into **sessions** — typically 10–12 prompts with deadlines every other week.
 
 ## Architecture
 
 - **Frontend:** React (Vite) + Tailwind CSS, deployed on Vercel
-- **Database:** Firestore (migrated from GunDB). Collection names in Firestore still use legacy terminology (e.g. `requests` collection for prompts)
+- **Database:** Cloud Firestore. Collection names in Firestore still use legacy terminology (e.g. `requests` collection for prompts)
 - **Storage:** Cloudflare R2 (S3-compatible) for audio/image uploads
 - **Auth:** Firebase Auth with magic-link (passwordless) sign-in
 

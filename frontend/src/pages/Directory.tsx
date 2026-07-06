@@ -6,6 +6,7 @@ import { fixUrl } from '../lib/url';
 import type { UserProfile } from '../types';
 import { db } from '../lib/firebase'; // Import Firebase db
 import { collection, query, getDocs } from 'firebase/firestore'; // Import Firestore functions
+import { useGlobalFeatures } from '../hooks/useGlobalFeatures';
 
 type UserState = Record<string, UserProfile>;
 type Action = 
@@ -27,6 +28,7 @@ function userReducer(state: UserState, action: Action): UserState {
 }
 
 export function Directory() {
+  const { features } = useGlobalFeatures();
   // const { gun } = useGun(); // Removed Gun destructuring
   const [userState, dispatch] = useReducer(userReducer, {});
   // const [migratedSet, setMigratedSet] = useState<Set<string>>(new Set()); // Removed Gun-specific migratedSet
@@ -79,6 +81,15 @@ export function Directory() {
        (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (u.bio && u.bio.toLowerCase().includes(searchTerm.toLowerCase())))
   );
+
+  if (!features.directory) {
+    return (
+      <div className="max-w-4xl mx-auto py-20 px-4 text-center">
+        <h1 className="text-2xl font-bold text-white mb-2">Directory Feature Disabled</h1>
+        <p className="text-gray-400">This feature is currently disabled by the community administrator.</p>
+      </div>
+    );
+  }
 
   return (
       <div className="max-w-6xl mx-auto px-4 sm:px-8 pb-20">

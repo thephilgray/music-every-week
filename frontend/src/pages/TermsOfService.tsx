@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { BRAND_INFO } from '../config/appConfig';
 
 export function TermsOfService() {
   return (
@@ -19,14 +20,14 @@ export function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using the Music Every Week ("MEW") application, you agree to be bound by these Terms of Service. If you disagree with any part of the terms, you may not access the service.
+              By accessing or using the {BRAND_INFO.name} ("{BRAND_INFO.shortName}") application, you agree to be bound by these Terms of Service. If you disagree with any part of the terms, you may not access the service.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">2. Description of Service</h2>
             <p>
-              MEW is an invite-only platform designed to facilitate weekly music collaboration, track uploading, and community feedback. We reserve the right to modify or discontinue, temporarily or permanently, the service with or without notice.
+              {BRAND_INFO.shortName} is an invite-only platform designed to facilitate weekly music collaboration, track uploading, and community feedback. We reserve the right to modify or discontinue, temporarily or permanently, the service with or without notice.
             </p>
           </section>
 
@@ -35,7 +36,7 @@ export function TermsOfService() {
             <ul className="list-disc pl-5 space-y-2">
               <li>You must be invited to use this service.</li>
               <li>You are responsible for safeguarding the password or magic links that you use to access the service.</li>
-              <li>You retain all of your ownership rights in your User Content (tracks, lyrics, comments). By submitting content to MEW, you grant us a worldwide, non-exclusive, royalty-free license to use, reproduce, display, and distribute that content solely for the purpose of operating the MEW platform.</li>
+              <li>You retain all of your ownership rights in your User Content (tracks, lyrics, comments). By submitting content to {BRAND_INFO.shortName}, you grant us a worldwide, non-exclusive, royalty-free license to use, reproduce, display, and distribute that content solely for the purpose of operating the {BRAND_INFO.shortName} platform.</li>
               <li>You agree not to upload any content that infringes on the intellectual property rights of others, or is unlawful, offensive, or malicious.</li>
             </ul>
           </section>
@@ -43,7 +44,7 @@ export function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">4. Intellectual Property</h2>
             <p>
-              The service and its original content (excluding User Content), features, and functionality are and will remain the exclusive property of MEW and its licensors.
+              The service and its original content (excluding User Content), features, and functionality are and will remain the exclusive property of {BRAND_INFO.shortName} and its licensors.
             </p>
           </section>
 
@@ -57,14 +58,14 @@ export function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">6. Limitation of Liability</h2>
             <p>
-              In no event shall MEW, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the service.
+              In no event shall {BRAND_INFO.shortName}, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the service.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">7. Contact Us</h2>
             <p>
-              If you have any questions about these Terms, please contact us at: <a href="mailto:MEWisMusicEveryWeek@gmail.com" className="text-blue-400 hover:underline">MEWisMusicEveryWeek@gmail.com</a>.
+              If you have any questions about these Terms, please contact us at: <a href={`mailto:${BRAND_INFO.supportEmail}`} className="text-blue-400 hover:underline">{BRAND_INFO.supportEmail}</a>.
             </p>
           </section>
         </div>

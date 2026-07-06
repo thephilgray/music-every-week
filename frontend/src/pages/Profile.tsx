@@ -737,7 +737,7 @@ export function Profile() {
                                 {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                         )}
-                        <Link to={`/request/${req.id}`} className="flex-1 min-w-0 mr-8">
+                        <Link to={`/prompt/${req.id}`} className="flex-1 min-w-0 mr-8">
                             <div>
                                 <h3 className="text-white font-bold group-hover:text-blue-400 transition">{req.title}</h3>
                                 <p className="text-gray-500 text-sm line-clamp-1">{req.description}</p>

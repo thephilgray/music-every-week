@@ -14,10 +14,12 @@ import { useAuth } from '../contexts/AuthContext';
 import type { Submission, UserProfile } from '../types';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Users } from 'lucide-react';
+import { useGlobalFeatures } from '../hooks/useGlobalFeatures';
 
 export function WatchParty() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { features } = useGlobalFeatures();
     const { party, loading, error, calculateOffset, status, currentIndex } = useWatchPartySync(id);
     const { pause: pauseGlobalPlayer, isPlaying: isGlobalPlaying } = usePlayer();
     const { user, isAdmin, profile, addPoints } = useAuth();
@@ -467,6 +469,22 @@ export function WatchParty() {
         return (
             <div className="flex h-full items-center justify-center bg-black">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            </div>
+        );
+    }
+
+    if (!features.live) {
+        return (
+            <div className="flex flex-col h-full items-center justify-center text-center p-4">
+                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                <h2 className="text-xl font-bold text-white mb-2">Watch Party Disabled</h2>
+                <p className="text-gray-400 mb-6">This feature is currently disabled by the community administrator.</p>
+                <button
+                    onClick={() => navigate('/')}
+                    className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+                >
+                    Back to Home
+                </button>
             </div>
         );
     }

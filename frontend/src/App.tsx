@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AppLayout } from './components/Layout/AppLayout';
 import { Home } from './pages/Home';
 import { Inbox } from './pages/Inbox';
@@ -26,6 +26,11 @@ import { AuthGuard } from './components/AuthGuard';
 import { AuthProvider } from './contexts/AuthContext';
 import { FinishSignIn } from './pages/FinishSignIn';
 
+function LegacyPromptRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/prompt/${id}`} replace />;
+}
+
 function App() {
   return (
     <ToastProvider>
@@ -44,7 +49,8 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Home />} />
               <Route path="/feed" element={<Community />} />
-              <Route path="/request/:id" element={<PromptDetail />} />
+              <Route path="/prompt/:id" element={<PromptDetail />} />
+              <Route path="/request/:id" element={<LegacyPromptRedirect />} />
               <Route path="/inbox" element={<Inbox />} />
               <Route path="/creator" element={<CreatorTools />} />
               <Route path="/directory" element={<Directory />} />

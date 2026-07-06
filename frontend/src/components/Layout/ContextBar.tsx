@@ -66,11 +66,17 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
                 </div>
             )}
             {pathnames.map((name, index) => {
-                const routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
+                let routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
                 const isLast = index === pathnames.length - 1;
                 // Simple capitalization and truncation for IDs
                 let label = name;
-                if (label.length > 15) {
+                if (label.toLowerCase() === 'request' || label.toLowerCase() === 'prompt') {
+                    label = 'Prompt';
+                    routeTo = '/';
+                } else if (label.toLowerCase() === 'requests' || label.toLowerCase() === 'prompts') {
+                    label = 'Prompts';
+                    routeTo = '/';
+                } else if (label.length > 15) {
                     label = label.substring(0, 6) + '...';
                 } else {
                     label = label.charAt(0).toUpperCase() + label.slice(1);

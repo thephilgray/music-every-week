@@ -477,7 +477,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                                  const notifData = {
                                      type: 'collaborator',
                                      message: `You've been added as a collaborator on "${title}" by ${user?.displayName || user?.email || participantEmail}`,
-                                     link: `/request/${requestId}?submission=${existingSubmission.id}`,
+                                     link: `/prompt/${requestId}?submission=${existingSubmission.id}`,
                                      fromUid: user?.uid || 'participant',
                                      fromName: user?.displayName || user?.email || participantEmail,
                                      fromEmail: user?.email || participantEmail,
@@ -516,7 +516,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                                 const notifData = {
                                     type: 'collaborator',
                                     message: `You've been added as a collaborator on "${title}" by ${user?.displayName || user?.email || participantEmail}`,
-                                    link: `/request/${requestId}?submission=${docRef.id}`,
+                                    link: `/prompt/${requestId}?submission=${docRef.id}`,
                                     fromUid: user?.uid || 'participant',
                                     fromName: user?.displayName || user?.email || participantEmail,
                                     fromEmail: user?.email || participantEmail,

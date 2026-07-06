@@ -5,6 +5,7 @@ import { collection, query, where, onSnapshot, getDoc, doc, getDocs } from 'fire
 import { Loader2, Radio, Play, Users } from 'lucide-react';
 import type { WatchParty } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useGlobalFeatures } from '../hooks/useGlobalFeatures';
 
 interface LiveParty extends WatchParty {
     viewerCount: number;
@@ -12,6 +13,7 @@ interface LiveParty extends WatchParty {
 
 export function LiveSessions() {
     const { user, participantEmail } = useAuth();
+    const { features } = useGlobalFeatures();
     const [liveParties, setLiveParties] = useState<LiveParty[]>([]);
     const [loading, setLoading] = useState(true);
     const [accessibleRequestIds, setAccessibleRequestIds] = useState<Set<string>>(new Set());
@@ -157,6 +159,15 @@ export function LiveSessions() {
         return (
             <div className="flex justify-center items-center py-20 min-h-[50vh]">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+            </div>
+        );
+    }
+
+    if (!features.live) {
+        return (
+            <div className="max-w-4xl mx-auto py-20 px-4 text-center">
+                <h1 className="text-2xl font-bold text-white mb-2">Live Sessions Disabled</h1>
+                <p className="text-gray-400">This feature is currently disabled by the community administrator.</p>
             </div>
         );
     }

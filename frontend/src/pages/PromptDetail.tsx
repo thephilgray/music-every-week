@@ -701,7 +701,7 @@ const computedVisibleSubmissions = useMemo(() => {
               type: 'request',
               id: request.id!,
               name: request.title,
-              link: `/request/${request.id}`,
+              link: `/prompt/${request.id}`,
               artworkUrl: request.artworkUrl
           });
       }
@@ -717,7 +717,7 @@ const computedVisibleSubmissions = useMemo(() => {
         type: 'request', 
         id: request?.id!,
         name: request?.title || 'Prompt', 
-        link: `/request/${request?.id}`,
+        link: `/prompt/${request?.id}`,
         artworkUrl: request?.artworkUrl
       });
       removeCommentParam();
@@ -991,7 +991,7 @@ const computedVisibleSubmissions = useMemo(() => {
                                             type: 'request',
                                             id: request.id!,
                                             name: request.title,
-                                            link: `/request/${request.id}`,
+                                            link: `/prompt/${request.id}`,
                                             artworkUrl: request.artworkUrl
                                         });
                                         removeCommentParam();

@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { fixUrl } from '../lib/url';
 import { uploadToR2 } from '../lib/r2';
+import { BRAND_INFO } from '../config/appConfig';
 
 export function EventsCalendar() {
     const { user, isAdmin } = useAuth();
@@ -270,7 +271,7 @@ export function EventsCalendar() {
             {/* Disclaimer */}
             <div className="p-4 bg-gray-900/30 border border-gray-800 rounded-lg flex gap-3 text-sm text-gray-500 italic">
                 <Info className="w-5 h-5 flex-shrink-0 text-gray-600 not-italic" />
-                <p>Postings by community members are user-submitted and unaffiliated with MEW corporate. Please verify event details independently.</p>
+                <p>Postings by community members are user-submitted and unaffiliated with {BRAND_INFO.shortName} corporate. Please verify event details independently.</p>
             </div>
 
             {/* Submit Modal */}
@@ -291,7 +292,7 @@ export function EventsCalendar() {
                                     required
                                     value={newTitle}
                                     onChange={e => setNewTitle(e.target.value)}
-                                    placeholder="e.g. MEW Community Show @ The Satellite"
+                                    placeholder={`e.g. ${BRAND_INFO.shortName} Community Show @ The Satellite`}
                                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors"
                                 />
                             </div>
@@ -418,7 +419,7 @@ export function EventsCalendar() {
                                     required
                                     value={newTitle}
                                     onChange={e => setNewTitle(e.target.value)}
-                                    placeholder="e.g. MEW Community Show @ The Satellite"
+                                    placeholder={`e.g. ${BRAND_INFO.shortName} Community Show @ The Satellite`}
                                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors"
                                 />
                             </div>
@@ -744,7 +745,7 @@ function EventRow({ event, getTypeColor, isPast, onEdit, onDelete, onFlyerClick,
                         {event.type.replace('_', ' ')}
                     </span>
                     {event.isOfficial && (
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-600 text-white rounded shadow-lg shadow-blue-900/20">MEW Official</span>
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-600 text-white rounded shadow-lg shadow-blue-900/20">{BRAND_INFO.shortName} Official</span>
                     )}
                 </div>
                 <h4 className="text-lg font-bold text-white mb-1 group-hover:text-blue-400 transition leading-snug">{event.title}</h4>

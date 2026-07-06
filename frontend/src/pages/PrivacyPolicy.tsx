@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { BRAND_INFO } from '../config/appConfig';
 
 export function PrivacyPolicy() {
   return (
@@ -19,7 +20,7 @@ export function PrivacyPolicy() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">1. Introduction</h2>
             <p>
-              Welcome to Music Every Week ("MEW", "we", "our", or "us"). We respect your privacy and are committed to protecting your personal data. This Privacy Policy will inform you as to how we look after your personal data when you visit our website and tell you about your privacy rights and how the law protects you.
+              Welcome to {BRAND_INFO.name} ("{BRAND_INFO.shortName}", "we", "our", or "us"). We respect your privacy and are committed to protecting your personal data. This Privacy Policy will inform you as to how we look after your personal data when you visit our website and tell you about your privacy rights and how the law protects you.
             </p>
           </section>
 
@@ -62,7 +63,7 @@ export function PrivacyPolicy() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">6. Contact Us</h2>
             <p>
-              If you have any questions about this Privacy Policy or our privacy practices, please contact us at: <a href="mailto:MEWisMusicEveryWeek@gmail.com" className="text-blue-400 hover:underline">MEWisMusicEveryWeek@gmail.com</a>.
+              If you have any questions about this Privacy Policy or our privacy practices, please contact us at: <a href={`mailto:${BRAND_INFO.supportEmail}`} className="text-blue-400 hover:underline">{BRAND_INFO.supportEmail}</a>.
             </p>
           </section>
         </div>

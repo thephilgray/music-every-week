@@ -165,7 +165,7 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
                             <Music className="w-3 h-3 flex-shrink-0" />
                             <span className="truncate">{item.submissionTitle}</span>
                             <span className="flex-shrink-0">in</span>
-                            <Link to={`/request/${item.requestId}`} className="text-blue-400 hover:underline truncate max-w-[150px]">
+                            <Link to={`/prompt/${item.requestId}`} className="text-blue-400 hover:underline truncate max-w-[150px]">
                                 {item.requestTitle}
                             </Link>
                         </div>
@@ -193,7 +193,7 @@ export function FeedItemRow({ item }: FeedItemRowProps) {
                         </Link>
                     ) : (
                         <Link 
-                            to={`/request/${item.requestId}?submission=${item.submissionId}${item.type === 'comment' ? `&comment=${item.id}` : ''}`}
+                            to={`/prompt/${item.requestId}?submission=${item.submissionId}${item.type === 'comment' ? `&comment=${item.id}` : ''}`}
                             className="flex items-center gap-1 text-gray-400 hover:text-white transition self-end md:self-auto"
                         >
                             {item.type === 'submission' ? 'View Track' : 'View Thread'}

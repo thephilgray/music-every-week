@@ -261,7 +261,7 @@ export function CreatePrompt() {
       ]);
 
       console.log("CreatePrompt: Prompt and Playlist created.");
-      const finalRequestLink = `${window.location.origin}/request/${requestId}`;
+      const finalRequestLink = `${window.location.origin}/prompt/${requestId}`;
       
       setInviteLink(finalRequestLink);
       setCreatedRequestId(requestId);
@@ -304,7 +304,7 @@ export function CreatePrompt() {
                     Create Another
                 </button>
                 <Link 
-                    to={`/request/${createdRequestId}`}
+                    to={`/prompt/${createdRequestId}`}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-bold flex items-center gap-2 text-sm"
                 >
                     View Prompt <ArrowRight className="w-4 h-4" />

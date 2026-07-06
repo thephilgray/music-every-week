@@ -78,8 +78,8 @@ graph TD
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/thephilgray/trackpeer-mew2.git
-cd trackpeer-mew2
+git clone https://github.com/thephilgray/music-every-week.git
+cd music-every-week
 ```
 
 ### 2. Install Dependencies

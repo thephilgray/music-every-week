@@ -15,3 +15,7 @@ bin/
 # Vercel & Private Notes
 .vercel
 *.private.md
+
+# Firebase
+.firebaserc
+

@@ -91,10 +91,18 @@ npm install
 
 ### 3. Environment Configuration
 
-Copy the example environment file and fill in your Firebase and Cloudflare R2 credentials:
+Copy the example environment file inside `frontend/` and fill in your credentials:
 
 ```bash
 cp .env.example .env
+```
+
+If you plan to deploy backend Cloud Firestore security rules using the Firebase CLI, also copy the example Firebase configuration from the root directory:
+
+```bash
+cd ..
+cp .firebaserc.example .firebaserc
+cd frontend
 ```
 
 Edit `frontend/.env`:

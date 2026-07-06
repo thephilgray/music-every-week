@@ -1,3 +1,0 @@
-name: mew2-infra
-runtime: nodejs
-description: Infrastructure for MEW2 (GunDB Relay on Cloud Run with GCS Persistence)

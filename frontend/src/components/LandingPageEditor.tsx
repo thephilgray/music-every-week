@@ -152,11 +152,11 @@ export function LandingPageEditor() {
 
       {/* Rules Section */}
       <div className="bg-gray-900/40 p-6 rounded-xl border border-gray-800 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <label className="block text-sm font-semibold text-gray-300">Rules & Guidelines List</label>
           <button
             onClick={() => setRules([...rules, ""])}
-            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition font-medium"
+            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition font-medium flex-shrink-0"
           >
             <Plus className="w-4 h-4" /> Add Rule
           </button>
@@ -193,14 +193,14 @@ export function LandingPageEditor() {
 
       {/* CTA Links Section */}
       <div className="bg-gray-900/40 p-6 rounded-xl border border-gray-800 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div>
             <label className="block text-sm font-semibold text-gray-300">Call-to-Action Buttons</label>
             <p className="text-xs text-gray-500 mt-0.5">Configure the invitation buttons shown on the landing page.</p>
           </div>
           <button
             onClick={() => setCtaLinks([...ctaLinks, { label: "", url: "", style: "blue" }])}
-            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition font-medium"
+            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition font-medium flex-shrink-0"
           >
             <Plus className="w-4 h-4" /> Add Button
           </button>
@@ -258,17 +258,17 @@ export function LandingPageEditor() {
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-purple-500/20 pt-6">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 border-t border-purple-500/20 pt-6">
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition whitespace-nowrap flex-shrink-0"
+          className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition flex-shrink-0"
         >
           <RotateCcw className="w-4 h-4" /> Reset Defaults
         </button>
         <button
           onClick={handleSave}
           disabled={saving || !hasChanges}
-          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg font-medium transition shadow-lg shadow-purple-500/20 whitespace-nowrap flex-shrink-0"
+          className="flex items-center justify-center sm:justify-start gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg font-medium transition shadow-lg shadow-purple-500/20 flex-shrink-0"
         >
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Changes'}
         </button>

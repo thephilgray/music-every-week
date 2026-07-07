@@ -289,6 +289,24 @@ export function Settings() {
   ];
 
   const [activeSection, setActiveSection] = useState<string>('profile');
+  const navContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (navContainerRef.current && activeSection) {
+      const activeBtn = navContainerRef.current.querySelector(`[data-section-id="${activeSection}"]`) as HTMLElement;
+      if (activeBtn) {
+        const container = navContainerRef.current;
+        const containerRect = container.getBoundingClientRect();
+        const btnRect = activeBtn.getBoundingClientRect();
+        const offset = btnRect.left - containerRect.left;
+        const scrollLeft = container.scrollLeft + offset - (container.clientWidth / 2) + (activeBtn.clientWidth / 2);
+        container.scrollTo({
+          left: scrollLeft,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [activeSection]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -335,7 +353,7 @@ export function Settings() {
       </div>
 
       {/* Mobile & Tablet Horizontal Pill Navigation */}
-      <div className="lg:hidden sticky top-0 z-30 bg-gray-950/85 backdrop-blur-xl border-b border-gray-800/80 py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 mb-8 flex items-center gap-2 overflow-x-auto no-scrollbar shadow-lg shadow-black/40">
+      <div ref={navContainerRef} className="lg:hidden sticky top-0 z-30 bg-gray-950/85 backdrop-blur-xl border-b border-gray-800/80 py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 mb-8 flex items-center gap-2 overflow-x-auto no-scrollbar shadow-lg shadow-black/40">
         {navSections.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.id;
@@ -343,6 +361,7 @@ export function Settings() {
           return (
             <button
               key={section.id}
+              data-section-id={section.id}
               onClick={() => scrollToSection(section.id)}
               className={`px-3.5 py-2 rounded-full text-xs font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap flex-shrink-0 ${
                 isActive 
@@ -546,24 +565,24 @@ export function Settings() {
                         <label className="block text-sm text-gray-400 mb-2">External Links</label>
                         <div className="space-y-3">
                             {links.map((link, i) => (
-                                <div key={i} className="flex gap-2">
+                                <div key={i} className="flex flex-col sm:flex-row gap-2">
                                     <input 
                                         type="text" 
                                         value={link.label}
                                         onChange={e => handleLinkChange(i, 'label', e.target.value)}
-                                        className="w-1/3 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
+                                        className="w-full sm:w-1/3 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
                                         placeholder="Label (e.g. Website)"
                                     />
                                     <input 
                                         type="text" 
                                         value={link.url}
                                         onChange={e => handleLinkChange(i, 'url', e.target.value)}
-                                        className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
+                                        className="w-full sm:flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition"
                                         placeholder="URL (https://...)"
                                     />
                                     <button 
                                         onClick={() => handleRemoveLink(i)}
-                                        className="p-3 text-red-500 hover:bg-red-900/20 rounded-lg transition"
+                                        className="p-3 text-red-500 hover:bg-red-900/20 rounded-lg transition self-end sm:self-center flex-shrink-0"
                                     >
                                         <Trash2 className="w-5 h-5" />
                                     </button>
@@ -582,7 +601,7 @@ export function Settings() {
                 <button 
                     onClick={handleSaveProfile}
                     disabled={isSavingProfile || !hasProfileChanges}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                    className="w-full sm:w-auto justify-center sm:justify-start bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                 >
                     {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Save Profile
@@ -804,7 +823,7 @@ export function Settings() {
                     </button>
                 </div>
                 
-                <div className="flex items-center justify-between border-t border-purple-500/20 pt-4 gap-x-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-t border-purple-500/20 pt-4 gap-4">
                     <div>
                         <h3 className="text-white font-medium mb-1 flex items-center gap-2">
                             Download Bug Reports
@@ -815,7 +834,7 @@ export function Settings() {
                     </div>
                     <button 
                         onClick={handleDownloadBugReports}
-                        className="bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/50 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                        className="w-full sm:w-auto justify-center bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/50 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition flex-shrink-0"
                     >
                         <Upload className="w-4 h-4" /> 
                         Download CSV

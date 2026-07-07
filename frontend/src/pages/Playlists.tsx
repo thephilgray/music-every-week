@@ -7,7 +7,7 @@ import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy, documentId } from 'firebase/firestore';
 import type { Playlist, Submission, FileRequest, Session } from '../types';
 import { getTimestampAsNumber, seededRandom } from '../lib/utils';
-import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio, GripVertical, Check, Search, Music, User, Layers } from 'lucide-react';
+import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio, GripVertical, Check, Search, Music, User, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 import { PromptCard } from '../components/PromptCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
@@ -43,6 +43,8 @@ function PlaylistList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSession, setSelectedSession] = useState('all');
   const [selectedArtist, setSelectedArtist] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const hasActiveFilters = Boolean(searchTerm || selectedSession !== 'all' || selectedArtist !== 'all');
   
   const [loadingMy, setLoadingMy] = useState(true);
   const [loadingHosted, setLoadingHosted] = useState(true);
@@ -570,125 +572,153 @@ function PlaylistList() {
     <div className="max-w-6xl mx-auto p-4 sm:p-8 sm:pb-32 space-y-8">
         {/* Navigation & Filtering Header */}
         <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 sm:p-5 backdrop-blur-md space-y-4 shadow-xl">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-800/80 pb-4">
-                <div className="flex flex-wrap items-center gap-1.5 bg-gray-950/90 p-1.5 rounded-xl border border-gray-800/80">
+            <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${showFilters ? 'border-b border-gray-800/80 pb-4' : ''}`}>
+                <div className="flex items-center gap-1 sm:gap-1.5 bg-gray-950/90 p-1 sm:p-1.5 rounded-xl border border-gray-800/80 w-full lg:w-auto">
                     <button
                         onClick={() => setActiveTab('all')}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                        className={`flex-1 sm:flex-initial justify-center px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                             activeTab === 'all' 
                                 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
                                 : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
                         }`}
                     >
-                        All Playlists
-                        <span className={`px-1.5 py-0.5 text-xs rounded-full font-mono ${activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                        <span className="sm:hidden">All</span>
+                        <span className="hidden sm:inline">All Playlists</span>
+                        <span className={`px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full font-mono ${activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
                             {filteredHostedRequests.length + filteredMyPlaylists.length}
                         </span>
                     </button>
                     <button
                         onClick={() => setActiveTab('hosted')}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                        className={`flex-1 sm:flex-initial justify-center px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                             activeTab === 'hosted' 
                                 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
                                 : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
                         }`}
                     >
-                        Hosted Playlists
-                        <span className={`px-1.5 py-0.5 text-xs rounded-full font-mono ${activeTab === 'hosted' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                        <span className="sm:hidden">Hosted</span>
+                        <span className="hidden sm:inline">Hosted Playlists</span>
+                        <span className={`px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full font-mono ${activeTab === 'hosted' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
                             {filteredHostedRequests.length}
                         </span>
                     </button>
                     {user && (
                         <button
                             onClick={() => setActiveTab('custom')}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                            className={`flex-1 sm:flex-initial justify-center px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                                 activeTab === 'custom' 
                                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
                                     : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
                             }`}
                         >
-                            Custom Playlists
-                            <span className={`px-1.5 py-0.5 text-xs rounded-full font-mono ${activeTab === 'custom' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                            <span className="sm:hidden">Custom</span>
+                            <span className="hidden sm:inline">Custom Playlists</span>
+                            <span className={`px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full font-mono ${activeTab === 'custom' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
                                 {filteredMyPlaylists.length}
                             </span>
                         </button>
                     )}
                 </div>
 
-                {activeTab === 'all' && user && (
-                    <div className="flex items-center gap-2 text-xs text-gray-400 lg:ml-auto">
-                        <span className="font-medium text-gray-500">Quick Jump:</span>
-                        <a href="#hosted-playlists" className="px-3 py-1.5 rounded-lg bg-gray-800/70 hover:bg-gray-800 text-blue-400 hover:text-blue-300 font-semibold transition border border-gray-700/50">
-                            Hosted ↑
-                        </a>
-                        <a href="#custom-playlists" className="px-3 py-1.5 rounded-lg bg-gray-800/70 hover:bg-gray-800 text-blue-400 hover:text-blue-300 font-semibold transition border border-gray-700/50">
-                            Custom ↓
-                        </a>
-                    </div>
-                )}
+                <div className="flex items-center justify-between lg:justify-end gap-2 sm:gap-3 w-full lg:w-auto lg:ml-auto">
+                    {activeTab === 'all' && user && (
+                        <div className="flex items-center gap-2 text-xs text-gray-400 flex-1 sm:flex-initial">
+                            <span className="font-medium text-gray-500 whitespace-nowrap hidden sm:inline">Quick Jump:</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial">
+                                <a href="#hosted-playlists" className="flex-1 sm:flex-initial flex items-center justify-center gap-1 text-center px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-800/70 hover:bg-gray-800 text-blue-400 hover:text-blue-300 font-semibold transition border border-gray-700/50 whitespace-nowrap">
+                                    <span>Hosted</span>
+                                    <span>↑</span>
+                                </a>
+                                <a href="#custom-playlists" className="flex-1 sm:flex-initial flex items-center justify-center gap-1 text-center px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-800/70 hover:bg-gray-800 text-blue-400 hover:text-blue-300 font-semibold transition border border-gray-700/50 whitespace-nowrap">
+                                    <span>Custom</span>
+                                    <span>↓</span>
+                                </a>
+                            </div>
+                        </div>
+                    )}
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 border flex-shrink-0 ml-auto whitespace-nowrap ${
+                            showFilters || hasActiveFilters
+                                ? 'bg-blue-600/20 text-blue-400 border-blue-500/40 hover:bg-blue-600/30'
+                                : 'bg-gray-800/70 text-gray-300 border-gray-700/50 hover:bg-gray-800 hover:text-white'
+                        }`}
+                        title="Toggle Search and Filters"
+                    >
+                        <Search className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="sm:hidden">{showFilters ? 'Hide' : 'Search'}</span>
+                        <span className="hidden sm:inline">{showFilters ? 'Hide Search' : 'Search & Filter'}</span>
+                        {hasActiveFilters && (
+                            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" title="Active filters applied"></span>
+                        )}
+                        {showFilters ? <ChevronUp className="w-3.5 h-3.5 ml-0.5 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 ml-0.5 flex-shrink-0" />}
+                    </button>
+                </div>
             </div>
 
             {/* Search & Filters */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 pt-1">
-                <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                        type="text"
-                        placeholder="Search by playlist, song title, artist, or session..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full bg-gray-950/80 border border-gray-800 rounded-xl pl-10 pr-9 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                    />
-                    {searchTerm && (
-                        <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition">
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative flex-1 sm:flex-initial min-w-[140px]">
-                        <Layers className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <select
-                            value={selectedSession}
-                            onChange={e => setSelectedSession(e.target.value)}
-                            className="w-full sm:w-auto bg-gray-950/80 border border-gray-800 rounded-xl pl-8 pr-8 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none"
-                        >
-                            <option value="all">All Sessions</option>
-                            {availableSessions.map(s => (
-                                <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
-                            ))}
-                        </select>
+            {showFilters && (
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 pt-1">
+                    <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                            type="text"
+                            placeholder="Search by playlist, song title, artist, or session..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full bg-gray-950/80 border border-gray-800 rounded-xl pl-10 pr-9 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
 
-                    <div className="relative flex-1 sm:flex-initial min-w-[140px]">
-                        <User className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <select
-                            value={selectedArtist}
-                            onChange={e => setSelectedArtist(e.target.value)}
-                            className="w-full sm:w-auto bg-gray-950/80 border border-gray-800 rounded-xl pl-8 pr-8 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none"
-                        >
-                            <option value="all">All Artists</option>
-                            {availableArtists.map(artist => (
-                                <option key={artist} value={artist}>{artist}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative flex-1 sm:flex-initial min-w-[140px]">
+                            <Layers className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <select
+                                value={selectedSession}
+                                onChange={e => setSelectedSession(e.target.value)}
+                                className="w-full sm:w-auto bg-gray-950/80 border border-gray-800 rounded-xl pl-8 pr-8 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none"
+                            >
+                                <option value="all">All Sessions</option>
+                                {availableSessions.map(s => (
+                                    <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
 
-                    {(searchTerm || selectedSession !== 'all' || selectedArtist !== 'all') && (
-                        <button
-                            onClick={() => {
-                                setSearchTerm('');
-                                setSelectedSession('all');
-                                setSelectedArtist('all');
-                            }}
-                            className="px-3.5 py-2.5 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition-all whitespace-nowrap flex items-center justify-center gap-1.5"
-                        >
-                            <X className="w-3.5 h-3.5" /> Reset
-                        </button>
-                    )}
+                        <div className="relative flex-1 sm:flex-initial min-w-[140px]">
+                            <User className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <select
+                                value={selectedArtist}
+                                onChange={e => setSelectedArtist(e.target.value)}
+                                className="w-full sm:w-auto bg-gray-950/80 border border-gray-800 rounded-xl pl-8 pr-8 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none"
+                            >
+                                <option value="all">All Artists</option>
+                                {availableArtists.map(artist => (
+                                    <option key={artist} value={artist}>{artist}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {(searchTerm || selectedSession !== 'all' || selectedArtist !== 'all') && (
+                            <button
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setSelectedSession('all');
+                                    setSelectedArtist('all');
+                                }}
+                                className="px-3.5 py-2.5 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition-all whitespace-nowrap flex items-center justify-center gap-1.5"
+                            >
+                                <X className="w-3.5 h-3.5" /> Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
 
         {/* Empty State when Filters match nothing */}

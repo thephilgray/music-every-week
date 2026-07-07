@@ -188,7 +188,7 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
 
   return (
     <div className="w-full bg-gray-900 border-r border-gray-800 flex flex-col h-full overflow-hidden">
-      <div className={`flex justify-between items-center min-h-[64px] border-b border-gray-800/40 md:border-b-0 transition-all duration-300 ${isCollapsed ? 'px-3 py-4' : 'p-4 md:p-6'}`}>
+      <div className={`flex justify-between items-center min-h-[64px] border-b border-gray-800/40 md:border-b-0 transition-all duration-300 p-4 md:p-6 ${isCollapsed ? 'md:px-3 md:py-4' : ''}`}>
         <Link 
           to="/" 
           className="flex items-center gap-2.5 overflow-hidden flex-shrink-0" 
@@ -196,11 +196,9 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
           title={BRAND_INFO.shortName}
         >
           <img src={BRAND_INFO.logoUrl} alt={BRAND_INFO.shortName} className="h-7 w-auto flex-shrink-0" />
-          {!isCollapsed && (
-            <span className="font-bold text-xl tracking-tight text-white whitespace-nowrap transition-all duration-300">
-              {BRAND_INFO.shortName}
-            </span>
-          )}
+          <span className={`font-bold text-xl tracking-tight text-white whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'md:hidden' : ''}`}>
+            {BRAND_INFO.shortName}
+          </span>
         </Link>
         
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -223,7 +221,7 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
         </div>
       </div>
 
-      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} py-3 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent transition-all duration-300`}>
+      <nav className={`flex-1 px-4 ${isCollapsed ? 'md:px-2' : ''} py-3 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent transition-all duration-300`}>
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -232,13 +230,13 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
               type="button"
               onClick={() => handleNavigation(item.path)}
               title={isCollapsed ? item.label : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'md:justify-center px-3' : 'justify-between px-4'} py-3 md:py-2.5 rounded-xl transition-all duration-200 text-left relative group ${
+              className={`w-full flex items-center justify-between px-4 ${isCollapsed ? 'md:justify-center md:px-3' : ''} py-3 md:py-2.5 rounded-xl transition-all duration-200 text-left relative group ${
                 isActive 
                   ? 'bg-blue-600/15 text-blue-400 font-semibold shadow-sm'  
                   : 'text-gray-400 hover:bg-gray-800/80 hover:text-gray-100'
               }`}
             >
-              <div className={`flex items-center ${isCollapsed ? 'md:justify-center' : 'gap-3.5'} overflow-hidden`}>
+              <div className={`flex items-center gap-3.5 ${isCollapsed ? 'md:gap-0 md:justify-center' : ''} overflow-hidden`}>
                   <item.icon className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
                   <span className={`font-medium whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'md:hidden' : ''}`}>
                     {item.label}
@@ -261,12 +259,12 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
         })}
       </nav>
 
-      <div className={`pt-3 pb-4 ${isCollapsed ? 'px-2' : 'px-4'} border-t border-gray-800/80 mb-4 md:mb-20 space-y-1.5 transition-all duration-300`}>
+      <div className={`pt-3 pb-4 px-4 ${isCollapsed ? 'md:px-2' : ''} border-t border-gray-800/80 mb-4 md:mb-20 space-y-1.5 transition-all duration-300`}>
         <button 
             type="button"
             onClick={() => setShowBugReport(true)}
             title={isCollapsed ? "Report Bug" : undefined}
-            className={`w-full text-left ${isCollapsed ? 'md:justify-center px-3' : 'px-4'} py-2.5 text-gray-400 hover:text-white hover:bg-gray-800/80 rounded-xl transition-all duration-200 text-sm font-medium flex items-center ${isCollapsed ? 'md:justify-center' : 'gap-3'} group`}
+            className={`w-full text-left px-4 ${isCollapsed ? 'md:justify-center md:px-3' : ''} py-2.5 text-gray-400 hover:text-white hover:bg-gray-800/80 rounded-xl transition-all duration-200 text-sm font-medium flex items-center gap-3 ${isCollapsed ? 'md:justify-center md:gap-0' : ''} group`}
         >
             <Bug className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
             <span className={`whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'md:hidden' : ''}`}>Report Bug</span>

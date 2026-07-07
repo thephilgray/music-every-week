@@ -133,7 +133,7 @@ export function Home() {
       </div>
 
       {showCreate && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl animate-in fade-in slide-in-from-top-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-6 shadow-xl animate-in fade-in slide-in-from-top-4">
            <CreatePrompt />
         </div>
       )}

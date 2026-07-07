@@ -131,7 +131,7 @@ export function DashboardEditor() {
 
       {/* Tertiary Navigation Links */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div>
             <label className="block text-sm font-medium text-white">
               Dashboard Navigation Links
@@ -142,7 +142,7 @@ export function DashboardEditor() {
           </div>
           <button
             onClick={handleAddLink}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/50 rounded-lg text-xs font-medium transition whitespace-nowrap flex-shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/50 rounded-lg text-xs font-medium transition flex-shrink-0"
           >
             <Plus className="w-3.5 h-3.5" /> Add Link
           </button>
@@ -184,17 +184,17 @@ export function DashboardEditor() {
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-purple-500/20 pt-6">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 border-t border-purple-500/20 pt-6">
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition whitespace-nowrap flex-shrink-0"
+          className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition flex-shrink-0"
         >
           <RotateCcw className="w-4 h-4" /> Reset Defaults
         </button>
         <button
           onClick={handleSave}
           disabled={saving || !hasChanges}
-          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg font-medium transition shadow-lg shadow-purple-500/20 whitespace-nowrap flex-shrink-0"
+          className="flex items-center justify-center sm:justify-start gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg font-medium transition shadow-lg shadow-purple-500/20 flex-shrink-0"
         >
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Changes'}
         </button>

@@ -315,7 +315,7 @@ export function CreatePrompt() {
   }
 
   return (
-    <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-8 border border-gray-700">
+    <div className="bg-gray-800 p-3 sm:p-6 rounded-lg shadow-lg mb-8 border border-gray-700">
       <div className="flex items-center justify-between mb-6 border-b border-gray-700 pb-4">
         <div>
             <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -411,7 +411,7 @@ export function CreatePrompt() {
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded font-semibold flex items-center gap-2 transition text-sm shadow-md"
                   >
-                    Next: Participants & Settings <ArrowRight className="w-4 h-4" />
+                    <span>Next<span className="hidden sm:inline">: Participants & Settings</span></span> <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
             </div>
@@ -585,7 +585,7 @@ export function CreatePrompt() {
                         className="w-full bg-gray-900/50 hover:bg-gray-900 px-4 py-3 text-left text-xs font-semibold text-gray-300 flex items-center justify-between transition"
                     >
                         <span className="flex items-center gap-2">
-                            <Settings className="w-4 h-4 text-gray-400" /> Advanced Settings (Volunteer Pool, Preview Track Limit)
+                            <Settings className="w-4 h-4 text-gray-400" /> <span>Advanced Settings<span className="hidden sm:inline"> (Volunteer Pool, Preview Track Limit)</span></span>
                         </span>
                         <span className="text-base font-bold text-gray-400">{showAdvanced ? '−' : '+'}</span>
                     </button>
@@ -602,7 +602,7 @@ export function CreatePrompt() {
                                     onClick={() => setAccessMode(accessMode === 'volunteer' ? 'direct' : 'volunteer')}
                                     className={`px-3 py-1.5 rounded text-xs font-semibold transition ${accessMode === 'volunteer' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                                 >
-                                    {accessMode === 'volunteer' ? 'Enabled' : 'Switch to Volunteer Pool'}
+                                    {accessMode === 'volunteer' ? 'Enabled' : <span><span className="sm:hidden">Volunteer Mode</span><span className="hidden sm:inline">Switch to Volunteer Pool</span></span>}
                                 </button>
                             </div>
                             {accessMode === 'volunteer' && (

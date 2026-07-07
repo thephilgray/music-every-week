@@ -112,7 +112,7 @@ export function LandingPageEditor() {
       <div className="border-b border-purple-500/20 pb-4">
         <h2 className="text-xl font-semibold text-purple-300 flex items-center gap-2">
           <Globe className="w-5 h-5" />
-          Admin: Landing Page Configuration
+          Global: Landing Page Configuration
         </h2>
         <p className="text-xs text-purple-200/70 mt-1">Customize the public homepage content seen by logged-out visitors.</p>
       </div>

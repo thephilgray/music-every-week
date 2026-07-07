@@ -5,9 +5,9 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useToast } from '../contexts/ToastContext';
 import { db } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy, documentId } from 'firebase/firestore';
-import type { Playlist, Submission, FileRequest } from '../types';
+import type { Playlist, Submission, FileRequest, Session } from '../types';
 import { getTimestampAsNumber, seededRandom } from '../lib/utils';
-import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio, GripVertical, Check } from 'lucide-react';
+import { Play, Trash2, ListMusic, Loader2, Edit, X, Pause, Lock, Shuffle, Filter, FileText, FileAudio, GripVertical, Check, Search, Music, User, Layers } from 'lucide-react';
 import { PromptCard } from '../components/PromptCard';
 import { ArtworkDisplay } from '../components/ui/ArtworkDisplay';
 import { Waveform } from '../components/ui/Waveform';
@@ -31,11 +31,18 @@ export function Playlists() {
 // ==========================================
 function PlaylistList() {
   const { user, participantEmail } = useAuth();
-  const { play } = usePlayer();
+  const { play, currentTrack, isPlaying, pause } = usePlayer();
   
   // State for different playlist sources
   const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
   const [hostedRequests, setHostedRequests] = useState<FileRequest[]>([]); // Merged state for requests
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [allSubmissions, setAllSubmissions] = useState<Submission[]>([]);
+  
+  const [activeTab, setActiveTab] = useState<'all' | 'hosted' | 'custom'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSession, setSelectedSession] = useState('all');
+  const [selectedArtist, setSelectedArtist] = useState('all');
   
   const [loadingMy, setLoadingMy] = useState(true);
   const [loadingHosted, setLoadingHosted] = useState(true);
@@ -188,6 +195,181 @@ function PlaylistList() {
 
       fetchRequests();
   }, [user, participantEmail]);
+
+  useEffect(() => {
+      const unsubSessions = onSnapshot(collection(db, 'sessions'), (snap) => {
+          const list: Session[] = [];
+          snap.forEach(docSnap => list.push({ id: docSnap.id, ...docSnap.data() } as Session));
+          list.sort((a, b) => getTimestampAsNumber(b.createdAt) - getTimestampAsNumber(a.createdAt));
+          setSessions(list);
+      }, (err) => console.error("Error fetching sessions in Playlists:", err));
+
+      const unsubSubs = onSnapshot(collection(db, 'submissions'), (snap) => {
+          const subs: Submission[] = [];
+          snap.forEach(docSnap => subs.push({ id: docSnap.id, ...docSnap.data() } as Submission));
+          setAllSubmissions(subs);
+      }, (err) => console.error("Error fetching submissions in Playlists:", err));
+
+      return () => {
+          unsubSessions();
+          unsubSubs();
+      };
+  }, []);
+
+  const availableSessions = useMemo(() => {
+      return sessions.filter(session => {
+          if (user && session.ownerPub === user.uid) return true;
+          const hasHostedPrompt = hostedRequests.some(req => 
+              req.sessionId === session.id || session.promptIds?.includes(req.id || '')
+          );
+          if (hasHostedPrompt) return true;
+          const hasCustomTrack = myPlaylists.some(pl => 
+              pl.tracks?.some(track => {
+                  if (!track.requestId) return false;
+                  const req = hostedRequests.find(r => r.id === track.requestId);
+                  return req?.sessionId === session.id || session.promptIds?.includes(track.requestId);
+              })
+          );
+          return hasCustomTrack;
+      });
+  }, [sessions, hostedRequests, myPlaylists, user]);
+
+  const availableArtists = useMemo(() => {
+      const artists = new Set<string>();
+      const accessibleRequestIds = new Set(hostedRequests.map(r => r.id));
+      allSubmissions.forEach(sub => {
+          const isAccessible = (sub.requestId && accessibleRequestIds.has(sub.requestId)) ||
+                               (sub.playlistId && accessibleRequestIds.has(sub.playlistId));
+          if (isAccessible) {
+              const name = sub.byline || (sub.uploaderEmail ? sub.uploaderEmail.split('@')[0] : '');
+              if (name) artists.add(name);
+          }
+      });
+      myPlaylists.forEach(pl => {
+          pl.tracks?.forEach(t => {
+              if (t.artist && t.artist !== 'Unknown') artists.add(t.artist);
+          });
+      });
+      return Array.from(artists).sort((a, b) => a.localeCompare(b));
+  }, [allSubmissions, myPlaylists, hostedRequests]);
+
+  const filteredHostedRequests = useMemo(() => {
+      return hostedRequests.filter(req => {
+          if (selectedSession !== 'all') {
+              const session = sessions.find(s => s.id === selectedSession || s.name === selectedSession);
+              const matchesSessionId = req.sessionId === (session?.id || selectedSession);
+              const inSessionPromptIds = session?.promptIds?.includes(req.id || '');
+              if (!matchesSessionId && !inSessionPromptIds) return false;
+          }
+
+          const reqSubs = allSubmissions.filter(sub => 
+              sub.requestId === req.id || 
+              sub.playlistId === req.id || 
+              (req.playlistId && sub.playlistId === req.playlistId)
+          );
+
+          if (selectedArtist !== 'all') {
+              const hasArtist = reqSubs.some(sub => {
+                  const name = sub.byline || (sub.uploaderEmail ? sub.uploaderEmail.split('@')[0] : '') || '';
+                  return name.toLowerCase() === selectedArtist.toLowerCase();
+              });
+              const isHost = (req.hostEmail || '').toLowerCase().includes(selectedArtist.toLowerCase());
+              if (!hasArtist && !isHost) return false;
+          }
+
+          if (searchTerm.trim() !== '') {
+              const term = searchTerm.toLowerCase().trim();
+              const titleMatch = (req.title || '').toLowerCase().includes(term);
+              const descMatch = (req.description || '').toLowerCase().includes(term);
+              const sessionName = sessions.find(s => s.id === req.sessionId)?.name || '';
+              const sessionMatch = sessionName.toLowerCase().includes(term);
+              const subMatch = reqSubs.some(sub => 
+                  (sub.title || '').toLowerCase().includes(term) || 
+                  (sub.byline || sub.uploaderEmail || '').toLowerCase().includes(term)
+              );
+              if (!titleMatch && !descMatch && !sessionMatch && !subMatch) return false;
+          }
+
+          return true;
+      });
+  }, [hostedRequests, sessions, allSubmissions, selectedSession, selectedArtist, searchTerm]);
+
+  const filteredMyPlaylists = useMemo(() => {
+      return myPlaylists.filter(pl => {
+          if (selectedSession !== 'all') {
+              const session = sessions.find(s => s.id === selectedSession || s.name === selectedSession);
+              const hasSessionTrack = pl.tracks?.some(track => {
+                  if (!track.requestId) return false;
+                  const req = hostedRequests.find(r => r.id === track.requestId);
+                  return req?.sessionId === (session?.id || selectedSession) || session?.promptIds?.includes(track.requestId);
+              });
+              if (!hasSessionTrack) return false;
+          }
+
+          if (selectedArtist !== 'all') {
+              const hasArtist = pl.tracks?.some(track => {
+                  return (track.artist || '').toLowerCase() === selectedArtist.toLowerCase();
+              });
+              if (!hasArtist) return false;
+          }
+
+          if (searchTerm.trim() !== '') {
+              const term = searchTerm.toLowerCase().trim();
+              const titleMatch = (pl.title || '').toLowerCase().includes(term);
+              const trackMatch = pl.tracks?.some(track => 
+                  (track.title || '').toLowerCase().includes(term) || 
+                  (track.artist || '').toLowerCase().includes(term)
+              );
+              if (!titleMatch && !trackMatch) return false;
+          }
+
+          return true;
+      });
+  }, [myPlaylists, hostedRequests, sessions, selectedSession, selectedArtist, searchTerm]);
+
+  const matchingSongs = useMemo(() => {
+      if (!searchTerm.trim() && selectedArtist === 'all' && selectedSession === 'all') {
+          return [];
+      }
+      
+      const term = searchTerm.toLowerCase().trim();
+      const accessibleRequestIds = new Set(hostedRequests.map(r => r.id));
+      const myPlaylistSubIds = new Set<string>();
+      myPlaylists.forEach(pl => {
+          pl.tracks?.forEach(t => {
+              if (t.submissionId) myPlaylistSubIds.add(t.submissionId);
+          });
+      });
+
+      return allSubmissions.filter(sub => {
+          const isAccessible = (sub.requestId && accessibleRequestIds.has(sub.requestId)) ||
+                               (sub.playlistId && accessibleRequestIds.has(sub.playlistId)) ||
+                               (sub.id && myPlaylistSubIds.has(sub.id));
+          if (!isAccessible) return false;
+
+          if (selectedSession !== 'all') {
+              const session = sessions.find(s => s.id === selectedSession || s.name === selectedSession);
+              const req = hostedRequests.find(r => r.id === sub.requestId || r.id === sub.playlistId);
+              const matchesSessionId = req?.sessionId === (session?.id || selectedSession);
+              const inSessionPromptIds = session?.promptIds?.includes(sub.requestId || '');
+              if (!matchesSessionId && !inSessionPromptIds) return false;
+          }
+
+          if (selectedArtist !== 'all') {
+              const name = sub.byline || (sub.uploaderEmail ? sub.uploaderEmail.split('@')[0] : '') || '';
+              if (name.toLowerCase() !== selectedArtist.toLowerCase()) return false;
+          }
+
+          if (term !== '') {
+              const titleMatch = (sub.title || '').toLowerCase().includes(term);
+              const artistMatch = ((sub.byline || sub.uploaderEmail || '').toLowerCase()).includes(term);
+              if (!titleMatch && !artistMatch) return false;
+          }
+
+          return true;
+      });
+  }, [allSubmissions, hostedRequests, myPlaylists, sessions, selectedSession, selectedArtist, searchTerm]);
+
 
 
   const handlePlay = async (playlist: Playlist, startIndex = 0) => {
@@ -385,56 +567,255 @@ function PlaylistList() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-8 sm:pb-32 space-y-12">
-        <section>
-            <h2 className="text-3xl font-bold text-white mb-6 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-3 text-center sm:text-left">
-                <ListMusic className="w-8 h-8 text-blue-500" />
-                Hosted Playlists
-            </h2>
-            {loadingHosted ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <Skeleton className="h-80 w-full rounded-xl" />
-                    <Skeleton className="h-80 w-full rounded-xl" />
-                    <Skeleton className="h-80 w-full rounded-xl" />
+    <div className="max-w-6xl mx-auto p-4 sm:p-8 sm:pb-32 space-y-8">
+        {/* Navigation & Filtering Header */}
+        <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 sm:p-5 backdrop-blur-md space-y-4 shadow-xl">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-800/80 pb-4">
+                <div className="flex flex-wrap items-center gap-1.5 bg-gray-950/90 p-1.5 rounded-xl border border-gray-800/80">
+                    <button
+                        onClick={() => setActiveTab('all')}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                            activeTab === 'all' 
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                                : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                        }`}
+                    >
+                        All Playlists
+                        <span className={`px-1.5 py-0.5 text-xs rounded-full font-mono ${activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                            {filteredHostedRequests.length + filteredMyPlaylists.length}
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('hosted')}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                            activeTab === 'hosted' 
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                                : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                        }`}
+                    >
+                        Hosted Playlists
+                        <span className={`px-1.5 py-0.5 text-xs rounded-full font-mono ${activeTab === 'hosted' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                            {filteredHostedRequests.length}
+                        </span>
+                    </button>
+                    {user && (
+                        <button
+                            onClick={() => setActiveTab('custom')}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                                activeTab === 'custom' 
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                            }`}
+                        >
+                            Custom Playlists
+                            <span className={`px-1.5 py-0.5 text-xs rounded-full font-mono ${activeTab === 'custom' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                                {filteredMyPlaylists.length}
+                            </span>
+                        </button>
+                    )}
                 </div>
-            ) : hostedRequests.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
-                    <p>No hosted playlists found.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {hostedRequests.map(req => (
-                        <PromptCard 
-                            key={req.id} 
-                            request={req} 
-                            isClosed={false} 
-                            hideStatus={true}
-                        />
-                    ))}
-                </div>
-            )}
-        </section>
 
-        {user && (
-            <section>
-                <h2 className="text-2xl font-bold text-white mb-6 border-t border-gray-800 pt-8 text-center sm:text-left">
-                    My Playlists
-                </h2>
-                {loadingMy ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <Skeleton className="h-48 w-full rounded-xl" />
-                        <Skeleton className="h-48 w-full rounded-xl" />
-                        <Skeleton className="h-48 w-full rounded-xl" />
+                {activeTab === 'all' && user && (
+                    <div className="flex items-center gap-2 text-xs text-gray-400 lg:ml-auto">
+                        <span className="font-medium text-gray-500">Quick Jump:</span>
+                        <a href="#hosted-playlists" className="px-3 py-1.5 rounded-lg bg-gray-800/70 hover:bg-gray-800 text-blue-400 hover:text-blue-300 font-semibold transition border border-gray-700/50">
+                            Hosted ↑
+                        </a>
+                        <a href="#custom-playlists" className="px-3 py-1.5 rounded-lg bg-gray-800/70 hover:bg-gray-800 text-blue-400 hover:text-blue-300 font-semibold transition border border-gray-700/50">
+                            Custom ↓
+                        </a>
                     </div>
-                ) : myPlaylists.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
-                        <p>No playlists yet.</p>
-                        <p className="text-sm mt-2">Create one from a track's menu.</p>
-                    </div>
-                ) : (
-                    <PlaylistGrid list={myPlaylists} isOwner={true} />
                 )}
-            </section>
+            </div>
+
+            {/* Search & Filters */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 pt-1">
+                <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                        type="text"
+                        placeholder="Search by playlist, song title, artist, or session..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full bg-gray-950/80 border border-gray-800 rounded-xl pl-10 pr-9 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition">
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 sm:flex-initial min-w-[140px]">
+                        <Layers className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <select
+                            value={selectedSession}
+                            onChange={e => setSelectedSession(e.target.value)}
+                            className="w-full sm:w-auto bg-gray-950/80 border border-gray-800 rounded-xl pl-8 pr-8 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none"
+                        >
+                            <option value="all">All Sessions</option>
+                            {availableSessions.map(s => (
+                                <option key={s.id || s.name} value={s.id || s.name}>{s.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="relative flex-1 sm:flex-initial min-w-[140px]">
+                        <User className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <select
+                            value={selectedArtist}
+                            onChange={e => setSelectedArtist(e.target.value)}
+                            className="w-full sm:w-auto bg-gray-950/80 border border-gray-800 rounded-xl pl-8 pr-8 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none"
+                        >
+                            <option value="all">All Artists</option>
+                            {availableArtists.map(artist => (
+                                <option key={artist} value={artist}>{artist}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {(searchTerm || selectedSession !== 'all' || selectedArtist !== 'all') && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setSelectedSession('all');
+                                setSelectedArtist('all');
+                            }}
+                            className="px-3.5 py-2.5 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl border border-red-500/20 transition-all whitespace-nowrap flex items-center justify-center gap-1.5"
+                        >
+                            <X className="w-3.5 h-3.5" /> Reset
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+
+        {/* Empty State when Filters match nothing */}
+        {(filteredHostedRequests.length === 0 && filteredMyPlaylists.length === 0 && matchingSongs.length === 0 && (searchTerm || selectedSession !== 'all' || selectedArtist !== 'all')) ? (
+            <div className="text-center py-16 text-gray-500 border border-gray-800 border-dashed rounded-xl bg-gray-900/30">
+                <ListMusic className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-lg font-semibold text-gray-400">No playlists or songs match your filters</p>
+                <p className="text-sm mt-1">Try broadening your search or clearing your session/artist filters.</p>
+                <button
+                    onClick={() => { setSearchTerm(''); setSelectedSession('all'); setSelectedArtist('all'); }}
+                    className="mt-4 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition"
+                >
+                    Clear All Filters
+                </button>
+            </div>
+        ) : (
+            <>
+                {(searchTerm || selectedArtist !== 'all' || selectedSession !== 'all') && matchingSongs.length > 0 && (
+                    <section id="matching-songs" className="space-y-6">
+                        <h2 className="text-2xl font-bold text-white flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-3 text-center sm:text-left">
+                            <FileAudio className="w-7 h-7 text-green-400" />
+                            Song Results ({matchingSongs.length})
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {matchingSongs.slice(0, 30).map((sub, idx) => (
+                                <div 
+                                    key={sub.id || idx} 
+                                    className={`bg-gray-900 border ${currentTrack?.id === sub.id ? 'border-green-500/50 border-l-4 border-l-green-500' : 'border-gray-800'} rounded-xl p-4 flex items-center justify-between gap-4 hover:border-gray-700 transition group shadow-md`}
+                                >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="w-12 h-12 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative shadow-inner">
+                                            <ArtworkDisplay src={fixUrl(sub.artworkUrl)} alt="Art" className="w-full h-full object-cover" FallbackIcon={FileAudio} />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h4 className="text-white font-bold truncate text-base group-hover:text-blue-400 transition">{sub.title || 'Untitled Track'}</h4>
+                                            <p className="text-gray-400 text-sm truncate">{sub.byline || (sub.uploaderEmail ? sub.uploaderEmail.split('@')[0] : 'Anonymous')}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        <button 
+                                            onClick={() => {
+                                                if (isPlaying && currentTrack?.id === sub.id) {
+                                                    pause();
+                                                } else {
+                                                    play(sub, matchingSongs, { 
+                                                        type: 'playlist', 
+                                                        id: 'search-results', 
+                                                        name: searchTerm ? `Search: "${searchTerm}"` : 'Song Results', 
+                                                        link: '/playlists' 
+                                                    });
+                                                }
+                                            }}
+                                            className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 hover:bg-green-400 transition shadow-lg"
+                                            title={isPlaying && currentTrack?.id === sub.id ? "Pause" : "Play track"}
+                                        >
+                                            {isPlaying && currentTrack?.id === sub.id ? (
+                                                <Pause className="w-4 h-4 fill-current" />
+                                            ) : (
+                                                <Play className="w-4 h-4 ml-0.5 fill-current" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {matchingSongs.length > 30 && (
+                            <div className="text-center text-sm text-gray-500 pt-2">
+                                Showing top 30 of {matchingSongs.length} matching songs. Refine your search to see more.
+                            </div>
+                        )}
+                    </section>
+                )}
+
+                {(activeTab === 'all' || activeTab === 'hosted') && (
+                    <section id="hosted-playlists" className="space-y-6">
+                        <h2 className="text-2xl font-bold text-white flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-3 text-center sm:text-left">
+                            <ListMusic className="w-7 h-7 text-blue-500" />
+                            Hosted Playlists
+                        </h2>
+                        {loadingHosted ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <Skeleton className="h-80 w-full rounded-xl" />
+                                <Skeleton className="h-80 w-full rounded-xl" />
+                                <Skeleton className="h-80 w-full rounded-xl" />
+                            </div>
+                        ) : filteredHostedRequests.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
+                                <p>No hosted playlists found.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {filteredHostedRequests.map(req => (
+                                    <PromptCard 
+                                        key={req.id} 
+                                        request={req} 
+                                        isClosed={false} 
+                                        hideStatus={true}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                )}
+
+                {user && (activeTab === 'all' || activeTab === 'custom') && (
+                    <section id="custom-playlists" className="space-y-6">
+                        <h2 className="text-2xl font-bold text-white border-t border-gray-800 pt-8 flex items-center justify-center sm:justify-start gap-3 text-center sm:text-left">
+                            <Music className="w-7 h-7 text-purple-400" />
+                            Custom Playlists
+                        </h2>
+                        {loadingMy ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <Skeleton className="h-48 w-full rounded-xl" />
+                                <Skeleton className="h-48 w-full rounded-xl" />
+                                <Skeleton className="h-48 w-full rounded-xl" />
+                            </div>
+                        ) : filteredMyPlaylists.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500 border border-gray-800 border-dashed rounded-lg bg-gray-900/30">
+                                <p>No custom playlists yet.</p>
+                                <p className="text-sm mt-2">Create one from any track's menu.</p>
+                            </div>
+                        ) : (
+                            <PlaylistGrid list={filteredMyPlaylists} isOwner={true} />
+                        )}
+                    </section>
+                )}
+            </>
         )}
 
         {selectedPlaylist && (

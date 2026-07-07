@@ -4,7 +4,11 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { fixUrl } from '../../lib/url';
 
-export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+interface ContextBarProps {
+  onToggleSidebar: () => void;
+}
+
+export function ContextBar({ onToggleSidebar }: ContextBarProps) {
   const { user, profile, participantEmail, logout, isLoading } = useAuth();
 
   const location = useLocation();
@@ -50,6 +54,7 @@ export function ContextBar({ onToggleSidebar }: { onToggleSidebar: () => void })
         <button 
            onClick={onToggleSidebar} 
            className="md:hidden text-gray-400 hover:text-white mr-2"
+           title="Open Menu"
         >
            <Menu className="w-6 h-6" />
         </button>

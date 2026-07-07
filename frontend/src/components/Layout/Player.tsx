@@ -9,7 +9,7 @@ import { CollaboratorList } from '../ui/CollaboratorList';
 import { useAuth } from '../../contexts/AuthContext';
 
 
-export function Player() { // Removed props
+export function Player() {
   const { currentTrack, isPlaying, pause, resume, next, prev, currentTime, duration, seek, volume, muted, setVolume, toggleMute, queue, play, context } = usePlayer();
   const { participantEmail } = useAuth();
   const [showLyrics, setShowLyrics] = useState(false);

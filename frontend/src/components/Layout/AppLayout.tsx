@@ -8,7 +8,18 @@ import { FloatingScrollToTop } from '../ui/FloatingScrollToTop';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem('mew_sidebar_collapsed') === 'true';
+  });
   const location = useLocation();
+
+  const toggleCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('mew_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   const isWatchPartyRoute = location.pathname.startsWith('/party/') && location.pathname !== '/party';
 
@@ -26,16 +37,23 @@ export function AppLayout() {
 
       {/* Sidebar - Responsive */}
       <div className={`
-        fixed inset-y-0 left-0 z-[100] w-64 bg-gray-900 transform transition-transform duration-300 ease-in-out border-r border-gray-800
+        fixed inset-y-0 left-0 z-[100] bg-gray-900 transform transition-all duration-300 ease-in-out border-r border-gray-800
         md:relative md:translate-x-0 md:border-r-0 md:z-30
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        w-64 ${isCollapsed ? 'md:w-20' : 'md:w-64'}
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+        <Sidebar 
+          onClose={() => setSidebarOpen(false)} 
+          isCollapsed={isCollapsed}
+          onToggleCollapse={toggleCollapse}
+        />
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 w-full relative">
-        <ContextBar onToggleSidebar={() => setSidebarOpen(true)} />
+      <div className="flex-1 flex flex-col min-w-0 w-full relative transition-all duration-300">
+        <ContextBar 
+          onToggleSidebar={() => setSidebarOpen(true)} 
+        />
         
         {/* Removed Connection Status Banner */}
         

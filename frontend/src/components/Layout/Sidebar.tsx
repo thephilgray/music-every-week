@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Home, Inbox, Layers, Users, Settings, X, ListMusic, Bug, Globe, Radio } from 'lucide-react';
+import { Home, Inbox, Layers, Users, Settings, X, ListMusic, Bug, Globe, Radio, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BugReportModal } from '../BugReportModal';
@@ -10,9 +10,11 @@ import { useGlobalFeatures } from '../../hooks/useGlobalFeatures';
 
 interface SidebarProps {
   onClose?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export function Sidebar({ onClose }: SidebarProps) {
+export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, participantEmail, settings, isAdmin } = useAuth();
@@ -185,21 +187,43 @@ export function Sidebar({ onClose }: SidebarProps) {
   };
 
   return (
-    <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
-      <div className="p-6 flex justify-between items-center">
-        <Link to="/" className="flex items-center gap-3" onClick={onClose}>
-          <img src={BRAND_INFO.logoUrl} alt={BRAND_INFO.shortName} className="h-8 w-auto" />
-          <span className="font-bold text-xl tracking-tight text-white">{BRAND_INFO.shortName}</span>
-        </Link>
-        <button 
+    <div className="w-full bg-gray-900 border-r border-gray-800 flex flex-col h-full overflow-hidden">
+      <div className={`flex justify-between items-center min-h-[64px] border-b border-gray-800/40 md:border-b-0 transition-all duration-300 ${isCollapsed ? 'px-3 py-4' : 'p-4 md:p-6'}`}>
+        <Link 
+          to="/" 
+          className="flex items-center gap-2.5 overflow-hidden flex-shrink-0" 
           onClick={onClose}
-          className="md:hidden text-gray-400 hover:text-white"
+          title={BRAND_INFO.shortName}
         >
-          <X className="w-6 h-6" />
-        </button>
+          <img src={BRAND_INFO.logoUrl} alt={BRAND_INFO.shortName} className="h-7 w-auto flex-shrink-0" />
+          {!isCollapsed && (
+            <span className="font-bold text-xl tracking-tight text-white whitespace-nowrap transition-all duration-300">
+              {BRAND_INFO.shortName}
+            </span>
+          )}
+        </Link>
+        
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              className="hidden md:flex p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            >
+              {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            </button>
+          )}
+          <button 
+            onClick={onClose}
+            className="md:hidden text-gray-400 hover:text-white p-1"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
       </div>
 
-      <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} py-3 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent transition-all duration-300`}>
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -207,18 +231,28 @@ export function Sidebar({ onClose }: SidebarProps) {
               key={item.path}
               type="button"
               onClick={() => handleNavigation(item.path)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors text-left ${
+              title={isCollapsed ? item.label : undefined}
+              className={`w-full flex items-center ${isCollapsed ? 'md:justify-center px-3' : 'justify-between px-4'} py-3 md:py-2.5 rounded-xl transition-all duration-200 text-left relative group ${
                 isActive 
-                  ? 'bg-blue-600/10 text-blue-500'  
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
+                  ? 'bg-blue-600/15 text-blue-400 font-semibold shadow-sm'  
+                  : 'text-gray-400 hover:bg-gray-800/80 hover:text-gray-100'
               }`}
             >
-              <div className="flex items-center gap-3">
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
+              <div className={`flex items-center ${isCollapsed ? 'md:justify-center' : 'gap-3.5'} overflow-hidden`}>
+                  <item.icon className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                  <span className={`font-medium whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'md:hidden' : ''}`}>
+                    {item.label}
+                  </span>
               </div>
               {item.badge !== undefined && item.badge > 0 && (
-                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  isCollapsed ? (
+                    <span className="hidden md:flex absolute top-1.5 right-1.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full items-center justify-center shadow-sm border border-gray-900">
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  ) : null
+              )}
+              {item.badge !== undefined && item.badge > 0 && (
+                  <span className={`bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full ${isCollapsed ? 'md:hidden' : ''}`}>
                       {item.badge > 99 ? '99+' : item.badge}
                   </span>
               )}
@@ -227,13 +261,15 @@ export function Sidebar({ onClose }: SidebarProps) {
         })}
       </nav>
 
-      <div className="pt-4 pb-4 px-4 border-t border-gray-800 mb-4 md:mb-20">
+      <div className={`pt-3 pb-4 ${isCollapsed ? 'px-2' : 'px-4'} border-t border-gray-800/80 mb-4 md:mb-20 space-y-1.5 transition-all duration-300`}>
         <button 
+            type="button"
             onClick={() => setShowBugReport(true)}
-            className="w-full text-left px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition text-sm font-medium flex items-center gap-3"
+            title={isCollapsed ? "Report Bug" : undefined}
+            className={`w-full text-left ${isCollapsed ? 'md:justify-center px-3' : 'px-4'} py-2.5 text-gray-400 hover:text-white hover:bg-gray-800/80 rounded-xl transition-all duration-200 text-sm font-medium flex items-center ${isCollapsed ? 'md:justify-center' : 'gap-3'} group`}
         >
-            <Bug className="w-5 h-5" />
-            Report Bug
+            <Bug className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+            <span className={`whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'md:hidden' : ''}`}>Report Bug</span>
         </button>
       </div>
       

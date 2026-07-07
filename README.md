@@ -124,6 +124,8 @@ VITE_ADMIN_SECRET=your_secret_admin_code
 # VITE_BRAND_NAME="Your Songwriting Club"
 # VITE_BRAND_SHORT_NAME="CLUB"
 # VITE_BRAND_LOGO_URL="/yourlogo.png"
+# VITE_BRAND_SUPPORT_EMAIL="support@yourdomain.com"
+# VITE_BRAND_TAGLINE="A collaborative music community and songwriting group."
 ```
 
 ### 4. Run Development Server
@@ -133,6 +135,32 @@ npm run dev
 ```
 
 The application will be available at `http://localhost:5173`.
+
+---
+
+## 🚀 Production Deployment & White-Labeling
+
+Music Every Week is designed for zero-config deployment on **Vercel** with complete white-label customization support.
+
+### 1. Vercel Environment Variables
+When deploying your clone/fork to production on Vercel, navigate to **Project Settings → Environment Variables** and add your required Firebase and R2 credentials from your local `.env` file.
+
+### 2. Customizing Your Brand (No Git Changes Required!)
+To customize the application name, logo, or support email for your own songwriting community without altering open-source code in Git, set any of the following optional override variables in your Vercel Environment Variables:
+
+| Variable Name | Description | Example Value |
+| :--- | :--- | :--- |
+| `VITE_BRAND_NAME` | Full name of your platform | `"Songwriters League"` |
+| `VITE_BRAND_SHORT_NAME` | 3–4 letter acronym or short name | `"LEAGUE"` |
+| `VITE_BRAND_LOGO_URL` | URL or public asset path for logo | `"/customlogo.png"` |
+| `VITE_BRAND_SUPPORT_EMAIL` | Email displayed on help/privacy links | `"support@songwritersleague.com"` |
+| `VITE_BRAND_TAGLINE` | Homepage hero description | `"A weekly collaborative music community."` |
+
+### 3. Pro-Tip: Pushing Local Env Vars via CLI
+If you prefer command-line workflows, you can use the Vercel CLI to pipe variables directly from your local terminal to Vercel:
+```bash
+printf "support@yourdomain.com" | npx vercel env add VITE_BRAND_SUPPORT_EMAIL production
+```
 
 ---
 

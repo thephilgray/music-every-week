@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { AppLayout } from './components/Layout/AppLayout';
 import { Home } from './pages/Home';
 import { Inbox } from './pages/Inbox';
@@ -28,7 +28,8 @@ import { FinishSignIn } from './pages/FinishSignIn';
 
 function LegacyPromptRedirect() {
   const { id } = useParams();
-  return <Navigate to={`/prompt/${id}`} replace />;
+  const location = useLocation();
+  return <Navigate to={`/prompt/${id}${location.search}${location.hash}`} replace />;
 }
 
 function App() {

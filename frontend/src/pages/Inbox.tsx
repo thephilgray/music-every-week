@@ -258,15 +258,28 @@ const updateNotificationState = useCallback(async (
 
       // Navigate based on type
       if (n.link) {
-          if (n.link.startsWith('http')) {
-             window.open(n.link, '_blank');
+          let targetLink = n.link;
+          if (targetLink.startsWith('/request/')) {
+              targetLink = targetLink.replace('/request/', '/prompt/');
+          }
+          if (targetLink.startsWith('http')) {
+             window.open(targetLink, '_blank');
           } else {
-             navigate(n.link);
+             navigate(targetLink);
           }
       } else if (n.type === 'submission' || n.type === 'comment' || n.type === 'mention') {
           // Fallback if no link, try to construct one
            if (n.requestId) {
-              navigate(`/prompt/${n.requestId}`);
+               let fallbackUrl = `/prompt/${n.requestId}`;
+               const subId = (n as any).submissionId;
+               const commId = (n as any).commentId || (n as any).id;
+               if (subId) {
+                   fallbackUrl += `?submission=${subId}`;
+                   if (n.type === 'comment' || n.type === 'mention') {
+                       if (commId) fallbackUrl += `&comment=${commId}`;
+                   }
+               }
+               navigate(fallbackUrl);
            }
       }
   };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, Link as LinkIcon, Loader2, Trash2, Archive } from 'lucide-react';
+import { Download, Users, ChevronRight, Mail, SkipForward, ArrowLeft, ExternalLink, Edit, Music, List, Link as LinkIcon, Loader2, Trash2, Archive, Tag, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import JSZip from 'jszip';
 import { useAuth } from '../contexts/AuthContext'; 
@@ -7,6 +7,9 @@ import { useToast } from '../contexts/ToastContext';
 import { EditPrompt } from '../components/EditPrompt';
 import { SubmitTrack } from '../components/SubmitTrack'; 
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { DistroHelperModal } from '../components/CreatorTools/DistroHelperModal';
+import { PromptAnalytics } from '../components/CreatorTools/PromptAnalytics';
+import { SessionAnalytics } from '../components/CreatorTools/SessionAnalytics';
 import type { Prompt, Submission, UserProfile, Session } from '../types';
 import { getTimestampAsNumber, copyToClipboard } from '../lib/utils';
 import { db } from '../lib/firebase'; 
@@ -26,7 +29,14 @@ export function CreatorTools() {
   const { user, participantEmail, isAdmin } = useAuth(); 
   const { success, error } = useToast();
 
-  
+  // New state for Tools upgrade: View Toggle & Distro Helper
+  const [viewMode, setViewMode] = useState<'management' | 'analytics'>('management');
+  const [showDistroHelper, setShowDistroHelper] = useState(false);
+  const [distroFormat, setDistroFormat] = useState<'comma' | 'newline' | 'table'>('comma');
+  const [distroIncludePending, setDistroIncludePending] = useState(true);
+  const [distroTarget, setDistroTarget] = useState<'inactive' | 'active' | 'all'>('inactive');
+  const [promptComments, setPromptComments] = useState<unknown[]>([]);
+
   // Tabs
   const [activeTab, setActiveTab] = useState<'sessions' | 'requests' | 'submissions'>('sessions');
 
@@ -87,6 +97,33 @@ export function CreatorTools() {
       };
       fetchComments();
   }, [selectedSubmission?.id]);
+
+  // Reset view mode when switching prompt or session
+  useEffect(() => {
+      setViewMode('management');
+      setShowDistroHelper(false);
+  }, [selectedRequest?.id, selectedSession?.id]);
+
+  // Fetch comments for selected prompt (for analytics)
+  useEffect(() => {
+      if (!selectedRequest?.id) {
+          setPromptComments([]);
+          return;
+      }
+      const fetchPromptComments = async () => {
+          try {
+              const q = query(collection(db, 'comments'), where('requestId', '==', selectedRequest.id));
+              const snap = await getDocs(q);
+              const comms: unknown[] = [];
+              snap.forEach(d => comms.push({ id: d.id, ...d.data(), createdAt: getTimestampAsNumber(d.data().createdAt) }));
+              setPromptComments(comms);
+          } catch (e) {
+              console.error("Error fetching prompt comments:", e);
+              setPromptComments([]);
+          }
+      };
+      fetchPromptComments();
+  }, [selectedRequest?.id]);
 
   // Combine Requests
   useEffect(() => {
@@ -342,7 +379,7 @@ export function CreatorTools() {
                       id: participantId,
                       name: data.alias || resolvedProfile?.displayName || resolvedProfile?.alias || 'Unknown User',
                       contact: data.email || resolvedProfile?.email || participantId,
-                      status: data.status || 'pending', // Initial status from request.participants
+                      status: data.status || 'accepted', // In participants map = joined; only accessList-only entries are 'invited'
                       type: 'user',
                       extensionHours: data.extensionHours || 0,
                       hasPass: data.hasPass || false
@@ -741,36 +778,34 @@ export function CreatorTools() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-theme(spacing.16))]">
-        {
-/* Sidebar */}
-        <div className={`w-full lg:w-80 border-r border-gray-800 bg-gray-950/50 overflow-y-auto flex flex-col ${selectedRequest || selectedSubmission || selectedSession ? 'hidden lg:flex' : 'flex'}`}>
-            {
-/* Tabs */}
+    <div className="flex flex-col lg:flex-row h-full overflow-hidden">
+        {/* Sidebar */}
+        <div className={`w-full lg:w-[350px] border-r border-gray-800 bg-gray-950/50 flex flex-col ${selectedRequest || selectedSubmission || selectedSession ? 'hidden lg:flex' : 'flex'}`}>
+            {/* Tabs */}
             <div className="flex border-b border-gray-800">
                 <button
                     onClick={() => { setActiveTab('sessions'); setSelectedRequest(null); setSelectedSubmission(null); }}
-                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'sessions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`flex-1 py-3 px-1.5 text-xs font-medium flex items-center justify-center gap-1.5 transition whitespace-nowrap ${activeTab === 'sessions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    <Archive className="w-4 h-4" /> Sessions
+                    <Archive className="w-4 h-4 shrink-0" /> Sessions
                 </button>
                 <button
                     onClick={() => { setActiveTab('requests'); setSelectedSubmission(null); setSelectedSession(null); }}
-                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'requests' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`flex-1 py-3 px-1.5 text-xs font-medium flex items-center justify-center gap-1.5 transition whitespace-nowrap ${activeTab === 'requests' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    <List className="w-4 h-4" /> Prompts
+                    <List className="w-4 h-4 shrink-0" /> Prompts
                 </button>
                 <button
                     onClick={() => { setActiveTab('submissions'); setSelectedRequest(null); setSelectedSession(null); }}
-                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition ${activeTab === 'submissions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`flex-1 py-3 px-1.5 text-xs font-medium flex items-center justify-center gap-1.5 transition whitespace-nowrap ${activeTab === 'submissions' ? 'text-white bg-gray-900 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                    <Music className="w-4 h-4" /> Submissions
+                    <Music className="w-4 h-4 shrink-0" /> Submissions
                 </button>
             </div>
             
             {/* Sync Button - REMOVED (Migration Tool) */}
             
-            <div className="p-4 space-y-1 flex-1 overflow-y-auto">
+            <div className="p-4 pb-32 space-y-1 flex-1 overflow-y-auto">
                 {activeTab === 'sessions' ? (
                     <div className="space-y-2">
                         <button
@@ -781,7 +816,7 @@ export function CreatorTools() {
                                 setSessionFormCadence('Bi-weekly');
                                 setIsCreateSessionOpen(true);
                             }}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition shadow-md mb-3"
+                            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium shadow-lg shadow-blue-600/20 transition flex items-center justify-center gap-2 text-sm"
                         >
                             + New Session
                         </button>
@@ -803,19 +838,21 @@ export function CreatorTools() {
                             </button>
                         ))}
 
-                        <button
-                            onClick={() => setSelectedSession({ id: 'UNASSIGNED', name: 'Standalone Prompts', description: 'Prompts not assigned to any session group.', ownerPub: user?.uid || '', ownerEmail: user?.email || '', createdAt: 0 })}
-                            className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition-colors mt-4 border-t border-gray-800/80 pt-3 ${selectedSession?.id === 'UNASSIGNED' 
-                                ? 'bg-gray-800 text-gray-200 border border-gray-700'
-                                : 'text-gray-400 hover:bg-gray-900 hover:text-gray-300'
-                            }`}
-                        >
-                            <div className="truncate">
-                                <div className="font-medium truncate">Standalone Prompts</div>
-                                <div className="text-xs text-gray-500">{myRequests.filter(r => !r.sessionId).length} Unassigned</div>
-                            </div>
-                            <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedSession?.id === 'UNASSIGNED' ? 'opacity-100' : ''}`} />
-                        </button>
+                        <div className="pt-2">
+                            <button
+                                onClick={() => setSelectedSession({ id: 'UNASSIGNED', name: 'Standalone Prompts', description: 'Prompts not assigned to any session', ownerPub: user?.uid || '', ownerEmail: user?.email || '', createdAt: 0 })}
+                                className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between group ${selectedSession?.id === 'UNASSIGNED'
+                                    ? 'bg-gray-800/80 border-blue-500 text-white'
+                                    : 'bg-gray-900/40 border-gray-800/80 text-gray-300 hover:bg-gray-900 hover:border-gray-700'
+                                }`}
+                            >
+                                <div className="truncate">
+                                    <div className="font-medium truncate">Standalone Prompts</div>
+                                    <div className="text-xs text-gray-500">{myRequests.filter(r => !r.sessionId).length} Unassigned</div>
+                                </div>
+                                <ChevronRight className={`w-4 h-4 opacity-0 group-hover:opacity-100 ${selectedSession?.id === 'UNASSIGNED' ? 'opacity-100' : ''}`} />
+                            </button>
+                        </div>
                     </div>
                 ) : activeTab === 'requests' ? (
                     <>
@@ -855,7 +892,7 @@ export function CreatorTools() {
             </div>
         </div>
 
-        <div className={`flex-1 p-4 md:p-8 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission || selectedSession ? 'block' : 'hidden lg:block'}`}>
+        <div className={`flex-1 px-3 py-4 md:px-5 md:py-6 pb-32 md:pb-36 bg-gray-900/10 overflow-y-auto ${selectedRequest || selectedSubmission || selectedSession ? 'block' : 'hidden lg:block'}`}>
             {activeTab === 'sessions' && selectedSession ? (
                 <div>
                     <button 
@@ -865,7 +902,7 @@ export function CreatorTools() {
                         <ArrowLeft className="w-4 h-4" /> Back to Sessions
                     </button>
 
-                    <div className="flex items-center justify-between border-b border-gray-800 pb-6 mb-6 flex-wrap gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b border-gray-800 pb-6 mb-6 gap-4">
                         <div>
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -915,133 +952,168 @@ export function CreatorTools() {
                         )}
                     </div>
 
-                    {/* Prompts in this Session */}
-                    <div className="space-y-3 mb-8">
-                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                            {selectedSession.id === 'UNASSIGNED' ? 'Standalone Prompts' : 'Session Prompts'}
-                        </h3>
-                        {(() => {
-                            const sessionPrompts = myRequests.filter(r => selectedSession.id === 'UNASSIGNED' ? !r.sessionId : r.sessionId === selectedSession.id);
-                            if (sessionPrompts.length === 0) {
-                                return (
-                                    <div className="p-8 text-center bg-gray-950 border border-gray-800/80 rounded-xl text-gray-500 italic">
-                                        No prompts in this group yet.
-                                    </div>
-                                );
-                            }
-                            return sessionPrompts.map(req => (
-                                <div key={req.id} className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap hover:border-gray-700 transition">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h4 className="font-semibold text-white text-base">{req.title}</h4>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-semibold ${req.accessMode === 'direct' ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'bg-purple-900/30 text-purple-400 border border-purple-800/50'}`}>
-                                                {req.accessMode || 'direct'}
-                                            </span>
+                    {/* View Mode Toggle for Session */}
+                    <div className="flex items-center gap-2 mb-6 bg-gray-950 p-1.5 rounded-xl border border-gray-800/80 w-fit">
+                        <button
+                            onClick={() => setViewMode('management')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                                viewMode === 'management'
+                                    ? 'bg-gray-800 text-white shadow border border-gray-700'
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-900/50'
+                            }`}
+                        >
+                            <List className="w-4 h-4" /> Management
+                        </button>
+                        <button
+                            onClick={() => setViewMode('analytics')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                                viewMode === 'analytics'
+                                    ? 'bg-blue-600 text-white shadow border border-blue-500/50'
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-900/50'
+                            }`}
+                        >
+                            <BarChart3 className="w-4 h-4" /> Analytics & Cadence
+                        </button>
+                    </div>
+
+                    {viewMode === 'analytics' ? (
+                        <SessionAnalytics
+                            session={selectedSession}
+                            sessionPrompts={myRequests.filter(r => selectedSession.id === 'UNASSIGNED' ? !r.sessionId : r.sessionId === selectedSession.id)}
+                        />
+                    ) : (
+                        <>
+                            {/* Prompts in this Session */}
+                            <div className="space-y-3 mb-8">
+                                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                                    {selectedSession.id === 'UNASSIGNED' ? 'Standalone Prompts' : 'Session Prompts'}
+                                </h3>
+                                {(() => {
+                                    const sessionPrompts = myRequests.filter(r => selectedSession.id === 'UNASSIGNED' ? !r.sessionId : r.sessionId === selectedSession.id);
+                                    if (sessionPrompts.length === 0) {
+                                        return (
+                                            <div className="p-8 text-center bg-gray-950 border border-gray-800/80 rounded-xl text-gray-500 italic">
+                                                No prompts in this group yet.
+                                            </div>
+                                        );
+                                    }
+                                    return sessionPrompts.map(req => (
+                                        <div key={req.id} className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap hover:border-gray-700 transition">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-semibold text-white text-base">{req.title}</h4>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-semibold ${req.accessMode === 'direct' ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'bg-purple-900/30 text-purple-400 border border-purple-800/50'}`}>
+                                                        {req.accessMode || 'direct'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-gray-400 mt-1 flex items-center gap-4">
+                                                    <span>Deadline: {req.deadline ? new Date(req.deadline).toLocaleDateString() : 'None'}</span>
+                                                    {req.participants && <span>{Object.keys(req.participants).length} Participants</span>}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {selectedSession.id === 'UNASSIGNED' ? (
+                                                    <select
+                                                        onChange={async (e) => {
+                                                            const targetSessId = e.target.value;
+                                                            if (!targetSessId) return;
+                                                            try {
+                                                                await updateDoc(doc(db, 'requests', req.id!), { sessionId: targetSessId });
+                                                                if (targetSessId !== 'UNASSIGNED') {
+                                                                    await updateDoc(doc(db, 'sessions', targetSessId), { promptIds: arrayUnion(req.id) });
+                                                                }
+                                                                success(`Moved "${req.title}" to session`);
+                                                            } catch (err: any) {
+                                                                error("Failed to move prompt: " + err.message);
+                                                            }
+                                                        }}
+                                                        defaultValue=""
+                                                        className="bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 p-1.5 focus:border-blue-500 outline-none"
+                                                    >
+                                                        <option value="" disabled>Move to session...</option>
+                                                        {sessions.filter(s => s.id !== 'UNASSIGNED').map(s => (
+                                                            <option key={s.id} value={s.id!}>{s.name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                await updateDoc(doc(db, 'requests', req.id!), { sessionId: null });
+                                                                if (selectedSession.id) {
+                                                                    await updateDoc(doc(db, 'sessions', selectedSession.id), { promptIds: arrayRemove(req.id) });
+                                                                }
+                                                                success(`Removed "${req.title}" from session`);
+                                                            } catch (err: any) {
+                                                                error("Failed to remove prompt: " + err.message);
+                                                            }
+                                                        }}
+                                                        className="text-xs text-gray-400 hover:text-red-400 bg-gray-900 px-2.5 py-1.5 rounded border border-gray-800 hover:border-red-900/30 transition"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+
+                                                <button
+                                                    onClick={() => {
+                                                        setActiveTab('requests');
+                                                        setSelectedRequest(req);
+                                                    }}
+                                                    className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-xs flex items-center gap-1 transition border border-gray-700"
+                                                >
+                                                    Manage <ChevronRight className="w-3 h-3" />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="text-xs text-gray-400 mt-1 flex items-center gap-4">
-                                            <span>Deadline: {req.deadline ? new Date(req.deadline).toLocaleDateString() : 'None'}</span>
-                                            {req.participants && <span>{Object.keys(req.participants).length} Participants</span>}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        {selectedSession.id === 'UNASSIGNED' ? (
-                                            <select
-                                                onChange={async (e) => {
-                                                    const targetSessId = e.target.value;
-                                                    if (!targetSessId) return;
-                                                    try {
-                                                        await updateDoc(doc(db, 'requests', req.id!), { sessionId: targetSessId });
-                                                        await updateDoc(doc(db, 'sessions', targetSessId), { promptIds: arrayUnion(req.id!) });
-                                                        success(`Moved "${req.title}" to session!`);
-                                                    } catch (err: any) {
-                                                        error("Failed to assign: " + err.message);
-                                                    }
-                                                }}
-                                                defaultValue=""
-                                                className="bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-xs text-gray-300 focus:border-blue-500 outline-none"
-                                            >
-                                                <option value="" disabled>+ Assign to Session</option>
-                                                {sessions.map(s => (
-                                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        await updateDoc(doc(db, 'requests', req.id!), { sessionId: null });
-                                                        if (selectedSession.id) {
-                                                            await updateDoc(doc(db, 'sessions', selectedSession.id), { promptIds: arrayRemove(req.id!) });
-                                                        }
-                                                        success("Removed from session");
-                                                    } catch (err: any) {
-                                                        error("Failed to remove: " + err.message);
-                                                    }
-                                                }}
-                                                className="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-red-400 px-3 py-1.5 rounded text-xs transition border border-gray-700"
-                                                title="Remove from this session (make standalone)"
-                                            >
-                                                Remove from Session
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => {
-                                                setSelectedRequest(req);
-                                                setActiveTab('requests');
-                                            }}
-                                            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-3 py-1.5 rounded text-xs font-medium transition border border-blue-500/30 flex items-center gap-1"
+                                    ));
+                                })()}
+                            </div>
+
+                            {/* Add existing prompt to session */}
+                            {selectedSession.id !== 'UNASSIGNED' && (
+                                <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 mt-6">
+                                    <h4 className="text-sm font-semibold text-white mb-2">Add Existing Prompt to Session</h4>
+                                    <p className="text-xs text-gray-400 mb-3">Select a prompt from your standalone or other sessions to pull into this session group.</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        <select
+                                            value={addPromptToSessionId}
+                                            onChange={e => setAddPromptToSessionId(e.target.value)}
+                                            className="flex-1 min-w-[200px] bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
                                         >
-                                            Manage <ChevronRight className="w-3 h-3" />
+                                            <option value="">-- Select a Prompt --</option>
+                                            {myRequests.filter(r => r.sessionId !== selectedSession.id).map(r => (
+                                                <option key={r.id} value={r.id!}>
+                                                    {r.title} ({r.sessionId ? 'In another session' : 'Standalone'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            onClick={async () => {
+                                                if (!addPromptToSessionId) return;
+                                                try {
+                                                    const reqToMove = myRequests.find(r => r.id === addPromptToSessionId);
+                                                    if (reqToMove?.sessionId) {
+                                                        await updateDoc(doc(db, 'sessions', reqToMove.sessionId), { promptIds: arrayRemove(addPromptToSessionId) });
+                                                    }
+                                                    await updateDoc(doc(db, 'requests', addPromptToSessionId), { sessionId: selectedSession.id });
+                                                    if (selectedSession.id) {
+                                                        await updateDoc(doc(db, 'sessions', selectedSession.id), { promptIds: arrayUnion(addPromptToSessionId) });
+                                                    }
+                                                    setAddPromptToSessionId('');
+                                                    success("Prompt added to session!");
+                                                } catch (err: any) {
+                                                    error("Failed to add prompt: " + err.message);
+                                                }
+                                            }}
+                                            disabled={!addPromptToSessionId}
+                                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+                                        >
+                                            + Add to Session
                                         </button>
                                     </div>
                                 </div>
-                            ));
-                        })()}
-                    </div>
-
-                    {/* Add existing prompt to session */}
-                    {selectedSession.id !== 'UNASSIGNED' && (
-                        <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 mt-6">
-                            <h4 className="text-sm font-semibold text-white mb-2">Add Existing Prompt to Session</h4>
-                            <p className="text-xs text-gray-400 mb-3">Select a prompt from your standalone or other sessions to pull into this session group.</p>
-                            <div className="flex gap-2 flex-wrap">
-                                <select
-                                    value={addPromptToSessionId}
-                                    onChange={e => setAddPromptToSessionId(e.target.value)}
-                                    className="flex-1 min-w-[200px] bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
-                                >
-                                    <option value="">-- Select a Prompt --</option>
-                                    {myRequests.filter(r => r.sessionId !== selectedSession.id).map(r => (
-                                        <option key={r.id} value={r.id!}>
-                                            {r.title} ({r.sessionId ? 'In another session' : 'Standalone'})
-                                        </option>
-                                    ))}
-                                </select>
-                                <button
-                                    onClick={async () => {
-                                        if (!addPromptToSessionId) return;
-                                        try {
-                                            const reqToMove = myRequests.find(r => r.id === addPromptToSessionId);
-                                            if (reqToMove?.sessionId) {
-                                                await updateDoc(doc(db, 'sessions', reqToMove.sessionId), { promptIds: arrayRemove(addPromptToSessionId) });
-                                            }
-                                            await updateDoc(doc(db, 'requests', addPromptToSessionId), { sessionId: selectedSession.id });
-                                            if (selectedSession.id) {
-                                                await updateDoc(doc(db, 'sessions', selectedSession.id), { promptIds: arrayUnion(addPromptToSessionId) });
-                                            }
-                                            setAddPromptToSessionId('');
-                                            success("Prompt added to session!");
-                                        } catch (err: any) {
-                                            error("Failed to add prompt: " + err.message);
-                                        }
-                                    }}
-                                    disabled={!addPromptToSessionId}
-                                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
-                                >
-                                    + Add to Session
-                                </button>
-                            </div>
-                        </div>
+                            )}
+                        </>
                     )}
                 </div>
             ) : activeTab === 'requests' && selectedRequest ? (
@@ -1053,54 +1125,98 @@ export function CreatorTools() {
                         <ArrowLeft className="w-4 h-4" /> Back to List
                     </button>
 
-                    <div className="flex items-center justify-between mb-8">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
                         <div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-wrap">
                                 <h1 className="text-2xl font-bold text-white">{selectedRequest.title}</h1>
-                                <Link 
-                                    to={`/prompt/${selectedRequest.id}`}
-                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Open Prompt Page"
-                                >
-                                    <ExternalLink className="w-5 h-5" />
-                                </Link>
-                                <button 
-                                    onClick={() => setIsEditRequestOpen(true)}
-                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Edit Prompt"
-                                >
-                                    <Edit className="w-5 h-5" />
-                                </button>
-                                <button 
-                                    onClick={() => setShowDeleteRequestConfirm(true)}
-                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
-                                    title="Delete Prompt"
-                                >
-                                    <Trash2 className="w-5 h-5" />
-                                </button>
-                                <button 
-                                    onClick={handleGenerateExtensionLink}
-                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
-                                    title="Generate Extension Link"
-                                >
-                                    <LinkIcon className="w-5 h-5" />
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                    <Link 
+                                        to={`/prompt/${selectedRequest.id}`}
+                                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                        title="Open Prompt Page"
+                                    >
+                                        <ExternalLink className="w-5 h-5" />
+                                    </Link>
+                                    <button 
+                                        onClick={() => setIsEditRequestOpen(true)}
+                                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                        title="Edit Prompt"
+                                    >
+                                        <Edit className="w-5 h-5" />
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowDeleteRequestConfirm(true)}
+                                        className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
+                                        title="Delete Prompt"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                    <button 
+                                        onClick={handleGenerateExtensionLink}
+                                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition"
+                                        title="Generate Extension Link"
+                                    >
+                                        <LinkIcon className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
-                            <p className="text-gray-400">Manage participants and exports</p>
+                            <p className="text-gray-400 mt-1">Manage participants and exports</p>
                         </div>
-                        <button 
-                            onClick={exportCSV}
-                            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-700 transition"
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <button 
+                                onClick={() => setShowDistroHelper(true)}
+                                className="flex items-center justify-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 px-3.5 py-2 rounded-xl border border-blue-500/30 transition font-medium shadow text-sm whitespace-nowrap"
+                                title="Audit lists and generate custom exports for Mailchimp tags"
+                            >
+                                <Tag className="w-4 h-4 shrink-0" />
+                                <span>Distro / Tag Helper</span>
+                            </button>
+                            <button 
+                                onClick={exportCSV}
+                                className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-3.5 py-2 rounded-xl border border-gray-700 transition font-medium text-sm whitespace-nowrap"
+                            >
+                                <Download className="w-4 h-4 shrink-0" />
+                                <span>Export CSV</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* View Mode Toggle for Request */}
+                    <div className="flex items-center gap-2 mb-6 bg-gray-950 p-1.5 rounded-xl border border-gray-800/80 w-fit">
+                        <button
+                            onClick={() => setViewMode('management')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                                viewMode === 'management'
+                                    ? 'bg-gray-800 text-white shadow border border-gray-700'
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-900/50'
+                            }`}
                         >
-                            <Download className="w-4 h-4" />
-                            <span className="hidden sm:inline">Export CSV</span>
+                            <List className="w-4 h-4" /> Management
+                        </button>
+                        <button
+                            onClick={() => setViewMode('analytics')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                                viewMode === 'analytics'
+                                    ? 'bg-blue-600 text-white shadow border border-blue-500/50'
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-900/50'
+                            }`}
+                        >
+                            <BarChart3 className="w-4 h-4" /> Prompt Analytics
                         </button>
                     </div>
 
-                    <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden overflow-x-auto">
-                        <div className="p-4 border-b border-gray-800 flex justify-between items-center flex-wrap gap-4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-gray-500 text-sm">Bulk Actions:</span>
+                    {viewMode === 'analytics' ? (
+                        <PromptAnalytics
+                            request={selectedRequest}
+                            participants={participants}
+                            submissions={selectedRequestSubmissions}
+                            comments={promptComments}
+                        />
+                    ) : (
+                        <div className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden overflow-x-auto">
+                            <div className="p-4 border-b border-gray-800 flex justify-between items-center flex-wrap gap-4">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-500 text-sm">Bulk Actions:</span>
                                 <button 
                                     onClick={() => handleBulkExtend(24)}
                                     className="px-3 py-1.5 bg-blue-900/30 text-blue-400 border border-blue-800 rounded text-xs hover:bg-blue-900/50 transition"
@@ -1277,7 +1393,8 @@ export function CreatorTools() {
                             </tbody>
                         </table>
                     </div>
-                </div>
+                )}
+            </div>
             ) : activeTab === 'submissions' && selectedSubmission ? (
                 <div>
                     <button 
@@ -1540,6 +1657,19 @@ export function CreatorTools() {
             isDestructive={true}
             onConfirm={handleDeleteSubmission}
             onCancel={() => setShowDeleteSubmissionConfirm(false)}
+        />
+
+        <DistroHelperModal
+            isOpen={showDistroHelper}
+            onClose={() => setShowDistroHelper(false)}
+            participants={participants}
+            promptTitle={selectedRequest?.title || selectedSession?.name || 'Prompt'}
+            distroTarget={distroTarget}
+            setDistroTarget={setDistroTarget}
+            distroFormat={distroFormat}
+            setDistroFormat={setDistroFormat}
+            distroIncludePending={distroIncludePending}
+            setDistroIncludePending={setDistroIncludePending}
         />
     </div>
   );

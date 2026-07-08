@@ -422,7 +422,7 @@ export function CreatePrompt() {
                 <div>
                     <label className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-2">
                         Assign to Session (Optional)
-                        <Tooltip content="Group multiple related prompts (e.g. bi-weekly sessions for Fall 2025) together in Creator Tools." icon />
+                        <Tooltip content="Group multiple related prompts (e.g. bi-weekly sessions for Fall 2025) together in Tools." icon />
                     </label>
                     <select
                         value={selectedSessionId}

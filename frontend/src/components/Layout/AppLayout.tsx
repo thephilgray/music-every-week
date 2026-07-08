@@ -22,6 +22,7 @@ export function AppLayout() {
   };
 
   const isWatchPartyRoute = location.pathname.startsWith('/party/') && location.pathname !== '/party';
+  const isCreatorRoute = location.pathname === '/creator';
 
   return (
     <div className="flex h-[100dvh] bg-black overflow-hidden relative">
@@ -58,7 +59,11 @@ export function AppLayout() {
         {/* Removed Connection Status Banner */}
         
         {/* Scrollable Stage */}
-        <main className={`flex-1 overflow-x-hidden overflow-y-auto ${isWatchPartyRoute ? 'p-0' : 'p-4 md:p-8 pb-32'} bg-black relative w-full`}>
+        <main className={`flex-1 min-h-0 overflow-x-hidden ${
+          isWatchPartyRoute || isCreatorRoute
+            ? 'overflow-hidden p-0'
+            : 'overflow-y-auto p-4 md:p-8 pb-32'
+        } bg-black relative w-full`}>
           <Outlet />
         </main>
         

@@ -304,7 +304,7 @@ export function PartyHub() {
                                       </select>
                                   ) : (
                                       <div className="bg-gray-800 p-3 rounded-lg text-sm text-gray-400 border border-gray-700">
-                                          You don't have any requests yet. <Link to="/creator" className="text-blue-400 hover:underline">Create one first.</Link>
+                                          You don't have any prompts yet. <Link to="/tools" className="text-blue-400 hover:underline">Create one first.</Link>
                                       </div>
                                   )}
                               </div>

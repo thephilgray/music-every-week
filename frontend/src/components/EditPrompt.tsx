@@ -631,7 +631,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                 <div>
                     <label className="block text-gray-300 text-sm mb-1 font-semibold flex items-center gap-2">
                         Assign to Session (Optional)
-                        <Tooltip content="Group multiple related prompts together in Creator Tools." icon />
+                        <Tooltip content="Group multiple related prompts together in Tools." icon />
                     </label>
                     <select
                         value={selectedSessionId}

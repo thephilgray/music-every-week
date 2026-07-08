@@ -52,6 +52,7 @@ function App() {
               <Route path="/prompt/:id" element={<PromptDetail />} />
               <Route path="/request/:id" element={<LegacyPromptRedirect />} />
               <Route path="/inbox" element={<Inbox />} />
+              <Route path="/tools" element={<CreatorTools />} />
               <Route path="/creator" element={<CreatorTools />} />
               <Route path="/directory" element={<Directory />} />
               <Route path="/playlists" element={<Playlists />} />

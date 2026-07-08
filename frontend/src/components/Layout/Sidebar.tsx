@@ -176,7 +176,7 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
     ...(features.community ? [{ icon: Globe, label: 'Community', path: '/feed', badge: communityUnreadCount }] : []),
     { icon: Inbox, label: 'Inbox', path: '/inbox', badge: unreadCount },
     ...(features.directory ? [{ icon: Users, label: 'Directory', path: '/directory' }] : []),
-    { icon: Layers, label: 'Creator Tools', path: '/creator' },
+    { icon: Layers, label: 'Tools', path: '/tools' },
     ...(isAdmin && features.live ? [{ icon: ListMusic, label: 'Party Hub', path: '/party' }] : []),
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];

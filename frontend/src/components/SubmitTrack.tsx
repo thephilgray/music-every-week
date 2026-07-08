@@ -591,7 +591,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   };
 
   return createPortal(
-    <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 py-10 sm:p-6 bg-gray-950/90 backdrop-blur-sm overscroll-none touch-none">
+    <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 py-10 sm:p-6 bg-gray-950 overscroll-none touch-none">
       <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[82vh] sm:max-h-[88vh] overflow-y-auto overscroll-contain touch-auto">
         <button 
             onClick={onClose}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, ChevronDown, ChevronUp, ListMusic } from 'lucide-react';
+import { Play, SkipBack, SkipForward, Volume2, VolumeX, Pause, Music, FileText, ChevronDown, ListMusic } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { SongDetailsModal } from '../SongDetailsModal';
 import { QueueModal } from './QueueModal';
@@ -71,9 +71,9 @@ export function Player() {
       <div 
         className={`
             fixed bottom-0 left-0 right-0 z-50 bg-gray-900 border-t border-gray-800 transition-all duration-300 ease-in-out
-            ${isMinimized ? 'h-16' : 'h-[100dvh] md:h-24'}
+            ${isMinimized ? 'h-16' : 'h-[100dvh] md:h-16'}
             flex flex-col md:flex-row items-center justify-between
-            ${!isMinimized && 'md:px-6'}
+            px-0 md:px-4
         `}
       >
         
@@ -94,7 +94,8 @@ export function Player() {
         <div 
             className={`
                 flex transition-all duration-300
-                ${isMinimized ? 'w-full md:w-1/3 h-full items-center px-4 gap-3 cursor-pointer' : 'flex-col md:flex-row w-full md:w-1/3 items-center md:gap-4 p-6 md:p-0 flex-1 md:flex-none'}
+                ${isMinimized ? 'w-full h-full items-center px-4 gap-3 cursor-pointer' : 'flex-col w-full items-center p-6 flex-1'}
+                md:flex-row md:w-1/3 md:max-w-[380px] md:h-full md:items-center md:px-2 md:gap-3 md:p-0 md:flex-none md:cursor-default
             `}
             onClick={() => {
                 // On mobile minimized, clicking anywhere (except buttons) expands
@@ -105,7 +106,8 @@ export function Player() {
         >
             <div className={`
                 bg-gray-800 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0 relative group transition-all
-                ${isMinimized ? 'w-10 h-10' : 'w-64 h-64 md:w-14 md:h-14 shadow-2xl md:shadow-none mb-6 md:mb-0'}
+                ${isMinimized ? 'w-10 h-10' : 'w-64 h-64 shadow-2xl mb-6'}
+                md:w-10 md:h-10 md:shadow-none md:mb-0
             `}>
                 <ArtworkDisplay 
                     src={currentTrack?.artworkUrl || context?.artworkUrl || '/mewlogo.png'} 
@@ -113,19 +115,19 @@ export function Player() {
                     className="w-full h-full object-cover"
                     FallbackIcon={Music}
                 />
-                {/* Overlay only on Desktop or Mobile Expanded */}
-                <div className={`absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center ${isMinimized ? 'hidden' : ''}`}>
+                {/* Overlay on Desktop or Mobile Expanded */}
+                <div className={`absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center ${isMinimized ? 'hidden md:flex' : ''}`}>
                     <button 
                         onClick={(e) => { e.stopPropagation(); setShowLyrics(true); }} 
                         title="View Notes/Lyrics" 
                         disabled={!currentTrack}
                     >
-                        <FileText className="w-6 h-6 text-white" />
+                        <FileText className="w-6 h-6 text-white md:w-5 md:h-5" />
                     </button>
                 </div>
             </div>
 
-            <div className={`min-w-0 flex-1 ${!isMinimized ? 'text-center md:text-left w-full' : ''}`}>
+            <div className={`min-w-0 flex-1 ${!isMinimized ? 'text-center w-full' : ''} md:text-left md:w-auto`}>
                 {currentTrack ? (
                     <CollaboratorList
                         uploaderPub={currentTrack.uploaderUid || currentTrack.originalUploaderPub || ''}
@@ -134,14 +136,14 @@ export function Player() {
                         collaborators={currentTrack.collaborators}
                         linkProfile={currentTrack.linkProfile}
                         proxyFor={currentTrack.proxyFor}
-                        className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}
+                        className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center text-xl' : ''} md:justify-start md:text-base`}
                     />
                 ) : (
-                    <div className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start text-xl md:text-base' : ''}`}>
+                    <div className={`text-white font-bold truncate flex items-center gap-2 ${!isMinimized ? 'justify-center text-xl' : ''} md:justify-start md:text-base`}>
                         No Artist Selected
                     </div>
                 )}
-                <div className={`text-gray-500 text-xs truncate ${!isMinimized ? 'text-lg md:text-xs mt-1 md:mt-0' : ''} flex items-center gap-2 ${!isMinimized ? 'justify-center md:justify-start' : ''}`}>
+                <div className={`text-gray-500 text-xs truncate ${!isMinimized ? 'text-lg mt-1 justify-center' : ''} md:text-xs md:mt-0 md:justify-start flex items-center gap-2`}>
                     {currentTrack?.title || 'Select a track to play'}
                     {currentTrack?.lyrics && !isMinimized && (
                         <button onClick={(e) => { e.stopPropagation(); setShowLyrics(true); }} className="text-gray-500 hover:text-blue-400 block md:hidden" title="View Notes">
@@ -168,10 +170,11 @@ export function Player() {
       {/* Controls Section */}
       <div className={`
           flex flex-col items-center justify-center transition-all
-          ${isMinimized ? 'hidden md:flex w-auto ml-4 flex-row gap-4 lg:w-1/3 lg:justify-center' : 'w-full md:w-1/3 min-w-[200px] gap-6 md:gap-2 p-6 md:p-0'}
+          ${isMinimized ? 'hidden' : 'w-full min-w-[200px] gap-6 p-6'}
+          md:flex md:flex-row md:flex-1 md:w-auto md:max-w-[800px] md:gap-6 md:px-4 md:p-0 md:justify-between
       `}>
           {/* Waveform / Progress (Mobile Expanded & Desktop) */}
-          <div className="w-full flex items-center gap-3 text-xs text-gray-500 font-mono animate-in fade-in duration-300">
+          <div className="w-full md:flex-1 md:w-auto min-w-0 flex items-center gap-3 text-xs text-gray-500 font-mono animate-in fade-in duration-300">
                <span className="min-w-[35px] text-right">{formatTime(currentTime)}</span>
                
                {currentTrack?.waveform && currentTrack.waveform.length > 0 ? (
@@ -195,7 +198,7 @@ export function Player() {
                <span className="min-w-[35px]">{formatTime(duration)}</span>
            </div>
 
-         <div className="flex items-center gap-8 md:gap-6 mt-4 md:mt-0">
+         <div className="flex items-center gap-8 md:gap-4 mt-4 md:mt-0 flex-shrink-0">
             <button onClick={prev} className="text-gray-400 hover:text-white transition transform hover:scale-110" disabled={!currentTrack}>
                 <SkipBack className="w-8 h-8 md:w-5 md:h-5" />
             </button>
@@ -214,8 +217,8 @@ export function Player() {
 
       {/* Volume / Extras (Desktop Only for Volume) */}
       <div className={`
-          ${isMinimized ? 'w-auto ml-4 lg:w-1/3 hidden md:flex' : 'w-full md:w-1/3 flex'} 
-          justify-between md:justify-end items-center gap-4 px-8 md:px-0 pb-8 md:pb-0
+          ${isMinimized ? 'hidden' : 'w-full flex'} 
+          md:flex md:w-auto md:flex-shrink-0 justify-between md:justify-end items-center gap-4 px-8 md:px-2 pb-8 md:pb-0
       `}>
           {/* Mobile Expanded Extras */}
           {!isMinimized && (
@@ -242,7 +245,16 @@ export function Player() {
                   <ListMusic className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center gap-4">
+              <button 
+                  onClick={() => setShowLyrics(true)}
+                  className={`transition ${!currentTrack ? 'text-gray-600 opacity-50 cursor-not-allowed' : currentTrack?.lyrics ? 'text-blue-400 hover:text-blue-300' : 'text-gray-400 hover:text-white'}`}
+                  disabled={!currentTrack}
+                  title={currentTrack?.lyrics ? "View Notes / Lyrics (Available)" : "View Song Details / Comments"}
+              >
+                  <FileText className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3">
                   <button onClick={toggleMute} className="text-gray-400 hover:text-white">
                       {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                   </button>
@@ -259,14 +271,6 @@ export function Player() {
                       className="w-24 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
                   />
               </div>
-              
-              <button 
-                onClick={() => setIsMinimized(!isMinimized)}
-                className="p-2 text-gray-500 hover:text-white bg-gray-800 rounded-full hover:bg-gray-700 transition"
-                title={isMinimized ? "Expand Player" : "Minimize Player"}
-              >
-                 {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
           </div>
       </div>
 

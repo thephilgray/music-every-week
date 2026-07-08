@@ -525,7 +525,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                       type="text" 
                       value={title}
                       onChange={e => setTitle(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-sm"
+                      className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-base sm:text-sm"
                       required
                   />
                 </div>
@@ -535,13 +535,13 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                   <textarea 
                       value={desc}
                       onChange={e => setDesc(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none h-28 text-sm"
+                      className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none h-28 text-base sm:text-sm"
                       required
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                  <div className="min-w-0 max-w-full">
                       <label className="block text-gray-300 text-sm mb-1 font-semibold flex items-center gap-2">
                           Deadline
                           <Tooltip content="The cut-off time for new submissions. Comments and interactions will remain open after this time." icon />
@@ -550,10 +550,10 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                           type="datetime-local" 
                           value={deadline}
                           onChange={e => setDeadline(e.target.value)}
-                          className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-sm"
+                          className="w-full max-w-full min-w-0 box-border block bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-base sm:text-sm"
                       />
                   </div>
-                  <div>
+                  <div className="min-w-0 max-w-full">
                       <label className="block text-gray-300 text-sm mb-1 font-semibold flex items-center gap-2">
                           Reveal Date (Optional)
                           <Tooltip content="If set, submissions remain hidden until this date." icon />
@@ -562,7 +562,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                           type="datetime-local" 
                           value={playlistLiveDate}
                           onChange={e => setPlaylistLiveDate(e.target.value)}
-                          className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-sm"
+                          className="w-full max-w-full min-w-0 box-border block bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-base sm:text-sm"
                       />
                   </div>
                 </div>

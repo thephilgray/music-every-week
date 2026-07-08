@@ -126,6 +126,16 @@ VITE_ADMIN_SECRET=your_secret_admin_code
 # VITE_BRAND_LOGO_URL="/yourlogo.png"
 # VITE_BRAND_SUPPORT_EMAIL="support@yourdomain.com"
 # VITE_BRAND_TAGLINE="A collaborative music community and songwriting group."
+
+# Server-Side Secrets (Vercel API Routes / Serverless Functions)
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key
+R2_SECRET_ACCESS_KEY=your_r2_secret_key
+R2_BUCKET_NAME=your_r2_bucket_name
+
+# Optional: GitHub API Integration for automated server-side bug reporting via /api/bug-report
+GITHUB_TOKEN=your_github_personal_access_token
+GITHUB_REPO=thephilgray/music-every-week
 ```
 
 ### 4. Run Development Server
@@ -143,9 +153,18 @@ The application will be available at `http://localhost:5173`.
 Music Every Week is designed for zero-config deployment on **Vercel** with complete white-label customization support.
 
 ### 1. Vercel Environment Variables
-When deploying your clone/fork to production on Vercel, navigate to **Project Settings → Environment Variables** and add your required Firebase and R2 credentials from your local `.env` file.
+When deploying your clone/fork to production on Vercel, navigate to **Project Settings → Environment Variables** and add your required Firebase (`VITE_FIREBASE_*`), R2 (`R2_*`, `VITE_R2_*`), and optional GitHub credentials from your local `.env` file.
 
-### 2. Customizing Your Brand (No Git Changes Required!)
+### 2. Automated Bug Reporting (GitHub API)
+MEW2 includes a built-in serverless function (`/api/bug-report`) that allows users to file bug reports directly as GitHub issues without needing a GitHub account.
+To enable automatic server-side issue filing in your deployment:
+1. Generate a GitHub Personal Access Token (PAT) with `issues:write` access to your target repository.
+2. Add the following to your Vercel Environment Variables:
+   - `GITHUB_TOKEN`: Your GitHub PAT.
+   - `GITHUB_REPO`: Your repository path (e.g., `thephilgray/music-every-week`).
+*Note: If `GITHUB_TOKEN` is not configured, the frontend gracefully degrades to opening a pre-filled GitHub issue in the user's browser.*
+
+### 3. Customizing Your Brand (No Git Changes Required!)
 To customize the application name, logo, or support email for your own songwriting community without altering open-source code in Git, set any of the following optional override variables in your Vercel Environment Variables:
 
 | Variable Name | Description | Example Value |

@@ -591,11 +591,11 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
   };
 
   return createPortal(
-    <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-2 sm:p-4 bg-gray-950 backdrop-blur-none overscroll-none touch-none">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto overscroll-contain touch-auto">
+    <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-4 py-10 sm:p-6 bg-gray-950/90 backdrop-blur-sm overscroll-none touch-none">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg shadow-2xl relative max-h-[82vh] sm:max-h-[88vh] overflow-y-auto overscroll-contain touch-auto">
         <button 
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-500 hover:text-white"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-400 hover:text-white p-1.5 rounded-lg bg-gray-800/80 sm:bg-transparent z-10 transition"
         >
             <X className="w-5 h-5" />
         </button>
@@ -1032,7 +1032,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 <textarea 
                     value={lyrics}
                     onChange={(e) => setLyrics(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24"
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24 text-base sm:text-sm"
                     placeholder="Lyrics, keys, bpm, or notes..."
                 />
             </div>

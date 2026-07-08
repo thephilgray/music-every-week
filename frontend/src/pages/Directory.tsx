@@ -155,10 +155,12 @@ export function Directory() {
                               {user.bio || "No bio yet."}
                           </p>
                           
-                          <div className="w-full border-t border-gray-800 pt-4 flex justify-between items-center text-xs text-gray-500">
-                              <span>Joined</span>
-                              <span>{user.joinedAt ? new Date(user.joinedAt).toLocaleDateString() : 'Unknown'}</span>
-                          </div>
+                          {user.joinedAt && !isNaN(new Date(user.joinedAt).getTime()) && (
+                            <div className="w-full border-t border-gray-800 pt-4 flex justify-between items-center text-xs text-gray-500">
+                                <span>Joined</span>
+                                <span>{new Date(user.joinedAt).toLocaleDateString()}</span>
+                            </div>
+                          )}
                       </Link>
                   ))}
               </div>

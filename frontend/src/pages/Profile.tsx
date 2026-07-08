@@ -674,7 +674,7 @@ export function Profile() {
                         {isOwnProfile && (
                             <button 
                                 onClick={(e) => handleToggleVisibility(e, sub)}
-                                className="absolute top-2 right-2 p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded-full z-10 opacity-0 group-hover:opacity-100 transition"
+                                className="absolute top-2 right-2 p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded-full z-10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
                                 title={sub.hiddenFromProfile ? "Show on Profile" : "Hide from Profile"}
                             >
                                 {sub.hiddenFromProfile ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -687,19 +687,19 @@ export function Profile() {
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-gray-600"><Music className="w-6 h-6" /></div>
                                 )}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition ${currentTrack?.id === sub.id && isPlaying ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'}`}>
                                     <button 
                                         onClick={() => {
                                              if (currentTrack?.id === sub.id && isPlaying) pause();
                                              else play(sub, visibleSubmissions);
                                         }}
-                                        className="text-white hover:scale-110 transition"
+                                        className="w-full h-full flex items-center justify-center text-white hover:scale-110 transition"
                                     >
                                         {currentTrack?.id === sub.id && isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                                     </button>
                                 </div>
                              </div>
-                             <div className="min-w-0">
+                             <div className="min-w-0 pr-6">
                                  <CollaboratorList 
                                     uploaderPub={sub.uploaderUid || sub.originalUploaderPub} 
                                     uploaderEmail={sub.uploaderEmail}
@@ -731,7 +731,7 @@ export function Profile() {
                          {isOwnProfile && (
                             <button 
                                 onClick={(e) => handleToggleRequestVisibility(e, req)}
-                                className="absolute top-2 right-2 p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded-full z-10 opacity-0 group-hover:opacity-100 transition"
+                                className="absolute top-2 right-2 p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded-full z-10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
                                 title={isHidden ? "Show on Profile" : "Hide from Profile"}
                             >
                                 {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

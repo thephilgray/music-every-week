@@ -18,6 +18,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
   const [description, setDescription] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [createGithubIssue, setCreateGithubIssue] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // State for fetched UserProfile
 
   // Fetch UserProfile when user changes
@@ -47,6 +48,9 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
     if (!description.trim()) return;
     setIsSending(true);
 
+    // Open tab synchronously before async work to prevent popup blocker on mobile/desktop if fallback is needed
+    const newTab = createGithubIssue ? window.open('about:blank', '_blank') : null;
+
     try {
       // 1. Upload Screenshot if present
       let screenshotUrl = '';
@@ -55,6 +59,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
               const res = await uploadToR2(screenshot); // Use uploadToR2
               screenshotUrl = res.url;
           } else {
+              if (newTab) newTab.close();
               error("Authentication required to upload screenshot.");
               setIsSending(false);
               return;
@@ -71,12 +76,14 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
           });
       } catch (e) {
           console.error("Error fetching admins:", e);
+          if (newTab) newTab.close();
           error("Failed to find administrators.");
           setIsSending(false);
           return;
       }
 
       if (adminUids.length === 0) {
+          if (newTab) newTab.close();
           error("No admins found to receive report.");
           setIsSending(false);
           return;
@@ -128,11 +135,52 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
       });
       await Promise.all(notificationPromises);
 
-      success("Bug report sent to admins. Thank you!");
+      if (createGithubIssue) {
+          try {
+              const res = await fetch('/api/bug-report', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      title: `[Bug]: ${description.substring(0, 60)}${description.length > 60 ? '...' : ''}`,
+                      description,
+                      diagnostics,
+                      screenshotUrl,
+                      reporter: `${userProfile?.alias || user?.displayName || user?.email || 'Anonymous'} (${user?.uid || 'guest'})`
+                  })
+              });
+              const data = await res.json().catch(() => ({}));
+              if (res.ok && data.success) {
+                  if (newTab) newTab.close();
+                  success(`Bug report sent & GitHub Issue #${data.issueNumber} created!`);
+              } else if (res.status === 501 && data.fallbackUrl) {
+                  // Token not configured on server, fall back to opening browser tab
+                  if (newTab) newTab.location.href = data.fallbackUrl;
+                  else window.open(data.fallbackUrl, '_blank');
+                  success("Bug report sent! Opened GitHub tab to submit issue.");
+              } else {
+                  console.warn("Could not create server GH issue:", data.error);
+                  if (newTab) {
+                      const repoUrl = import.meta.env.VITE_GITHUB_REPO_URL || "https://github.com/thephilgray/music-every-week";
+                      const title = encodeURIComponent(`[Bug]: ${description.substring(0, 60)}${description.length > 60 ? '...' : ''}`);
+                      const body = encodeURIComponent(`### Bug Description\n${description}\n\n### Diagnostics\n\`\`\`\n${diagnostics}\n\`\`\`\n\n${screenshotUrl ? `### Screenshot\n![Screenshot](${screenshotUrl})\n` : ''}`);
+                      newTab.location.href = `${repoUrl}/issues/new?title=${title}&body=${body}`;
+                  }
+                  success("Bug report sent to admins!");
+              }
+          } catch (apiErr) {
+              console.warn("API bug report failed:", apiErr);
+              if (newTab) newTab.close();
+              success("Bug report sent to admins!");
+          }
+      } else {
+          if (newTab) newTab.close();
+          success("Bug report sent to admins. Thank you!");
+      }
       onClose();
 
     } catch (err: any) {
       console.error("Failed to send report:", err);
+      if (newTab) newTab.close();
       error("Failed to send report: " + err.message);
     } finally {
       setIsSending(false);
@@ -162,7 +210,7 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
             <textarea 
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-white focus:border-red-500 outline-none h-32 text-sm font-mono"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-white focus:border-red-500 outline-none h-32 text-base sm:text-sm font-mono"
                 placeholder="I clicked the button and..."
                 required
                 autoFocus
@@ -188,6 +236,21 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
                     )}
                 </div>
             )}
+
+            <div className="pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white select-none">
+                    <input 
+                        type="checkbox" 
+                        checked={createGithubIssue} 
+                        onChange={e => setCreateGithubIssue(e.target.checked)}
+                        className="rounded border-gray-700 bg-gray-900 text-red-600 focus:ring-red-500 w-4 h-4"
+                    />
+                    <span>Also create an issue on GitHub</span>
+                </label>
+                <p className="text-xs text-gray-500 ml-6 mt-0.5">
+                    Automatically logs this bug to the project repository (no GitHub account required).
+                </p>
+            </div>
 
             <div className="flex justify-end gap-3 pt-2">
                 <button 

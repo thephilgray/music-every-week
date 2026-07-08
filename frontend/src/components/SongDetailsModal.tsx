@@ -1,5 +1,8 @@
+import { useState, useEffect } from 'react';
 import { X, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { CommentSection } from './CommentSection';
 import { ArtworkDisplay } from './ui/ArtworkDisplay';
 import { CollaboratorList } from './ui/CollaboratorList';
@@ -21,6 +24,7 @@ interface Track {
     feedbackFocus?: string[];
     usesAI?: boolean;
     context?: {
+        type?: 'request' | 'playlist' | 'profile' | string;
         name: string;
         link: string;
         artworkUrl?: string;
@@ -36,6 +40,37 @@ interface SongDetailsModalProps {
 export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: SongDetailsModalProps) {
     const draftKey = `comment_draft_${currentTrack.requestId}_${currentTrack.id || 'request'}`;
     const hasDraft = localStorage.getItem(draftKey) !== null;
+    const [promptTitle, setPromptTitle] = useState<string | null>(null);
+
+    const isContextThePrompt = currentTrack.context?.type === 'request' || 
+                               currentTrack.context?.link?.startsWith('/prompt/') || 
+                               currentTrack.context?.link?.startsWith('/request/');
+
+    useEffect(() => {
+        if (!currentTrack.requestId) return;
+        if (isContextThePrompt && currentTrack.context?.name) {
+            setPromptTitle(currentTrack.context.name);
+            return;
+        }
+        let isMounted = true;
+        const fetchPrompt = async () => {
+            try {
+                const reqDoc = await getDoc(doc(db, 'requests', currentTrack.requestId));
+                if (isMounted) {
+                    if (reqDoc.exists()) {
+                        setPromptTitle(reqDoc.data().title || 'Prompt');
+                    } else {
+                        setPromptTitle('Prompt');
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch prompt details:", e);
+                if (isMounted) setPromptTitle('Prompt');
+            }
+        };
+        fetchPrompt();
+        return () => { isMounted = false; };
+    }, [currentTrack.requestId, currentTrack.context, isContextThePrompt]);
 
 
     return (
@@ -71,12 +106,20 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
                                    className="text-gray-200 font-medium drop-shadow-md flex items-center gap-1"
                                />
                            </div>
-                           {currentTrack.context && (
-                               <Link to={currentTrack.context.link} className="text-blue-400 hover:text-blue-300 hover:underline text-xs flex items-center gap-1 mt-2 w-fit" onClick={onClose}>
-                                   <span className="truncate">From: {currentTrack.context.name}</span>
-                                   <ExternalLink className="w-3 h-3" />
-                               </Link>
-                           )}
+                           <div className="flex flex-col gap-1 mt-2">
+                               {currentTrack.requestId && (
+                                   <Link to={`/prompt/${currentTrack.requestId}`} className="text-blue-400 hover:text-blue-300 hover:underline text-xs flex items-center gap-1 w-fit" onClick={onClose}>
+                                       <span className="truncate">Prompt: {promptTitle || 'Loading...'}</span>
+                                       <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                   </Link>
+                               )}
+                               {currentTrack.context && !isContextThePrompt && (
+                                   <Link to={currentTrack.context.link} className="text-gray-300 hover:text-white hover:underline text-xs flex items-center gap-1 w-fit" onClick={onClose}>
+                                       <span className="truncate">Playing from: {currentTrack.context.name}</span>
+                                       <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                   </Link>
+                               )}
+                           </div>
                        </div>
                    </div>
 

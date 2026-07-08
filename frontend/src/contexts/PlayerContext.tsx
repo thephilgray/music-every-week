@@ -107,7 +107,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const play = (track: Submission, newQueue?: Submission[], newContext?: PlayerContextType['context']) => {
     if (newQueue) setQueue(newQueue);
-    if (newContext) setContext(newContext);
+    if (newContext !== undefined) {
+      setContext(newContext);
+    } else if (newQueue !== undefined) {
+      setContext(undefined);
+    }
     initialTimeLoadedRef.current = true;
     setCurrentTrack(track);
     setIsPlaying(true);
@@ -169,7 +173,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
         localStorage.setItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
         localStorage.setItem('player_queue', JSON.stringify(stripLargeFieldsFromQueue(queue)));
-        localStorage.setItem('player_context', JSON.stringify(context));
+        if (context !== undefined) {
+            localStorage.setItem('player_context', JSON.stringify(context));
+        } else {
+            localStorage.removeItem('player_context');
+        }
     } catch (e) {
         if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
             console.warn("Player state exceeds localStorage quota. Attempting recovery by clearing queue...");
@@ -177,7 +185,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 // Try saving only the current track if full state fails
                 localStorage.removeItem('player_queue');
                 localStorage.setItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
-                localStorage.setItem('player_context', JSON.stringify(context));
+                if (context !== undefined) {
+                    localStorage.setItem('player_context', JSON.stringify(context));
+                } else {
+                    localStorage.removeItem('player_context');
+                }
             } catch (innerError) {
                 console.error("Failed to recover from localStorage quota error:", innerError);
             }

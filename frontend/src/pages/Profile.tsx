@@ -691,7 +691,13 @@ export function Profile() {
                                     <button 
                                         onClick={() => {
                                              if (currentTrack?.id === sub.id && isPlaying) pause();
-                                             else play(sub, visibleSubmissions);
+                                             else play(sub, visibleSubmissions, {
+                                                 type: 'profile',
+                                                 id: targetUid || 'profile',
+                                                 name: profile?.displayName || profile?.alias || 'Profile',
+                                                 link: routePub ? `/profile/${routePub}` : targetUid ? `/profile/${targetUid}` : '/profile',
+                                                 artworkUrl: profile?.avatarUrl ? fixUrl(profile.avatarUrl) : undefined
+                                             });
                                         }}
                                         className="w-full h-full flex items-center justify-center text-white hover:scale-110 transition"
                                     >

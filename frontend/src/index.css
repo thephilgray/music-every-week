@@ -1,5 +1,46 @@
 @import "tailwindcss";
 
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  a:not([disabled]),
+  label[for],
+  label:has(input),
+  select:not(:disabled),
+  summary,
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  [role="tab"]:not(:disabled),
+  [role="menuitem"]:not(:disabled),
+  [role="option"]:not(:disabled),
+  [role="switch"]:not(:disabled),
+  [role="checkbox"]:not(:disabled),
+  [role="radio"]:not(:disabled),
+  [role="link"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  input:disabled,
+  select:disabled,
+  a[disabled],
+  [role="tab"][aria-disabled="true"],
+  [role="menuitem"][aria-disabled="true"],
+  [role="option"][aria-disabled="true"],
+  [role="switch"][aria-disabled="true"],
+  [role="checkbox"][aria-disabled="true"],
+  [role="radio"][aria-disabled="true"],
+  [role="link"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
 @theme {
   --animate-pulse-slow: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-float-up: float-up 1.5s ease-out forwards;

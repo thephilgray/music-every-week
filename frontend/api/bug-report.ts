@@ -23,7 +23,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Support multiple common env var names for the GitHub token
     const token = process.env.GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_BUG_REPORT_TOKEN;
-    const repo = process.env.GITHUB_REPO || process.env.VITE_GITHUB_REPO_URL?.replace('https://github.com/', '') || 'thephilgray/music-every-week';
+    const rawRepoUrl = process.env.VITE_GITHUB_REPO_URL || process.env.GITHUB_REPO;
+
+    if (!rawRepoUrl) {
+      console.error('[Bug Report API] Error: VITE_GITHUB_REPO_URL environment variable is not configured.');
+      return res.status(500).json({ error: 'Server configuration error: VITE_GITHUB_REPO_URL is not set.' });
+    }
+
+    const repo = rawRepoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\/$/, '');
+    const repoUrl = `https://github.com/${repo}`;
 
     const issueTitle = title || `[Bug]: ${description.substring(0, 60)}${description.length > 60 ? '...' : ''}`;
     const issueBody = `### Bug Description\n${description}\n\n### Reporter\n${reporter || 'Anonymous'}\n\n### Diagnostics\n\`\`\`\n${diagnostics || 'N/A'}\n\`\`\`\n\n${screenshotUrl ? `### Screenshot\n![Screenshot](${screenshotUrl})\n` : ''}`;
@@ -31,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // If no server token is configured, return 501 so the client can fall back to browser tab opening
     if (!token) {
       console.log('[Bug Report API] No GITHUB_TOKEN configured. Returning fallback URL.');
-      const fallbackUrl = `https://github.com/${repo}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(issueBody)}`;
+      const fallbackUrl = `${repoUrl}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(issueBody)}`;
       return res.status(501).json({ 
         error: 'GitHub token not configured on server.',
         fallbackUrl

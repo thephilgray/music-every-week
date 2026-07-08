@@ -135,7 +135,7 @@ R2_BUCKET_NAME=your_r2_bucket_name
 
 # Optional: GitHub API Integration for automated server-side bug reporting via /api/bug-report
 GITHUB_TOKEN=your_github_personal_access_token
-GITHUB_REPO=thephilgray/music-every-week
+VITE_GITHUB_REPO_URL=https://github.com/yourusername/yourrepo
 ```
 
 ### 4. Run Development Server
@@ -161,8 +161,8 @@ To enable automatic server-side issue filing in your deployment:
 1. Generate a GitHub Personal Access Token (PAT) with `issues:write` access to your target repository.
 2. Add the following to your Vercel Environment Variables:
    - `GITHUB_TOKEN`: Your GitHub PAT.
-   - `GITHUB_REPO`: Your repository path (e.g., `thephilgray/music-every-week`).
-*Note: If `GITHUB_TOKEN` is not configured, the frontend gracefully degrades to opening a pre-filled GitHub issue in the user's browser.*
+   - `VITE_GITHUB_REPO_URL`: Your repository URL (e.g., `https://github.com/yourusername/yourrepo`).
+*Note: If `GITHUB_TOKEN` is not configured, the frontend gracefully degrades to opening a pre-filled GitHub issue in the user's browser using `VITE_GITHUB_REPO_URL`.*
 
 ### 3. Customizing Your Brand (No Git Changes Required!)
 To customize the application name, logo, or support email for your own songwriting community without altering open-source code in Git, set any of the following optional override variables in your Vercel Environment Variables:

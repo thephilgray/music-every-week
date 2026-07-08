@@ -48,9 +48,6 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
     if (!description.trim()) return;
     setIsSending(true);
 
-    // Open tab synchronously before async work to prevent popup blocker on mobile/desktop if fallback is needed
-    const newTab = createGithubIssue ? window.open('about:blank', '_blank') : null;
-
     try {
       // 1. Upload Screenshot if present
       let screenshotUrl = '';
@@ -59,7 +56,6 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
               const res = await uploadToR2(screenshot); // Use uploadToR2
               screenshotUrl = res.url;
           } else {
-              if (newTab) newTab.close();
               error("Authentication required to upload screenshot.");
               setIsSending(false);
               return;
@@ -76,14 +72,12 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
           });
       } catch (e) {
           console.error("Error fetching admins:", e);
-          if (newTab) newTab.close();
           error("Failed to find administrators.");
           setIsSending(false);
           return;
       }
 
       if (adminUids.length === 0) {
-          if (newTab) newTab.close();
           error("No admins found to receive report.");
           setIsSending(false);
           return;
@@ -150,37 +144,35 @@ export function BugReportModal({ onClose }: BugReportModalProps) {
               });
               const data = await res.json().catch(() => ({}));
               if (res.ok && data.success) {
-                  if (newTab) newTab.close();
-                  success(`Bug report sent & GitHub Issue #${data.issueNumber} created!`);
+                  success(`Bug report sent & GitHub Issue #${data.issueNumber} created automatically!`);
               } else if (res.status === 501 && data.fallbackUrl) {
                   // Token not configured on server, fall back to opening browser tab
-                  if (newTab) newTab.location.href = data.fallbackUrl;
-                  else window.open(data.fallbackUrl, '_blank');
-                  success("Bug report sent! Opened GitHub tab to submit issue.");
+                  window.open(data.fallbackUrl, '_blank');
+                  success("Bug report logged! Opened GitHub tab to submit issue.");
               } else {
                   console.warn("Could not create server GH issue:", data.error);
-                  if (newTab) {
-                      const repoUrl = import.meta.env.VITE_GITHUB_REPO_URL || "https://github.com/thephilgray/music-every-week";
+                  const repoUrl = import.meta.env.VITE_GITHUB_REPO_URL;
+                  if (repoUrl) {
                       const title = encodeURIComponent(`[Bug]: ${description.substring(0, 60)}${description.length > 60 ? '...' : ''}`);
                       const body = encodeURIComponent(`### Bug Description\n${description}\n\n### Diagnostics\n\`\`\`\n${diagnostics}\n\`\`\`\n\n${screenshotUrl ? `### Screenshot\n![Screenshot](${screenshotUrl})\n` : ''}`);
-                      newTab.location.href = `${repoUrl}/issues/new?title=${title}&body=${body}`;
+                      window.open(`${repoUrl.replace(/\/$/, '')}/issues/new?title=${title}&body=${body}`, '_blank');
+                      success("Bug report logged! Opened GitHub tab to submit issue.");
+                  } else {
+                      error("VITE_GITHUB_REPO_URL is not configured in environment variables.");
+                      success("Bug report sent to admins!");
                   }
-                  success("Bug report sent to admins!");
               }
           } catch (apiErr) {
               console.warn("API bug report failed:", apiErr);
-              if (newTab) newTab.close();
               success("Bug report sent to admins!");
           }
       } else {
-          if (newTab) newTab.close();
           success("Bug report sent to admins. Thank you!");
       }
       onClose();
 
     } catch (err: any) {
       console.error("Failed to send report:", err);
-      if (newTab) newTab.close();
       error("Failed to send report: " + err.message);
     } finally {
       setIsSending(false);

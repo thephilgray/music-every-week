@@ -95,7 +95,7 @@ export function Player() {
             className={`
                 flex transition-all duration-300
                 ${isMinimized ? 'w-full h-full items-center px-4 gap-3 cursor-pointer' : 'flex-col w-full items-center p-6 flex-1'}
-                md:flex-row md:w-1/3 md:max-w-[380px] md:h-full md:items-center md:px-2 md:gap-3 md:p-0 md:flex-none md:cursor-default
+                md:flex-row md:w-1/4 lg:w-1/3 md:max-w-[260px] lg:max-w-[380px] md:h-full md:items-center md:px-2 md:gap-3 md:p-0 md:flex-none md:cursor-default
             `}
             onClick={() => {
                 // On mobile minimized, clicking anywhere (except buttons) expands
@@ -171,18 +171,20 @@ export function Player() {
       <div className={`
           flex flex-col items-center justify-center transition-all
           ${isMinimized ? 'hidden' : 'w-full min-w-[200px] gap-6 p-6'}
-          md:flex md:flex-row md:flex-1 md:w-auto md:max-w-[800px] md:gap-6 md:px-4 md:p-0 md:justify-between
+          md:flex md:flex-row md:flex-1 md:w-auto md:max-w-[800px] md:gap-4 lg:gap-6 md:px-4 md:p-0 md:justify-between min-w-0
       `}>
           {/* Waveform / Progress (Mobile Expanded & Desktop) */}
           <div className="w-full md:flex-1 md:w-auto min-w-0 flex items-center gap-3 text-xs text-gray-500 font-mono animate-in fade-in duration-300">
                <span className="min-w-[35px] text-right">{formatTime(currentTime)}</span>
                
                {currentTrack?.waveform && currentTrack.waveform.length > 0 ? (
-                   <Waveform 
-                      data={currentTrack.waveform} 
-                      progress={duration ? currentTime / duration : 0}
-                      onSeek={(p) => seek(p * (duration || 0))}
-                   />
+                   <div className="flex-1 min-w-0 overflow-hidden flex items-center">
+                       <Waveform 
+                          data={currentTrack.waveform} 
+                          progress={duration ? currentTime / duration : 0}
+                          onSeek={(p) => seek(p * (duration || 0))}
+                       />
+                   </div>
                ) : (
                    <input 
                       type="range" 
@@ -247,14 +249,14 @@ export function Player() {
 
               <button 
                   onClick={() => setShowLyrics(true)}
-                  className={`transition ${!currentTrack ? 'text-gray-600 opacity-50 cursor-not-allowed' : currentTrack?.lyrics ? 'text-blue-400 hover:text-blue-300' : 'text-gray-400 hover:text-white'}`}
+                  className={`hidden lg:block transition ${!currentTrack ? 'text-gray-600 opacity-50 cursor-not-allowed' : currentTrack?.lyrics ? 'text-blue-400 hover:text-blue-300' : 'text-gray-400 hover:text-white'}`}
                   disabled={!currentTrack}
                   title={currentTrack?.lyrics ? "View Notes / Lyrics (Available)" : "View Song Details / Comments"}
               >
                   <FileText className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center gap-3">
+              <div className="hidden lg:flex items-center gap-3">
                   <button onClick={toggleMute} className="text-gray-400 hover:text-white">
                       {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                   </button>

@@ -24,7 +24,7 @@ export function Waveform({
 
   return (
     <div 
-      className={`flex items-center gap-0.5 w-full ${height} ${interactive ? 'cursor-pointer group' : ''}`}
+      className={`flex items-center gap-0.5 w-full min-w-0 overflow-hidden ${height} ${interactive ? 'cursor-pointer group' : ''}`}
       onClick={(e) => {
         if (!interactive || !onSeek) return;
         const rect = e.currentTarget.getBoundingClientRect();

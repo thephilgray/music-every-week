@@ -88,7 +88,7 @@ export function SubmissionFormUI({
                     type="text" 
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none transition"
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none transition text-base"
                     placeholder="e.g. My Awesome Demo"
                     disabled={formDisabled}
                 />
@@ -99,12 +99,12 @@ export function SubmissionFormUI({
                     Artist Name (Optional)
                     <Tooltip content="The artist name displayed for this track. Your user alias name if blank. If 'Anonymous' is enabled, this is hidden from your profile and defaults to 'Anonymous' if left blank." icon />
                 </label>
-                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <div className="flex gap-2 items-center">
                     <input 
                         type="text" 
                         value={byline}
                         onChange={(e) => setByline(e.target.value)}
-                        className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none transition"
+                        className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none transition text-base"
                         placeholder="e.g. The Band Name"
                         disabled={formDisabled}
                     />
@@ -112,14 +112,14 @@ export function SubmissionFormUI({
                     <button
                         type="button"
                         onClick={() => setIsAnonymous(!isAnonymous)}
-                        className={`flex items-center gap-2 cursor-pointer select-none transition-all p-2 rounded-lg border w-fit ${isAnonymous ? 'bg-blue-900/30 border-blue-500/50' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
+                        className={`flex items-center gap-1.5 sm:gap-2 cursor-pointer select-none transition-all px-2.5 sm:px-3 py-2.5 rounded-lg border flex-shrink-0 whitespace-nowrap ${isAnonymous ? 'bg-blue-900/30 border-blue-500/50' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
                         title="Submit anonymously?"
                         disabled={formDisabled}
                     >
-                        <div className={`w-10 h-5 rounded-full relative transition-colors ${isAnonymous ? 'bg-blue-500' : 'bg-gray-600'}`}>
-                            <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${isAnonymous ? 'translate-x-5' : 'translate-x-0'}`} />
+                        <div className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${isAnonymous ? 'bg-blue-500' : 'bg-gray-600'}`}>
+                            <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${isAnonymous ? 'translate-x-4' : 'translate-x-0'}`} />
                         </div>
-                        <span className={`text-sm ${isAnonymous ? 'text-blue-200' : 'text-gray-400'}`}>
+                        <span className={`text-xs sm:text-sm font-medium whitespace-nowrap ${isAnonymous ? 'text-blue-200' : 'text-gray-400'}`}>
                             Anonymous
                         </span>
                     </button>
@@ -262,7 +262,7 @@ export function SubmissionFormUI({
             <textarea 
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24 transition"
+                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none h-24 transition text-base sm:text-sm"
                 placeholder="Lyrics, keys, bpm, or notes..."
                 disabled={formDisabled}
             />
@@ -278,7 +278,7 @@ export function SubmissionFormUI({
                 <select 
                     value={stage}
                     onChange={(e) => setStage(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none transition"
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none transition text-base sm:text-sm"
                     disabled={formDisabled}
                 >
                     {["Seed of an Idea", "First Draft / Demo", "In Production / Full Arrangement", 
@@ -373,10 +373,18 @@ export function SubmissionFormUI({
              <button 
                 type="submit" 
                 disabled={formDisabled || (!audioFile && !existingAudioUrl && !isRecording)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-full font-bold shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-full font-bold shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 transition-all disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center gap-2 relative overflow-hidden min-w-[150px]"
             >
-                {isUploading ? <Loader2 className="w-5 h-5" /> : null}
-                {isUploading ? 'Uploading...' : (isDisabled ? 'Deadline Passed' : submitLabel)}
+                {isUploading ? (
+                  <span key="uploading" className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+                    <span className="whitespace-nowrap">Uploading...</span>
+                  </span>
+                ) : (
+                  <span key="idle" className="flex items-center justify-center gap-2">
+                    <span className="whitespace-nowrap">{isDisabled ? 'Deadline Passed' : submitLabel}</span>
+                  </span>
+                )}
             </button>
         </div>
     </form>

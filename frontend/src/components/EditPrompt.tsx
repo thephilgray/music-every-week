@@ -916,10 +916,19 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                         <button 
                             type="submit" 
                             disabled={loading || isDeleting || stepTransitioning}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50"
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold flex items-center justify-center gap-2 text-sm shadow-md transition disabled:opacity-75 relative overflow-hidden min-w-[140px]"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            Save Changes
+                            {loading ? (
+                                <span key="loading" className="flex items-center justify-center gap-2">
+                                    <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                                    <span className="whitespace-nowrap">Saving...</span>
+                                </span>
+                            ) : (
+                                <span key="idle" className="flex items-center justify-center gap-2">
+                                    <Save className="w-4 h-4 flex-shrink-0" />
+                                    <span className="whitespace-nowrap">Save Changes</span>
+                                </span>
+                            )}
                         </button>
                     </div>
                 </div>

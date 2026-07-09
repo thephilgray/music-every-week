@@ -662,9 +662,13 @@ export function CreatePrompt() {
                   <button
                     type="submit"
                     disabled={loading || stepTransitioning}
-                    className={`flex-1 py-2.5 rounded font-semibold transition text-sm shadow-md ${loading ? 'bg-gray-600 cursor-not-allowed text-gray-300' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                    className={`flex-1 py-2.5 rounded font-semibold transition text-sm shadow-md flex items-center justify-center relative overflow-hidden ${loading ? 'bg-gray-600 cursor-not-allowed text-gray-300' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                   >
-                    {loading ? 'Creating Prompt...' : 'Create Prompt'}
+                    {loading ? (
+                      <span key="loading" className="whitespace-nowrap">Creating Prompt...</span>
+                    ) : (
+                      <span key="idle" className="whitespace-nowrap">Create Prompt</span>
+                    )}
                   </button>
                 </div>
             </div>

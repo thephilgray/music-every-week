@@ -713,7 +713,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                           type="text"
                           value={proxySearch}
                           onChange={(e) => setProxySearch(e.target.value)}
-                          className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 pl-8 text-white focus:border-purple-500 outline-none text-sm"
+                          className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 pl-8 text-white focus:border-purple-500 outline-none text-base sm:text-sm"
                           placeholder="Search user by name or email..."
                         />
                         {proxyResults.length > 0 && (
@@ -743,7 +743,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                         type="text"
                         value={proxyAlias}
                         onChange={(e) => setProxyAlias(e.target.value)}
-                        className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-sm"
+                        className="w-full bg-gray-900 border border-purple-500/50 rounded p-2 text-white focus:border-purple-500 outline-none text-base sm:text-sm"
                         placeholder="Artist name for non-account holder..."
                       />
                     </div>
@@ -900,24 +900,24 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     type="text"
                     value={byline}
                     onChange={(e) => setByline(e.target.value)}
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none"
+                    className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none text-base"
                     placeholder="e.g. The Band Name"
                   />
                   <button
                     type="button"
                     onClick={() => setIsAnonymous(!isAnonymous)}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors flex-shrink-0 ${
+                    className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-3 rounded-lg border transition-colors flex-shrink-0 whitespace-nowrap ${
                       isAnonymous ? 'bg-blue-900/30 border-blue-500/50' : 'bg-gray-800 border-gray-700'
                     }`}
                   >
-                    <div className={`w-9 h-5 rounded-full relative transition-colors ${
+                    <div className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${
                       isAnonymous ? 'bg-blue-500' : 'bg-gray-600'
                     }`}>
                       <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${
                         isAnonymous ? 'translate-x-4' : 'translate-x-0'
                       }`} />
                     </div>
-                    <span className={`text-sm ${ isAnonymous ? 'text-blue-200' : 'text-gray-400'}`}>
+                    <span className={`text-xs sm:text-sm font-medium whitespace-nowrap ${ isAnonymous ? 'text-blue-200' : 'text-gray-400'}`}>
                       Anonymous
                     </span>
                   </button>
@@ -970,7 +970,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                     value={collabSearch}
                     onChange={(e) => setCollabSearch(e.target.value)}
                     placeholder="Search by name..."
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-base sm:text-sm text-white focus:border-blue-500 outline-none"
                   />
                   {collabResults.length > 0 && (
                     <div className="absolute z-[10000] w-full bg-gray-800 border border-gray-700 rounded-lg mt-1 shadow-2xl max-h-48 overflow-y-auto">
@@ -1039,7 +1039,7 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
                 <select
                   value={stage}
                   onChange={(e) => setStage(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-white focus:border-blue-500 outline-none text-base sm:text-sm"
                 >
                   {["Seed of an Idea", "First Draft / Demo", "In Production / Full Arrangement",
                     "Ready for Mixing", "Final Polish / Mastering"].map(s => (
@@ -1194,18 +1194,22 @@ export function SubmitTrack({ requestId, participants, existingSubmission, onClo
             <button
               type="submit"
               disabled={isUploading || stepTransitioning}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm transition"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed text-sm transition relative overflow-hidden min-w-[140px]"
             >
               {isUploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {uploadStep || (existingSubmission ? 'Updating...' : 'Uploading...')}
-                </>
+                <span key="uploading" className="flex items-center justify-center gap-2 w-full">
+                  <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                  <span className="whitespace-nowrap">
+                    {uploadStep || (existingSubmission ? 'Updating...' : 'Uploading...')}
+                  </span>
+                </span>
               ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  {existingSubmission ? 'Update' : 'Submit Track'}
-                </>
+                <span key="idle" className="flex items-center justify-center gap-2 w-full">
+                  <Upload className="w-4 h-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">
+                    {existingSubmission ? 'Update' : 'Submit Track'}
+                  </span>
+                </span>
               )}
             </button>
           )}

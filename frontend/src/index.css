@@ -39,7 +39,24 @@
   [role="link"][aria-disabled="true"] {
     cursor: not-allowed;
   }
+
+  /* Prevent iOS Safari auto-zoom on focus when font-size < 16px */
+  @media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    input:not([type]),
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
 }
+
 
 @theme {
   --animate-pulse-slow: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;

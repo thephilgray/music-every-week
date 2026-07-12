@@ -7,9 +7,9 @@ import { uploadToR2 } from '../lib/r2'; // Replaced uploadFile
 import { CommentItemUI } from './ui/CommentItemUI';
 import { MiniPlayer } from './ui/MiniPlayer';
 import { ConfirmModal } from './ui/ConfirmModal';
-// import { fixUrl } from '../lib/url'; // Removed unused import
 import type { Comment, UserProfile, Notification } from '../types';
-import { getTimestampAsNumber } from '../lib/utils'; // Removed unused Notification, UserProfile
+import { getTimestampAsNumber } from '../lib/utils';
+import { safeGetItem, safeSetItem, safeRemoveItem } from '../lib/storage';
 
 interface CommentSectionProps {
   requestId: string;
@@ -56,10 +56,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
   }, [user, participantEmail, currentUserEmail]);
 
   const [newComment, setNewComment] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(`draft_comment_${submissionId}`) || '';
-    }
-    return '';
+    return safeGetItem(`draft_comment_${submissionId}`) || '';
   });
   
   // Audio Recording State
@@ -98,18 +95,14 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
     // Don't save empty string on initial mount if storage is already empty
     // But do save if user cleared it.
     const handler = setTimeout(() => {
-        if (typeof window !== 'undefined') {
-            if (newComment) {
-                localStorage.setItem(`draft_comment_${submissionId}`, newComment);
-                window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: true } }));
-            } else {
-                // Only remove if it was previously set, to avoid noise? 
-                // Actually safe to just remove if empty.
-                const preExists = localStorage.getItem(`draft_comment_${submissionId}`);
-                if (preExists) {
-                    localStorage.removeItem(`draft_comment_${submissionId}`);
-                    window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: false } }));
-                }
+        if (newComment) {
+            safeSetItem(`draft_comment_${submissionId}`, newComment);
+            window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: true } }));
+        } else {
+            const preExists = safeGetItem(`draft_comment_${submissionId}`);
+            if (preExists) {
+                safeRemoveItem(`draft_comment_${submissionId}`);
+                window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: false } }));
             }
         }
     }, 500); // 500ms debounce
@@ -445,7 +438,7 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
         }
         
         setNewComment('');
-        localStorage.removeItem(`draft_comment_${submissionId}`);
+        safeRemoveItem(`draft_comment_${submissionId}`);
         window.dispatchEvent(new CustomEvent('comment-draft-update', { detail: { submissionId, hasDraft: false } }));
         cancelRecording();
 

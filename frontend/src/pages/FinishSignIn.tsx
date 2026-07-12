@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { safeGetItem } from '../lib/storage';
 
 export function FinishSignIn() {
   const { completeMagicLinkSignIn, user } = useAuth();
@@ -19,7 +20,7 @@ export function FinishSignIn() {
       }
 
       try {
-        let email = window.localStorage.getItem('emailForSignIn');
+        let email = safeGetItem('emailForSignIn');
         
         if (!email) {
           // Cross-device logic: User opened the link on a different device

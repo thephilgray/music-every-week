@@ -5,18 +5,19 @@ import { ContextBar } from './ContextBar';
 import { Player } from './Player';
 import { PointsAnimation } from '../PointsAnimation';
 import { FloatingScrollToTop } from '../ui/FloatingScrollToTop';
+import { safeGetItem, safeSetItem } from '../../lib/storage';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    return localStorage.getItem('mew_sidebar_collapsed') === 'true';
+    return safeGetItem('mew_sidebar_collapsed') === 'true';
   });
   const location = useLocation();
 
   const toggleCollapse = () => {
     setIsCollapsed(prev => {
       const next = !prev;
-      localStorage.setItem('mew_sidebar_collapsed', String(next));
+      safeSetItem('mew_sidebar_collapsed', String(next));
       return next;
     });
   };

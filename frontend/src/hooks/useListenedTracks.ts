@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { safeGetItem, safeSetItem } from '../lib/storage';
 
 export function useListenedTracks() {
     const { participantEmail, addPoints } = useAuth();
@@ -7,7 +8,7 @@ export function useListenedTracks() {
     
     const [listenedTracks, setListenedTracks] = useState<Set<string>>(() => {
         try {
-            const saved = localStorage.getItem(key);
+            const saved = safeGetItem(key);
             if (saved) {
                 return new Set(JSON.parse(saved));
             }
@@ -17,7 +18,7 @@ export function useListenedTracks() {
 
     useEffect(() => {
         try {
-            const saved = localStorage.getItem(key);
+            const saved = safeGetItem(key);
             if (saved) {
                 setListenedTracks(new Set(JSON.parse(saved)));
             } else {
@@ -31,7 +32,7 @@ export function useListenedTracks() {
             if (prev.has(trackId)) return prev;
             const next = new Set(prev);
             next.add(trackId);
-            localStorage.setItem(key, JSON.stringify(Array.from(next)));
+            safeSetItem(key, JSON.stringify(Array.from(next)));
             
             // Award points for listening!
             if (addPoints) {
@@ -50,7 +51,7 @@ export function useListenedTracks() {
             } else {
                 next.add(trackId);
             }
-            localStorage.setItem(key, JSON.stringify(Array.from(next)));
+            safeSetItem(key, JSON.stringify(Array.from(next)));
             return next;
         });
     }, [key]);

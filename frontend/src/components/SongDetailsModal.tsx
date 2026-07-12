@@ -6,6 +6,7 @@ import { db } from '../lib/firebase';
 import { CommentSection } from './CommentSection';
 import { ArtworkDisplay } from './ui/ArtworkDisplay';
 import { CollaboratorList } from './ui/CollaboratorList';
+import { safeGetItem } from '../lib/storage';
 
 interface Track {
     id?: string; // Submission ID
@@ -39,7 +40,7 @@ interface SongDetailsModalProps {
 
 export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: SongDetailsModalProps) {
     const draftKey = `comment_draft_${currentTrack.requestId}_${currentTrack.id || 'request'}`;
-    const hasDraft = localStorage.getItem(draftKey) !== null;
+    const hasDraft = safeGetItem(draftKey) !== null;
     const [promptTitle, setPromptTitle] = useState<string | null>(null);
 
     const isContextThePrompt = currentTrack.context?.type === 'request' || 

@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import type { Submission, UserProfile } from '../types';
 import { fixUrl } from '../lib/url';
 import { useListenedTracks } from '../hooks/useListenedTracks';
+import { safeGetItem, safeSetItem, safeRemoveItem } from '../lib/storage';
 
 interface PlayerContextType {
   currentTrack: Submission | null;
@@ -29,26 +30,26 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<Submission | null>(() => {
     try {
-      const saved = localStorage.getItem('player_currentTrack');
+      const saved = safeGetItem('player_currentTrack');
       return saved ? JSON.parse(saved) : null;
     } catch { return null; }
   });
   const [queue, setQueue] = useState<Submission[]>(() => {
     try {
-      const saved = localStorage.getItem('player_queue');
+      const saved = safeGetItem('player_queue');
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
   const [context, setContext] = useState<PlayerContextType['context']>(() => {
     try {
-      const saved = localStorage.getItem('player_context');
+      const saved = safeGetItem('player_context');
       return saved ? JSON.parse(saved) : undefined;
     } catch { return undefined; }
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => {
     try {
-      const saved = localStorage.getItem('player_currentTime');
+      const saved = safeGetItem('player_currentTime');
       return saved ? parseFloat(saved) : 0;
     } catch { return 0; }
   });
@@ -167,35 +168,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
     
     const stripLargeFieldsFromQueue = (q: Submission[]): Submission[] => {
-        return q.map(t => stripLargeFields(t) as Submission);
+        return q.slice(0, 50).map(t => stripLargeFields(t) as Submission);
     };
 
-    try {
-        localStorage.setItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
-        localStorage.setItem('player_queue', JSON.stringify(stripLargeFieldsFromQueue(queue)));
-        if (context !== undefined) {
-            localStorage.setItem('player_context', JSON.stringify(context));
-        } else {
-            localStorage.removeItem('player_context');
-        }
-    } catch (e) {
-        if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-            console.warn("Player state exceeds localStorage quota. Attempting recovery by clearing queue...");
-            try {
-                // Try saving only the current track if full state fails
-                localStorage.removeItem('player_queue');
-                localStorage.setItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
-                if (context !== undefined) {
-                    localStorage.setItem('player_context', JSON.stringify(context));
-                } else {
-                    localStorage.removeItem('player_context');
-                }
-            } catch (innerError) {
-                console.error("Failed to recover from localStorage quota error:", innerError);
-            }
-        } else {
-            console.error("Failed to save player state:", e);
-        }
+    safeSetItem('player_currentTrack', JSON.stringify(stripLargeFields(currentTrack)));
+    safeSetItem('player_queue', JSON.stringify(stripLargeFieldsFromQueue(queue)));
+    if (context !== undefined) {
+        safeSetItem('player_context', JSON.stringify(context));
+    } else {
+        safeRemoveItem('player_context');
     }
   }, [currentTrack, queue, context]);
 
@@ -231,7 +212,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setCurrentTime(audio.currentTime);
         // Save time occasionally to avoid spamming localStorage
         if (Math.abs(audio.currentTime - lastSavedTimeRef.current) > 2) {
-             localStorage.setItem('player_currentTime', audio.currentTime.toString());
+             safeSetItem('player_currentTime', audio.currentTime.toString());
              lastSavedTimeRef.current = audio.currentTime;
         }
 
@@ -374,7 +355,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                     initialTimeLoadedRef.current = true;
                 } else {
                     audio.currentTime = 0;
-                    localStorage.setItem('player_currentTime', '0');
+                    safeSetItem('player_currentTime', '0');
                     lastSavedTimeRef.current = 0;
                 }
 
@@ -403,7 +384,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         audio.play().catch(e => console.error(e));
     } else if (!isPlaying && !audio.paused) {
         audio.pause();
-        localStorage.setItem('player_currentTime', audio.currentTime.toString()); // Save exact time on pause
+        safeSetItem('player_currentTime', audio.currentTime.toString()); // Save exact time on pause
         lastSavedTimeRef.current = audio.currentTime;
     }
     updateMediaSessionState();

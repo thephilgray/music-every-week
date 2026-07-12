@@ -4,6 +4,7 @@ import { auth, googleProvider, db } from '../lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp, query, where, getDocs, deleteDoc, collection, onSnapshot, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 import { type UserProfile } from '../types';
+import { safeSetItem, safeRemoveItem } from '../lib/storage';
 
 interface AuthContextType {
   user: User | null;
@@ -254,13 +255,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       handleCodeInApp: true,
     };
     await sendSignInLinkToEmail(auth, normalizedEmail, actionCodeSettings);
-    window.localStorage.setItem('emailForSignIn', normalizedEmail);
+    safeSetItem('emailForSignIn', normalizedEmail);
   };
 
   const completeMagicLinkSignIn = async (url: string, email: string) => {
     if (isSignInWithEmailLink(auth, url)) {
       await signInWithEmailLink(auth, email, url);
-      window.localStorage.removeItem('emailForSignIn');
+      safeRemoveItem('emailForSignIn');
     } else {
       throw new Error("Invalid magic link URL.");
     }
@@ -301,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       await firebaseSignOut(auth);
     }
-    window.localStorage.removeItem('emailForSignIn');
+    safeRemoveItem('emailForSignIn');
     setParticipantEmail(null);
     setIsAdmin(false);
     setSettings(null);

@@ -12,7 +12,8 @@ import { SubmissionCard } from '../components/SubmissionCard';
 import { fixUrl } from '../lib/url';
 import { seededRandom, getTimestampAsNumber, copyToClipboard } from '../lib/utils'; // Added imports
 import { FilterPopover } from '../components/ui/FilterPopover'; // Added import
-import { useListenedTracks } from '../hooks/useListenedTracks'; // Added import
+import { useListenedTracks } from '../hooks/useListenedTracks';
+import { safeGetItem, safeSetItem } from '../lib/storage';
 import type { Prompt, Submission } from '../types';
 
 export function PromptDetail() {
@@ -64,16 +65,16 @@ export function PromptDetail() {
 
   // Filter/Sort States
   const [showFilterPopover, setShowFilterPopover] = useState(false);
-  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('requestSearchTerm') || '');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst' | 'followedFirst'>(() => (localStorage.getItem('requestSortBy') as any) || 'newest');
-  const [filterByAI, setFilterByAI] = useState(() => localStorage.getItem('requestFilterByAI') === 'true');
-  const [filterByFragile, setFilterByFragile] = useState(() => localStorage.getItem('requestFilterByFragile') === 'true');
-  const [filterByUnlistened, setFilterByUnlistened] = useState(() => localStorage.getItem('requestFilterByUnlistened') === 'true');
-  const [filterByFollowing, setFilterByFollowing] = useState(() => localStorage.getItem('requestFilterByFollowing') === 'true');
+  const [searchTerm, setSearchTerm] = useState(() => safeGetItem('requestSearchTerm') || '');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'mostComments' | 'fewestComments' | 'alpha' | 'unlistenedFirst' | 'followedFirst'>(() => (safeGetItem('requestSortBy') as any) || 'newest');
+  const [filterByAI, setFilterByAI] = useState(() => safeGetItem('requestFilterByAI') === 'true');
+  const [filterByFragile, setFilterByFragile] = useState(() => safeGetItem('requestFilterByFragile') === 'true');
+  const [filterByUnlistened, setFilterByUnlistened] = useState(() => safeGetItem('requestFilterByUnlistened') === 'true');
+  const [filterByFollowing, setFilterByFollowing] = useState(() => safeGetItem('requestFilterByFollowing') === 'true');
   const { listenedTracks } = useListenedTracks();
   const [filterByFeedbackFocus, setFilterByFeedbackFocus] = useState<string[]>(() => {
     try {
-        const stored = localStorage.getItem('requestFilterByFeedbackFocus');
+        const stored = safeGetItem('requestFilterByFeedbackFocus');
         return stored ? JSON.parse(stored) : [];
     } catch {
         return [];
@@ -118,27 +119,27 @@ export function PromptDetail() {
   }, [searchTerm]);
 
   useEffect(() => {
-    localStorage.setItem('requestSearchTerm', searchTerm);
+    safeSetItem('requestSearchTerm', searchTerm);
   }, [searchTerm]);
 
   useEffect(() => {
-    localStorage.setItem('requestSortBy', sortBy);
+    safeSetItem('requestSortBy', sortBy);
   }, [sortBy]);
 
   useEffect(() => {
-    localStorage.setItem('requestFilterByAI', String(filterByAI));
+    safeSetItem('requestFilterByAI', String(filterByAI));
   }, [filterByAI]);
 
   useEffect(() => {
-    localStorage.setItem('requestFilterByFragile', String(filterByFragile));
+    safeSetItem('requestFilterByFragile', String(filterByFragile));
   }, [filterByFragile]);
 
   useEffect(() => {
-    localStorage.setItem('requestFilterByUnlistened', String(filterByUnlistened));
+    safeSetItem('requestFilterByUnlistened', String(filterByUnlistened));
   }, [filterByUnlistened]);
 
   useEffect(() => {
-    localStorage.setItem('requestFilterByFeedbackFocus', JSON.stringify(filterByFeedbackFocus));
+    safeSetItem('requestFilterByFeedbackFocus', JSON.stringify(filterByFeedbackFocus));
   }, [filterByFeedbackFocus]);
 
   // Load Request Data

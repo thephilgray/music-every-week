@@ -14,10 +14,11 @@ export function seededRandom(seed: string): () => number {
     const a = 1103515245;
     const c = 12345;
 
-    let state = hash;
+    let state = Math.abs(hash) % m;
 
     return function() {
         state = (a * state + c) % m;
+        if (state < 0) state += m;
         return state / m;
     };
 }
@@ -84,6 +85,9 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 
     // 2. Fallback to execCommand('copy')
     try {
+        if (typeof document.execCommand !== 'function') {
+            return false;
+        }
         const textArea = document.createElement("textarea");
         textArea.value = text;
         

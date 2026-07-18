@@ -10,6 +10,9 @@ Run all development commands from the `frontend/` directory:
 cd frontend
 npm install              # Install dependencies
 npm run dev              # Start Vite development server on http://localhost:5173
+npm test                 # Run Vitest test suite (`vitest run`)
+npm run test:watch       # Start Vitest in interactive watch mode (`vitest`)
+npm run test:coverage    # Run tests with code coverage report (`vitest run --coverage`)
 npm run build            # Run TypeScript type check (`tsc -b`) and production build
 npm run lint             # Run ESLint across codebase
 npm run deploy:rules     # Deploy firestore.rules using Firebase CLI
@@ -31,6 +34,27 @@ npm run deploy:rules     # Deploy firestore.rules using Firebase CLI
 
 3. **Real-Time Listener Cleanups:**
    - Whenever adding `onSnapshot` listeners in React components or custom hooks, always return the unsubscribe function in `useEffect` cleanup to prevent memory leaks and zombie listeners.
+
+---
+
+## 🧪 Test-Driven Development (TDD) & Testing Invariants
+
+All developers and AI assistants (Claude, Cursor, Copilot, Gemini) **MUST make Test-Driven Development (TDD) a core part of any code changes**:
+
+1. **Mandatory TDD Workflow:**
+   - **Red:** Write failing unit or component tests first capturing the requirements, expected behavior, or bug reproduction. Verify the test fails cleanly when running `npm test`.
+   - **Green:** Write the minimal implementation code necessary to make the failing test pass.
+   - **Refactor:** Optimize, clean up, and restructure the code while ensuring the entire test suite stays green (`npm test`).
+
+2. **Testing Stack & Infrastructure:**
+   - **Framework:** Vitest (`vitest.config.ts`) with `jsdom` test environment (`src/test/setup.ts`).
+   - **Component Testing:** React Testing Library (`@testing-library/react`), DOM matchers (`@testing-library/jest-dom`), and `@testing-library/user-event`.
+   - **Test Placement:** Co-locate test files alongside the code they test (`*.test.ts` / `*.test.tsx`) or in appropriate `src/` subdirectories (`src/lib/`, `src/components/`, `src/config/`).
+
+3. **Coverage & Pre-Commit Expectations:**
+   - Any new feature, utility function, or UI component MUST include automated tests before completion.
+   - Any bug fix MUST include a regression test proving the fix prevents future recurrences.
+   - Always run both `npm test` and `npm run build` (`tsc -b && vite build`) to confirm 100% test pass rate and 0 type errors before submitting PRs or marking tasks complete.
 
 ---
 

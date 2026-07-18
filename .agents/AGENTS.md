@@ -91,3 +91,23 @@ The `FileRequest` type (`Prompt` alias) has an optional `sessionId` field, and a
 - The URL route for viewing a prompt is `/request/:id` (legacy path, may be updated)
 - Toast notifications use a custom `ToastContext`
 - File uploads go to Cloudflare R2 via a Vercel API route
+
+## Testing & Test-Driven Development (TDD)
+
+All AI agents (Claude, Cursor, Gemini, Copilot) and human contributors **must follow Test-Driven Development (TDD)**:
+
+### TDD Workflow Requirement
+1. **Red (Write Failing Test First):** When asked to implement a new feature, fix a bug, or modify application logic, begin by writing or updating automated tests (`*.test.ts` or `*.test.tsx`) that verify the desired requirement or reproduce the bug. Verify the test fails cleanly before implementing changes (`npm test`).
+2. **Green (Minimal Implementation):** Write the minimal implementation required in `src/` to make the failing test pass.
+3. **Refactor (Clean & Optimize):** Clean up the code while keeping `npm test` 100% green.
+
+### Testing Stack & Commands (`frontend/`)
+- **Run tests once:** `npm test` (`vitest run`)
+- **Interactive watch mode:** `npm run test:watch` (`vitest`)
+- **Code coverage:** `npm run test:coverage`
+- **Testing environment:** Vitest + React Testing Library + `@testing-library/jest-dom` + `jsdom` (`src/test/setup.ts`).
+
+### Guidelines for Agents
+- Always check and verify that all unit/component tests pass (`npm test`) and the production build succeeds (`npm run build`) before returning completed tasks or opening pull requests.
+- When creating UI components (`src/components/`), write accompanying tests utilizing `@testing-library/react` and `@testing-library/user-event`.
+- When writing custom hooks or helper utilities (`src/lib/`, `src/hooks/`), write deterministic unit tests covering edge cases and fallback behaviors.

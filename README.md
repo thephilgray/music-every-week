@@ -185,10 +185,12 @@ printf "support@yourdomain.com" | npx vercel env add VITE_BRAND_SUPPORT_EMAIL pr
 
 ## 🤖 AI Agents & Developer Context
 
-This project is optimized for automated AI coding assistants (such as Claude, Cursor, and Gemini). If you are working on codebase contributions or using AI agents, please consult our specialized developer documentation:
+This project is optimized for automated AI coding assistants (such as Claude, Cursor, and Gemini) and enforces **Test-Driven Development (TDD)** (`vitest` + `@testing-library/react`). All developers and AI agents must write or update tests before or alongside code implementation, verifying clean execution with `npm test` inside `frontend/`.
 
-- **[CLAUDE.md](CLAUDE.md):** Quick-start reference, architectural invariants, and command cheat sheet for AI assistants.
-- **[.agents/AGENTS.md](.agents/AGENTS.md):** Comprehensive project context, domain terminology mappings, and data schema rules.
+For full architectural constraints, testing rules, and commands, consult:
+
+- **[CLAUDE.md](CLAUDE.md):** Quick-start commands, TDD workflow rules, architectural invariants, and command cheat sheet for AI assistants.
+- **[.agents/AGENTS.md](.agents/AGENTS.md):** Comprehensive project context, domain terminology mappings, data schema rules, and testing guidelines.
 
 ---
 

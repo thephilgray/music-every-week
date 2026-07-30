@@ -203,9 +203,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!isAllowed) {
-      const reqQ = query(collection(db, 'requests'), where('accessList', 'array-contains-any', [email, normalizedEmail]));
-      const reqSnap = await getDocs(reqQ);
-      if (!reqSnap.empty) isAllowed = true;
+      try {
+        const reqQ = query(collection(db, 'requests'), where('accessList', 'array-contains-any', [email, normalizedEmail]));
+        const reqSnap = await getDocs(reqQ);
+        if (!reqSnap.empty) isAllowed = true;
+      } catch {
+        // Unauthenticated users can't read invite-mode requests due to security rules.
+        // Fall through to the playlists query which has public read and the same accessList.
+      }
     }
 
     if (!isAllowed) {

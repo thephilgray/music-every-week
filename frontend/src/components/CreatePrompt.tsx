@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { uploadToR2 } from '../lib/r2';
-import type { Prompt, Session } from '../types';
+import type { Prompt, Session, Submission } from '../types';
 import { Check, Copy, ArrowRight, ArrowLeft, Settings, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Tooltip } from './ui/Tooltip';
@@ -35,6 +35,7 @@ export function CreatePrompt() {
 
   // Advanced Settings
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [importFilter, setImportFilter] = useState<'all' | 'accepted' | 'submitted'>('all');
   const [previewTrackCount, setPreviewTrackCount] = useState<number>(5);
 
   // Prerequisite & Scheduling
@@ -101,9 +102,54 @@ export function CreatePrompt() {
     setSelectedImportId(requestId);
     if (!requestId) return; 
     
-    const req = existingRequests.find(r => r.id === requestId);
-    if (req && req.accessList) {
-        setEmails(prev => Array.from(new Set([...prev, ...req.accessList!])));
+    try {
+        const reqDocRef = doc(db, 'requests', requestId);
+        const reqSnap = await getDoc(reqDocRef);
+        if (!reqSnap.exists()) return;
+        
+        const req = reqSnap.data() as Prompt;
+        let emailsToAdd = new Set<string>();
+
+        if (importFilter === 'all') {
+            if (req.accessList) req.accessList.forEach(e => emailsToAdd.add(e));
+            if (req.participants) {
+                Object.values(req.participants).forEach(p => {
+                    if (p.email) emailsToAdd.add(p.email);
+                });
+            }
+        } else if (importFilter === 'submitted') {
+            const submissionsQuery = query(collection(db, 'submissions'), where('requestId', '==', requestId));
+            const submissionsSnapshot = await getDocs(submissionsQuery);
+            submissionsSnapshot.forEach(subDoc => {
+                const subData = subDoc.data() as Submission;
+                if (subData.uploaderEmail) {
+                    emailsToAdd.add(subData.uploaderEmail);
+                } else if (subData.uploaderUid && req.participants && req.participants[subData.uploaderUid]?.email) {
+                    emailsToAdd.add(req.participants[subData.uploaderUid].email!);
+                }
+            });
+        } else if (importFilter === 'accepted') {
+            if (req.participants) {
+                Object.values(req.participants).forEach(p => {
+                    if (p.status === 'accepted' && p.email) emailsToAdd.add(p.email);
+                });
+            }
+        }
+
+        // Remove the host's own email just in case
+        if (user?.email) {
+            emailsToAdd.delete(user.email.toLowerCase());
+        }
+
+        if (emailsToAdd.size > 0) {
+            setEmails(prev => Array.from(new Set([...prev, ...Array.from(emailsToAdd)])));
+            success(`Imported ${emailsToAdd.size} participant(s)`);
+        } else {
+            error("No matching participants found to import.");
+        }
+    } catch (e) {
+        console.error("Error importing participants:", e);
+        error("Failed to import participants.");
     }
   };
 
@@ -515,36 +561,52 @@ export function CreatePrompt() {
                         </label>
 
                         {/* Import from previous */}
-                        <div>
-                            <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
-                                Import from Previous Prompt
-                                <Tooltip content="Quickly copy the participant list from a past prompt." icon />
-                            </label>
-                            <select
-                                value={selectedImportId}
-                                onChange={(e) => handleImportSelect(e.target.value)}
-                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
-                            >
-                                <option value="">-- Select a previous prompt --</option>
-                                {sessionPrompts.length > 0 && (
-                                    <optgroup label="This Session">
-                                        {sessionPrompts.map(req => (
-                                            <option key={req.id} value={req.id}>
-                                                {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
-                                            </option>
-                                        ))}
-                                    </optgroup>
-                                )}
-                                {otherPrompts.length > 0 && (
-                                    <optgroup label={sessionPrompts.length > 0 ? 'Other Prompts' : 'Your Prompts'}>
-                                        {otherPrompts.map(req => (
-                                            <option key={req.id} value={req.id}>
-                                                {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
-                                            </option>
-                                        ))}
-                                    </optgroup>
-                                )}
-                            </select>
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
+                                    Import from Previous Prompt
+                                    <Tooltip content="Quickly copy the participant list from a past prompt." icon />
+                                </label>
+                                <select
+                                    value={selectedImportId}
+                                    onChange={(e) => handleImportSelect(e.target.value)}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                                >
+                                    <option value="">-- Select a previous prompt --</option>
+                                    {sessionPrompts.length > 0 && (
+                                        <optgroup label="This Session">
+                                            {sessionPrompts.map(req => (
+                                                <option key={req.id} value={req.id}>
+                                                    {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                    {otherPrompts.length > 0 && (
+                                        <optgroup label={sessionPrompts.length > 0 ? 'Other Prompts' : 'Your Prompts'}>
+                                            {otherPrompts.map(req => (
+                                                <option key={req.id} value={req.id}>
+                                                    {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                </select>
+                            </div>
+                            <div className="w-1/3">
+                                <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
+                                    Filter
+                                </label>
+                                <select
+                                    value={importFilter}
+                                    onChange={(e) => setImportFilter(e.target.value as 'all' | 'accepted' | 'submitted')}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                                >
+                                    <option value="all">All</option>
+                                    <option value="accepted">Accepted</option>
+                                    <option value="submitted">Submitted</option>
+                                </select>
+                            </div>
                         </div>
 
                         {/* Start Date */}

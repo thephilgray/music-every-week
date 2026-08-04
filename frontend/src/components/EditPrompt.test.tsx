@@ -20,8 +20,8 @@ vi.mock('../lib/r2', () => ({
 vi.mock('firebase/firestore', () => {
   return {
     getFirestore: vi.fn(),
-    doc: vi.fn((db, collection, id) => ({ path: `${collection}/${id}`, id })),
-    collection: vi.fn((db, path) => ({ path })),
+    doc: vi.fn((_db, collection, id) => ({ path: `${collection}/${id}`, id })),
+    collection: vi.fn((_db, path) => ({ path })),
     query: vi.fn((collection, ...args) => ({ collection, args })),
     where: vi.fn((field, op, value) => ({ type: 'where', field, op, value })),
     getDocs: vi.fn(),

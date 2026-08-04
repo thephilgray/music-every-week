@@ -146,7 +146,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
   useEffect(() => {
     if (!selectedSessionId && existingSessions.length > 0) {
       const foundSess = existingSessions.find(s => s.promptIds && s.promptIds.includes(request.id!));
-      if (foundSess) {
+      if (foundSess && foundSess.id) {
         setSelectedSessionId(foundSess.id);
       }
     }

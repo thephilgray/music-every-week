@@ -82,11 +82,17 @@ export function PromptCard({ request, isClosed, hideStatus }: PromptCardProps) {
               <div className="px-2 py-1 bg-purple-600/90 text-white rounded text-[10px] font-bold border border-purple-400 shadow-md backdrop-blur-sm">
                 PRIVATE
               </div>
-            ) : request.accessMode === 'volunteer' ? (
-               <div className="px-2 py-1 bg-teal-600/90 text-white rounded text-[10px] font-bold border border-teal-400 shadow-md backdrop-blur-sm">
-                VOLUNTEER
-              </div>
             ) : null}
+            {request.startDate && new Date(request.startDate).getTime() > Date.now() && (
+              <div className="px-2 py-1 bg-amber-600/90 text-white rounded text-[10px] font-bold border border-amber-400 shadow-md backdrop-blur-sm">
+                SCHEDULED {new Date(request.startDate).toLocaleDateString()}
+              </div>
+            )}
+            {request.prerequisitePromptId && (
+              <div className="px-2 py-1 bg-cyan-600/90 text-white rounded text-[10px] font-bold border border-cyan-400 shadow-md backdrop-blur-sm">
+                PREREQ
+              </div>
+            )}
           </div>
 
           {isClosed && !hideStatus && (

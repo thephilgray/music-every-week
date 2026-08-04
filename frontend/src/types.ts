@@ -10,7 +10,6 @@ export interface UserProfile {
   location?: string;
   links?: { label: string; url: string }[];
   isAdmin?: boolean;
-  isVolunteer?: boolean; // Opt-in for random feedback requests
   isHost?: boolean; // Opt-in to host requests and invite users
   submissions?: Record<string, boolean>; // Linked to Submission IDs
   invitedBy?: string; // Pub key of inviter
@@ -40,15 +39,13 @@ export interface FileRequest {
   title: string;
   description: string;
   deadline: string;
-  accessMode: 'direct' | 'invite' | 'volunteer' | 'public'; // Added 'public' if needed, or map 'direct' to public
+  accessMode: 'direct' | 'invite' | 'public'; // Added 'public' if needed, or map 'direct' to public
   artworkUrl?: string;
   ownerPub: string; // Changed from ownerUid to match existing data in some places
   hostEmail?: string; // Add hostEmail
   accessList?: string[]; // List of allowed emails
   createdAt: number | FieldValue; // Changed type
   inviteCode?: string; // Reusable invite code
-  poolSeats?: number; // Number of open seats for volunteer pool
-  allowParticipantSubmissions?: boolean; // If false, only owner can submit
   participants?: Record<string, { 
     status: 'pending' | 'accepted', 
     alias?: string, 
@@ -63,6 +60,8 @@ export interface FileRequest {
   deleted?: boolean;
   updatedAt?: number | FieldValue; // Changed type
   sessionId?: string; // Linked session ID
+  startDate?: string; // ISO datetime — when prompt becomes visible in feed
+  prerequisitePromptId?: string; // ID of prompt that must be completed (submitted to or pass granted) before this one is visible
 }
 
 export type Prompt = FileRequest;

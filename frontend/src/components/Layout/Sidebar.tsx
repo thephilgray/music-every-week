@@ -99,7 +99,6 @@ export function Sidebar({ onClose, isCollapsed = false, onToggleCollapse }: Side
     const reqQueries = [];
     if (uid) reqQueries.push(query(collection(db, 'requests'), where('ownerPub', '==', uid)));
     if (email) reqQueries.push(query(collection(db, 'requests'), where('accessList', 'array-contains', email)));
-    reqQueries.push(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer')));
 
     reqQueries.forEach((q, index) => {
         unsubs.push(onSnapshot(q, (snap) => {

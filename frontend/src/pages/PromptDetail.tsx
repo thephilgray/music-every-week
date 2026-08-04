@@ -874,7 +874,7 @@ const computedVisibleSubmissions = useMemo(() => {
                     </div>
 
                     {/* Submission Button */}
-                    {( (isParticipant && request.allowParticipantSubmissions !== false) || hasSubmitted || isOwner ) && (
+                    {( isParticipant || hasSubmitted || isOwner ) && (
                     <button 
                         onClick={() => {
                             if (!isPastEffectiveDeadline || isAdmin) {

@@ -48,7 +48,7 @@ export function Archive() {
         }));
     }
 
-    // 3. (REMOVED) Public Volunteer Pools and Direct Links are NOT shown here by default.
+    // 3. (REMOVED) Direct Links are NOT shown here by default.
 
     return () => unsubs.forEach(unsub => unsub());
   }, [user, participantEmail]);

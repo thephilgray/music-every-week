@@ -51,8 +51,8 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
       return request.playlistLiveDate;
   });
 
-  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>(
-      (request.accessMode === 'public' ? 'direct' : request.accessMode) as 'direct' | 'invite' | 'volunteer' || 'direct'
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite'>(
+      (request.accessMode === 'public' ? 'direct' : request.accessMode) as 'direct' | 'invite' || 'direct'
   );
   const [file, setFile] = useState<File | null>(null);
   const [currentArtworkUrl] = useState(request.artworkUrl || '');
@@ -62,8 +62,6 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
   // Advanced Settings
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [poolSeats, setPoolSeats] = useState(request.poolSeats || 3);
-  const [allowSubmissions, setAllowSubmissions] = useState(request.allowParticipantSubmissions !== undefined ? request.allowParticipantSubmissions : true);
   const [previewTrackCount, setPreviewTrackCount] = useState<number>(request.previewTrackCount !== undefined ? request.previewTrackCount : 5);
 
   // Session Grouping
@@ -83,6 +81,19 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [playlistDocId, setPlaylistDocId] = useState<string | null>(null);
+
+  // Prerequisite & Scheduling
+  const [startDate, setStartDate] = useState(() => {
+      if (!request.startDate) return '';
+      if (request.startDate.endsWith('Z')) {
+          const d = new Date(request.startDate);
+          const offset = d.getTimezoneOffset() * 60000;
+          const localTime = new Date(d.getTime() - offset);
+          return localTime.toISOString().slice(0, 16);
+      }
+      return request.startDate;
+  });
+  const [prerequisitePromptId, setPrerequisitePromptId] = useState<string>(request.prerequisitePromptId || '');
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -128,6 +139,25 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
     fetchRequests();
     fetchSessions();
   }, [user, request.id]);
+
+  const handlePrerequisiteSelect = async (prereqId: string) => {
+    setPrerequisitePromptId(prereqId);
+    if (!prereqId) return;
+    try {
+      const prereqDocRef = doc(db, 'requests', prereqId);
+      const prereqSnap = await getDoc(prereqDocRef);
+      if (prereqSnap.exists()) {
+        const prereqData = prereqSnap.data() as Prompt;
+        if (prereqData.accessList) {
+          const newPendingEmails = new Set(pendingEmails);
+          prereqData.accessList.forEach(email => newPendingEmails.add(email));
+          setPendingEmails(Array.from(newPendingEmails));
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching prerequisite prompt:', e);
+    }
+  };
 
   const handleImportSelect = async (importId: string) => {
     setSelectedImportId(importId);
@@ -358,6 +388,11 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
           finalPlaylistLiveDate = new Date(playlistLiveDate).toISOString();
       }
 
+      let finalStartDate = startDate;
+      if (startDate) {
+          finalStartDate = new Date(startDate).toISOString();
+      }
+
       // Handle session grouping
       let finalSessionId = selectedSessionId === 'NEW' ? '' : selectedSessionId;
       if (selectedSessionId === 'NEW' && newSessionName.trim()) {
@@ -386,12 +421,12 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
         description: desc,
         deadline: finalDeadline,
         playlistLiveDate: finalPlaylistLiveDate,
+        startDate: finalStartDate || null,
+        prerequisitePromptId: prerequisitePromptId || null,
         accessMode,
         artworkUrl,
         inviteCode,
         accessList: finalPendingEmails,
-        poolSeats: accessMode === 'volunteer' ? poolSeats : null,
-        allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
         previewTrackCount: previewTrackCount,
         participants: selectedParticipants,
         sessionId: finalSessionId || null,
@@ -466,6 +501,13 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
       setLoading(false);
     }
   };
+
+  const sessionPrompts = request.sessionId
+    ? existingRequests.filter(r => r.sessionId === request.sessionId)
+    : [];
+  const otherPrompts = request.sessionId
+    ? existingRequests.filter(r => r.sessionId !== request.sessionId)
+    : existingRequests;
 
   const executeDelete = async () => {
       if (!request.id) return;
@@ -667,24 +709,15 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                     </label>
                     <select 
                         value={accessMode}
-                        onChange={(e: any) => {
-                            const newMode = e.target.value;
-                            setAccessMode(newMode);
-                            if (newMode === 'volunteer') {
-                                setPendingEmails([]);
-                                setEmailInput('');
-                            }
-                        }}
+                        onChange={(e: any) => setAccessMode(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2.5 text-white focus:border-blue-500 outline-none text-sm"
                     >
                         <option value="direct">Open (Anyone with the link can view & submit)</option>
                         <option value="invite">Invite Only (Private participant list)</option>
-                        {accessMode === 'volunteer' && <option value="volunteer">Volunteer Pool</option>}
                     </select>
                 </div>
 
                 {/* Participants Management */}
-                {accessMode !== 'volunteer' && (
                   <div className="border-t border-gray-800 pt-4 space-y-4">
                      <label className="block text-gray-300 text-sm font-semibold flex items-center gap-2">
                        <UserPlus className="w-4 h-4 text-blue-400" />
@@ -705,9 +738,20 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
                            >
                                <option value="">-- Select prompt --</option>
-                               {existingRequests.map(req => (
-                                   <option key={req.id} value={req.id}>{req.title}</option>
-                               ))}
+                               {sessionPrompts.length > 0 && (
+                                   <optgroup label="This Session">
+                                       {sessionPrompts.map(req => (
+                                           <option key={req.id} value={req.id}>{req.title}</option>
+                                       ))}
+                                   </optgroup>
+                               )}
+                               {otherPrompts.length > 0 && (
+                                   <optgroup label={sessionPrompts.length > 0 ? 'Other Prompts' : 'Your Prompts'}>
+                                       {otherPrompts.map(req => (
+                                           <option key={req.id} value={req.id}>{req.title}</option>
+                                       ))}
+                                   </optgroup>
+                               )}
                            </select>
                        </div>
                        <div className="w-1/3">
@@ -724,6 +768,63 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                                <option value="submitted">Submitted</option>
                            </select>
                        </div>
+                     </div>
+
+                     {/* Start Date */}
+                     <div>
+                         <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
+                             Start Date (Optional)
+                             <Tooltip content="When this prompt becomes visible to participants. Leave blank to show immediately." icon />
+                         </label>
+                         <input
+                             type="datetime-local"
+                             value={startDate}
+                             onChange={(e) => setStartDate(e.target.value)}
+                             className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                         />
+                         {startDate && (
+                             <p className="text-amber-500/90 text-xs mt-1">
+                                 This prompt will be hidden from participants until {new Date(startDate).toLocaleString()}.
+                             </p>
+                         )}
+                     </div>
+
+                     {/* Prerequisite Prompt */}
+                     <div>
+                         <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
+                             Prerequisite Prompt (Optional)
+                             <Tooltip content="Only participants who submitted a track to (or received a pass for) the selected prompt will be able to see this one." icon />
+                         </label>
+                         <select
+                             value={prerequisitePromptId}
+                             onChange={(e) => handlePrerequisiteSelect(e.target.value)}
+                             className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                         >
+                             <option value="">-- No Prerequisite --</option>
+                             {sessionPrompts.length > 0 && (
+                                 <optgroup label="This Session">
+                                     {sessionPrompts.map(req => (
+                                         <option key={req.id} value={req.id}>
+                                             {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                         </option>
+                                     ))}
+                                 </optgroup>
+                             )}
+                             {otherPrompts.length > 0 && (
+                                 <optgroup label={sessionPrompts.length > 0 ? 'Other Prompts' : 'Your Prompts'}>
+                                     {otherPrompts.map(req => (
+                                         <option key={req.id} value={req.id}>
+                                             {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                         </option>
+                                     ))}
+                                 </optgroup>
+                             )}
+                         </select>
+                         {prerequisitePromptId && (
+                             <p className="text-cyan-500/90 text-xs mt-1">
+                                 Only participants who completed the selected prompt (submitted or received a pass) will see this prompt.
+                             </p>
+                         )}
                      </div>
 
                      {/* Search Directory */}
@@ -823,7 +924,6 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                         </div>
                      )}
                   </div>
-                )}
 
                 {/* Advanced Settings Section */}
                 <div className="border border-gray-800 rounded-lg overflow-hidden pt-2">
@@ -833,51 +933,12 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
                         className="w-full bg-gray-800/60 hover:bg-gray-800 px-4 py-3 text-left text-xs font-semibold text-gray-300 flex items-center justify-between transition"
                     >
                         <span className="flex items-center gap-2">
-                            <Settings className="w-4 h-4 text-gray-400" /> <span>Advanced Settings<span className="hidden sm:inline"> (Volunteer Pool, Preview Track Limit)</span></span>
+                            <Settings className="w-4 h-4 text-gray-400" /> <span>Advanced Settings<span className="hidden sm:inline"> (Preview Track Limit)</span></span>
                         </span>
                         <span className="text-base font-bold text-gray-400">{showAdvanced ? '−' : '+'}</span>
                     </button>
                     {showAdvanced && (
                         <div className="p-4 bg-gray-800/30 space-y-4 border-t border-gray-800">
-                            <div className="flex items-center justify-between pb-3 border-b border-gray-700/60">
-                                <div>
-                                    <span className="text-sm font-semibold text-gray-300">Volunteer Pool Mode</span>
-                                    <p className="text-xs text-gray-400">Limit open seats for community members to give feedback.</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setAccessMode(accessMode === 'volunteer' ? 'direct' : 'volunteer')}
-                                    className={`px-3 py-1.5 rounded text-xs font-semibold transition ${accessMode === 'volunteer' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    {accessMode === 'volunteer' ? 'Enabled' : <span><span className="sm:hidden">Volunteer Mode</span><span className="hidden sm:inline">Switch to Volunteer Pool</span></span>}
-                                </button>
-                            </div>
-                            {accessMode === 'volunteer' && (
-                                <div className="p-3 bg-gray-900 rounded border border-gray-700 space-y-3">
-                                    <div className="flex items-center gap-4">
-                                        <label className="text-gray-300 text-sm">Open Seats:</label>
-                                        <input 
-                                            type="number" 
-                                            min={2} 
-                                            value={poolSeats} 
-                                            onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
-                                            className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none text-sm"
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <input 
-                                            type="checkbox" 
-                                            id="allowSubmissions"
-                                            checked={allowSubmissions}
-                                            onChange={e => setAllowSubmissions(e.target.checked)}
-                                            className="rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <label htmlFor="allowSubmissions" className="text-gray-300 text-xs cursor-pointer select-none">
-                                            Allow volunteers to submit tracks
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
                             <div>
                                 <label className="block text-gray-300 text-xs mb-1 font-semibold flex items-center gap-1.5">
                                     Preview Tracks Limit

@@ -55,8 +55,6 @@ export function Settings() {
     links: {label: string, url: string}[];
   } | null>(null);
 
-  // Privacy State
-  const [isVolunteer, setIsVolunteer] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [showRequestsOnProfile, setShowRequestsOnProfile] = useState(true);
   const [showSubmissionsOnProfile, setShowSubmissionsOnProfile] = useState(true);
@@ -81,7 +79,6 @@ export function Settings() {
                 setLocation(data.location || '');
                 setLinks(data.links || []);
                 setCurrentAvatarUrl(data.avatarUrl || '');
-                setIsVolunteer(!!data.isVolunteer);
                 setIsHost(!!data.isHost);
                 setInitialProfile({
                   username: data.alias || '',
@@ -191,12 +188,6 @@ export function Settings() {
       const newValue = !showSubmissionsOnProfile;
       setShowSubmissionsOnProfile(newValue);
       updateSetting('showSubmissionsOnProfile', newValue, 'settings.privacy');
-  };
-
-  const handleToggleVolunteer = () => {
-      const newValue = !isVolunteer;
-      setIsVolunteer(newValue); 
-      updateSetting('isVolunteer', newValue);
   };
 
   const handleToggleHost = () => {
@@ -680,24 +671,8 @@ export function Settings() {
             </h2>
             
             <div className="space-y-6">
-                <div className="flex items-center justify-between gap-x-4">
-                    <div>
-                        <h3 className="text-white font-medium mb-1">Join Feedback Volunteer Pool</h3>
-                        <p className="text-xs text-gray-400">
-                            Opt-in to be randomly selected to give feedback on tracks from other users. 
-                            Helping others helps the community grow!
-                        </p>
-                    </div>
-                    <button 
-                        onClick={handleToggleVolunteer}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${isVolunteer ? 'bg-purple-600' : 'bg-gray-600'}`}
-                    >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isVolunteer ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </button>
-                </div>
-
                 {isAdmin && (
-                <div className="flex items-center justify-between border-t border-gray-800 pt-4 gap-x-4">
+                <div className="flex items-center justify-between gap-x-4">
                     <div>
                         <h3 className="text-white font-medium mb-1 flex items-center gap-2">
                             Host Prompts

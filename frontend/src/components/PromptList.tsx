@@ -1,6 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { PromptCard } from './PromptCard';
 import { Skeleton } from './ui/Skeleton';
+import { usePrerequisiteCheck } from '../hooks/usePrerequisiteCheck';
 import type { Prompt } from '../types';
 import { Music } from 'lucide-react';
 
@@ -13,18 +14,34 @@ interface PromptListProps {
 export function PromptList({ requests, loading, filter = 'active' }: PromptListProps) {
   const { user, participantEmail, isAdmin } = useAuth();
 
-  // Filter Logic based on deadline and status
+  // Batch-check prerequisite eligibility for all prompts with prerequisites
+  const { eligibility: prerequisiteStatus } = usePrerequisiteCheck(
+    requests,
+    user?.uid ?? null,
+    user?.email || participantEmail
+  );
+
+  // Filter Logic based on deadline, status, start date, and prerequisites
   const filtered = requests.filter(req => {
       const isExpired = req.deadline ? new Date(req.deadline).getTime() < Date.now() : false;
       
       const currentUserEmail = user?.email || participantEmail;
       
       const isOwner = req.hostEmail && currentUserEmail && req.hostEmail === currentUserEmail;
-      const isPublicVolunteerPool = req.accessMode === 'volunteer'; 
       const isJoined = currentUserEmail && req.accessList?.includes(currentUserEmail);
 
-      // 1. Privacy Check: Must be Admin, Owner, in Access List, or a Public Volunteer Pool
-      if (!isAdmin && !isOwner && !isJoined && !isPublicVolunteerPool) return false;
+      // 1. Privacy Check: Must be Admin, Owner, or in Access List
+      if (!isAdmin && !isOwner && !isJoined) return false;
+
+      // 2. Start Date Check: Hide if not yet started (unless host/admin)
+      if (req.startDate && new Date(req.startDate).getTime() > Date.now()) {
+          if (!isAdmin && !isOwner) return false;
+      }
+
+      // 3. Prerequisite Check: Hide if prerequisite not met (unless host/admin)
+      if (req.prerequisitePromptId && !isAdmin && !isOwner) {
+          if (!prerequisiteStatus.get(req.id!)) return false;
+      }
       
       if (filter === 'active') {
           return !isExpired; 

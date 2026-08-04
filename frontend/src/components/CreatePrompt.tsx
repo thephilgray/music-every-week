@@ -7,7 +7,7 @@ import { Check, Copy, ArrowRight, ArrowLeft, Settings, Sparkles } from 'lucide-r
 import { Link } from 'react-router-dom';
 import { Tooltip } from './ui/Tooltip';
 import { db } from '../lib/firebase';
-import { collection, serverTimestamp, query, where, getDocs, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, serverTimestamp, query, where, getDocs, getDoc, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { getTimestampAsNumber, copyToClipboard } from '../lib/utils';
 
 export function CreatePrompt() {
@@ -24,7 +24,7 @@ export function CreatePrompt() {
   const [loading, setLoading] = useState(false);
   
   // Participants & Access
-  const [accessMode, setAccessMode] = useState<'direct' | 'invite' | 'volunteer'>('direct');
+  const [accessMode, setAccessMode] = useState<'direct' | 'invite'>('direct');
   const [emailInput, setEmailInput] = useState('');
   const [emails, setEmails] = useState<string[]>([]);
   
@@ -36,8 +36,10 @@ export function CreatePrompt() {
   // Advanced Settings
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [previewTrackCount, setPreviewTrackCount] = useState<number>(5);
-  const [poolSeats, setPoolSeats] = useState(3);
-  const [allowSubmissions, setAllowSubmissions] = useState(true);
+
+  // Prerequisite & Scheduling
+  const [startDate, setStartDate] = useState('');
+  const [prerequisitePromptId, setPrerequisitePromptId] = useState<string>('');
 
   // Import Logic
   const [existingRequests, setExistingRequests] = useState<Prompt[]>([]);
@@ -105,6 +107,33 @@ export function CreatePrompt() {
     }
   };
 
+  const handlePrerequisiteSelect = async (prereqId: string) => {
+    setPrerequisitePromptId(prereqId);
+    if (!prereqId) return;
+
+    // Auto-populate accessList from the prerequisite prompt so Firestore queries return this prompt
+    try {
+      const prereqDocRef = doc(db, 'requests', prereqId);
+      const prereqSnap = await getDoc(prereqDocRef);
+      if (prereqSnap.exists()) {
+        const prereqData = prereqSnap.data() as Prompt;
+        if (prereqData.accessList) {
+          setEmails(prev => Array.from(new Set([...prev, ...prereqData.accessList!])));
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching prerequisite prompt:', e);
+    }
+  };
+
+  // Get prompts to show in the import/prerequisite dropdowns, prioritizing session prompts
+  const sessionPrompts = selectedSessionId && selectedSessionId !== 'NEW'
+    ? existingRequests.filter(r => r.sessionId === selectedSessionId)
+    : [];
+  const otherPrompts = selectedSessionId && selectedSessionId !== 'NEW'
+    ? existingRequests.filter(r => r.sessionId !== selectedSessionId)
+    : existingRequests;
+
   const copyLink = async () => {
       const isCopied = await copyToClipboard(inviteLink);
       if (isCopied) {
@@ -126,6 +155,8 @@ export function CreatePrompt() {
       setSelectedSessionId('');
       setNewSessionName('');
       setShowAdvanced(false);
+      setStartDate('');
+      setPrerequisitePromptId('');
       setStep(1);
       setShowSuccess(false);
       setCreatedRequestId('');
@@ -231,12 +262,12 @@ export function CreatePrompt() {
         ownerPub: user.uid, 
         accessList: finalEmails, 
         inviteCode,
-        poolSeats: accessMode === 'volunteer' ? poolSeats : null,
-        allowParticipantSubmissions: accessMode === 'volunteer' ? allowSubmissions : true,
         hostEmail: user.email.toLowerCase(), 
         previewTrackCount: previewTrackCount,
         playlistId: playlistId,
         sessionId: finalSessionId || null,
+        startDate: safeISO(startDate),
+        prerequisitePromptId: prerequisitePromptId || null,
         createdAt: serverTimestamp()
       };
 
@@ -462,16 +493,11 @@ export function CreatePrompt() {
                         onChange={(e: any) => {
                             const newMode = e.target.value;
                             setAccessMode(newMode);
-                            if (newMode === 'volunteer') {
-                                setEmails([]);
-                                setEmailInput('');
-                            }
                         }}
                         className="w-full bg-gray-900 border border-gray-600 rounded p-2.5 text-white focus:border-blue-500 outline-none text-sm"
                     >
                         <option value="direct">Open (Anyone with the link can view & submit)</option>
                         <option value="invite">Invite Only (Private participant list)</option>
-                        {accessMode === 'volunteer' && <option value="volunteer">Volunteer Pool (Feedback mode)</option>}
                     </select>
                     {accessMode === 'direct' && (
                         <p className="text-yellow-500/90 text-xs mt-1.5 font-medium">
@@ -480,8 +506,8 @@ export function CreatePrompt() {
                     )}
                 </div>
 
-                {/* Participants Management (Hidden if Volunteer Pool is active) */}
-                {accessMode !== 'volunteer' && (
+                {/* Participants Management */}
+                {true && (
                     <div className="border-t border-gray-700 pt-4 space-y-4">
                         <label className="block text-gray-300 text-sm font-semibold flex items-center gap-2">
                             Add Participants
@@ -500,12 +526,82 @@ export function CreatePrompt() {
                                 className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
                             >
                                 <option value="">-- Select a previous prompt --</option>
-                                {existingRequests.map(req => (
-                                    <option key={req.id} value={req.id}>
-                                        {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
-                                    </option>
-                                ))}
+                                {sessionPrompts.length > 0 && (
+                                    <optgroup label="This Session">
+                                        {sessionPrompts.map(req => (
+                                            <option key={req.id} value={req.id}>
+                                                {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                )}
+                                {otherPrompts.length > 0 && (
+                                    <optgroup label={sessionPrompts.length > 0 ? 'Other Prompts' : 'Your Prompts'}>
+                                        {otherPrompts.map(req => (
+                                            <option key={req.id} value={req.id}>
+                                                {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                )}
                             </select>
+                        </div>
+
+                        {/* Start Date */}
+                        <div>
+                            <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
+                                Start Date (Optional)
+                                <Tooltip content="When this prompt becomes visible to participants. Leave blank to show immediately after creation." icon />
+                            </label>
+                            <input
+                                type="datetime-local"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                            />
+                            {startDate && (
+                                <p className="text-amber-500/90 text-xs mt-1">
+                                    This prompt will be hidden from participants until {new Date(startDate).toLocaleString()}.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Prerequisite Prompt */}
+                        <div>
+                            <label className="block text-gray-400 text-xs mb-1 flex items-center gap-1.5">
+                                Prerequisite Prompt (Optional)
+                                <Tooltip content="Only participants who submitted a track to (or received a pass for) the selected prompt will be able to see this one." icon />
+                            </label>
+                            <select
+                                value={prerequisitePromptId}
+                                onChange={(e) => handlePrerequisiteSelect(e.target.value)}
+                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none text-sm"
+                            >
+                                <option value="">-- No Prerequisite --</option>
+                                {sessionPrompts.length > 0 && (
+                                    <optgroup label="This Session">
+                                        {sessionPrompts.map(req => (
+                                            <option key={req.id} value={req.id}>
+                                                {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                )}
+                                {otherPrompts.length > 0 && (
+                                    <optgroup label={sessionPrompts.length > 0 ? 'Other Prompts' : 'Your Prompts'}>
+                                        {otherPrompts.map(req => (
+                                            <option key={req.id} value={req.id}>
+                                                {req.title} ({new Date(getTimestampAsNumber(req.createdAt)).toLocaleDateString()})
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                )}
+                            </select>
+                            {prerequisitePromptId && (
+                                <p className="text-cyan-500/90 text-xs mt-1">
+                                    Only participants who completed the selected prompt (submitted or received a pass) will see this prompt.
+                                </p>
+                            )}
                         </div>
 
                         {/* Email Invites */}
@@ -585,53 +681,12 @@ export function CreatePrompt() {
                         className="w-full bg-gray-900/50 hover:bg-gray-900 px-4 py-3 text-left text-xs font-semibold text-gray-300 flex items-center justify-between transition"
                     >
                         <span className="flex items-center gap-2">
-                            <Settings className="w-4 h-4 text-gray-400" /> <span>Advanced Settings<span className="hidden sm:inline"> (Volunteer Pool, Preview Track Limit)</span></span>
+                            <Settings className="w-4 h-4 text-gray-400" /> <span>Advanced Settings<span className="hidden sm:inline"> (Preview Track Limit)</span></span>
                         </span>
                         <span className="text-base font-bold text-gray-400">{showAdvanced ? '−' : '+'}</span>
                     </button>
                     {showAdvanced && (
                         <div className="p-4 bg-gray-900/30 space-y-4 border-t border-gray-700">
-                            {/* Volunteer Pool toggle */}
-                            <div className="flex items-center justify-between pb-3 border-b border-gray-800">
-                                <div>
-                                    <span className="text-sm font-semibold text-gray-300">Volunteer Pool Mode</span>
-                                    <p className="text-xs text-gray-400">Limit open seats for community members to give feedback.</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setAccessMode(accessMode === 'volunteer' ? 'direct' : 'volunteer')}
-                                    className={`px-3 py-1.5 rounded text-xs font-semibold transition ${accessMode === 'volunteer' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                                >
-                                    {accessMode === 'volunteer' ? 'Enabled' : <span><span className="sm:hidden">Volunteer Mode</span><span className="hidden sm:inline">Switch to Volunteer Pool</span></span>}
-                                </button>
-                            </div>
-                            {accessMode === 'volunteer' && (
-                                <div className="p-3 bg-gray-900 rounded border border-gray-700 space-y-3">
-                                    <div className="flex items-center gap-4">
-                                        <label className="text-gray-300 text-sm">Open Seats:</label>
-                                        <input
-                                            type="number"
-                                            min={2}
-                                            value={poolSeats}
-                                            onChange={e => setPoolSeats(Math.max(2, parseInt(e.target.value) || 2))}
-                                            className="w-20 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none text-sm"
-                                        />
-                                        <span className="text-xs text-gray-400">First to accept get seats.</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            id="allowSubmissions"
-                                            checked={allowSubmissions}
-                                            onChange={e => setAllowSubmissions(e.target.checked)}
-                                            className="rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <label htmlFor="allowSubmissions" className="text-gray-300 text-xs cursor-pointer select-none">
-                                            Allow volunteers to submit tracks
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
                             {/* Preview tracks limit */}
                             <div>
                                 <label className="block text-gray-300 text-xs mb-1 font-semibold flex items-center gap-1.5">

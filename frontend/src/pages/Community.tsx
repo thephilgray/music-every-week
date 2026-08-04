@@ -79,7 +79,6 @@ export function Community() {
             const reqPromises = [];
             if (uid) reqPromises.push(getDocs(query(collection(db, 'requests'), where('ownerPub', '==', uid))));
             if (email) reqPromises.push(getDocs(query(collection(db, 'requests'), where('accessList', 'array-contains', email))));
-            reqPromises.push(getDocs(query(collection(db, 'requests'), where('accessMode', '==', 'volunteer'))));
 
             const reqSnaps = await Promise.all(reqPromises);
             reqSnaps.forEach(snap => {

@@ -137,12 +137,7 @@ export function LiveSessions() {
                         }
                     }
 
-                    // Finally try to get the document directly for 'volunteer' mode, catch expected permission errors silently
-                    const reqDoc = await getDoc(doc(db, 'requests', reqId)).catch(() => null);
-                    if (reqDoc && reqDoc.exists() && reqDoc.data().accessMode === 'volunteer') {
-                        accessible.add(reqId);
-                        continue;
-                    }
+                    // Fallback to volunteer mode removed
 
                 } catch (err) {
                     // Suppress outer errors to avoid spamming the console

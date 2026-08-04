@@ -185,12 +185,7 @@ export function CreatePrompt() {
       })
     : [];
   const otherPrompts = selectedSessionId && selectedSessionId !== 'NEW'
-    ? existingRequests.filter(r => {
-        if (r.sessionId === selectedSessionId) return false;
-        const sess = existingSessions.find(s => s.id === selectedSessionId);
-        if (sess?.promptIds?.includes(r.id!)) return false;
-        return true;
-      })
+    ? []
     : existingRequests;
 
   const copyLink = async () => {

@@ -521,11 +521,16 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
   };
 
   const sessionPrompts = selectedSessionId && selectedSessionId !== 'NEW'
-    ? existingRequests.filter(r => r.sessionId === selectedSessionId)
+    ? existingRequests.filter(r => {
+        if (r.id === request.id) return false;
+        if (r.sessionId === selectedSessionId) return true;
+        const sess = existingSessions.find(s => s.id === selectedSessionId);
+        return sess?.promptIds?.includes(r.id!) || false;
+      })
     : [];
   const otherPrompts = selectedSessionId && selectedSessionId !== 'NEW'
-    ? existingRequests.filter(r => r.sessionId !== selectedSessionId)
-    : existingRequests;
+    ? []
+    : existingRequests.filter(r => r.id !== request.id);
 
   const executeDelete = async () => {
       if (!request.id) return;

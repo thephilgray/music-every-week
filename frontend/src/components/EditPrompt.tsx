@@ -186,7 +186,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
       const submitters = new Set<string>();
 
       if (importFilter === 'submitted') {
-        const submissionsQuery = query(collection(importRequestDocRef, 'submissions'));
+        const submissionsQuery = query(collection(db, 'submissions'), where('requestId', '==', importId));
         const submissionsSnapshot = await getDocs(submissionsQuery);
         submissionsSnapshot.forEach(subDoc => {
           const subData = subDoc.data();
@@ -201,7 +201,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
       for (const uid of Object.keys(participantsData)) {
         const participant = participantsData[uid];
-        if (!participant || uid === user?.uid) continue;
+        if (!participant || uid === user?.uid || uid === request.ownerPub) continue;
         if (selectedParticipants[uid]) continue; 
 
         if (importFilter === 'accepted' && participant.status !== 'accepted') continue;
@@ -216,13 +216,15 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
         };
       }
 
-      const newPendingEmails = new Set(pendingEmails);
-      accessListEmails.forEach(email => {
-        if (!newPendingEmails.has(email)) {
-          newPendingEmails.add(email);
-        }
-      });
-      setPendingEmails(Array.from(newPendingEmails));
+      if (importFilter !== 'submitted') {
+        const newPendingEmails = new Set(pendingEmails);
+        accessListEmails.forEach(email => {
+          if (!newPendingEmails.has(email)) {
+            newPendingEmails.add(email);
+          }
+        });
+        setPendingEmails(Array.from(newPendingEmails));
+      }
       setSelectedParticipants(prev => ({ ...prev, ...newParticipants }));
     } catch (e) {
       console.error("Error importing participants:", e);

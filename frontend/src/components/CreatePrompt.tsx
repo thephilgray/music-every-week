@@ -11,7 +11,7 @@ import { collection, serverTimestamp, query, where, getDocs, getDoc, doc, setDoc
 import { getTimestampAsNumber, copyToClipboard } from '../lib/utils';
 
 export function CreatePrompt() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { success, error } = useToast();
   
   const [step, setStep] = useState<1 | 2>(1);
@@ -62,7 +62,9 @@ export function CreatePrompt() {
     // Fetch existing requests for import
     const fetchRequests = async () => {
         try {
-            const q = query(collection(db, 'requests'), where('ownerEmail', '==', user.email));
+            const q = isAdmin 
+                ? query(collection(db, 'requests'))
+                : query(collection(db, 'requests'), where('ownerEmail', '==', user.email));
             const querySnapshot = await getDocs(q);
             const reqs: Prompt[] = [];
             querySnapshot.forEach((docSnap) => {
@@ -81,7 +83,9 @@ export function CreatePrompt() {
     // Fetch existing sessions for grouping
     const fetchSessions = async () => {
         try {
-            const q = query(collection(db, 'sessions'), where('ownerPub', '==', user.uid));
+            const q = isAdmin
+                ? query(collection(db, 'sessions'))
+                : query(collection(db, 'sessions'), where('ownerPub', '==', user.uid));
             const querySnapshot = await getDocs(q);
             const sessList: Session[] = [];
             querySnapshot.forEach((docSnap) => {
@@ -174,10 +178,19 @@ export function CreatePrompt() {
 
   // Get prompts to show in the import/prerequisite dropdowns, prioritizing session prompts
   const sessionPrompts = selectedSessionId && selectedSessionId !== 'NEW'
-    ? existingRequests.filter(r => r.sessionId === selectedSessionId)
+    ? existingRequests.filter(r => {
+        if (r.sessionId === selectedSessionId) return true;
+        const sess = existingSessions.find(s => s.id === selectedSessionId);
+        return sess?.promptIds?.includes(r.id!) || false;
+      })
     : [];
   const otherPrompts = selectedSessionId && selectedSessionId !== 'NEW'
-    ? existingRequests.filter(r => r.sessionId !== selectedSessionId)
+    ? existingRequests.filter(r => {
+        if (r.sessionId === selectedSessionId) return false;
+        const sess = existingSessions.find(s => s.id === selectedSessionId);
+        if (sess?.promptIds?.includes(r.id!)) return false;
+        return true;
+      })
     : existingRequests;
 
   const copyLink = async () => {

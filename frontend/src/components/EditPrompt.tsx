@@ -19,7 +19,7 @@ interface EditPromptProps {
 }
 
 export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
-  const { user } = useAuth(); 
+  const { user, isAdmin } = useAuth(); 
   const { success, error } = useToast();
   const navigate = useNavigate();
   
@@ -108,7 +108,9 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
     
     const fetchRequests = async () => {
       try {
-        const q = query(collection(db, 'requests'), where('ownerPub', '==', targetOwnerPub));
+        const q = isAdmin
+          ? query(collection(db, 'requests'))
+          : query(collection(db, 'requests'), where('ownerPub', '==', targetOwnerPub));
         const querySnapshot = await getDocs(q);
         const list: Prompt[] = [];
         querySnapshot.forEach((docSnap) => {
@@ -125,7 +127,9 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
     const fetchSessions = async () => {
       try {
-        const q = query(collection(db, 'sessions'), where('ownerPub', '==', targetOwnerPub));
+        const q = isAdmin
+          ? query(collection(db, 'sessions'))
+          : query(collection(db, 'sessions'), where('ownerPub', '==', targetOwnerPub));
         const querySnapshot = await getDocs(q);
         const sessList: Session[] = [];
         querySnapshot.forEach((docSnap) => {

@@ -102,11 +102,13 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
   // Fetch Existing Requests and Sessions
   useEffect(() => {
-    if (!user || !user.uid) return; 
+    // Use request.ownerPub so admins fetching someone else's prompt will fetch the host's sessions and requests
+    const targetOwnerPub = request.ownerPub || user?.uid;
+    if (!targetOwnerPub) return; 
     
     const fetchRequests = async () => {
       try {
-        const q = query(collection(db, 'requests'), where('ownerPub', '==', user.uid));
+        const q = query(collection(db, 'requests'), where('ownerPub', '==', targetOwnerPub));
         const querySnapshot = await getDocs(q);
         const list: Prompt[] = [];
         querySnapshot.forEach((docSnap) => {
@@ -123,7 +125,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
     const fetchSessions = async () => {
       try {
-        const q = query(collection(db, 'sessions'), where('ownerPub', '==', user.uid));
+        const q = query(collection(db, 'sessions'), where('ownerPub', '==', targetOwnerPub));
         const querySnapshot = await getDocs(q);
         const sessList: Session[] = [];
         querySnapshot.forEach((docSnap) => {
@@ -138,7 +140,17 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
     fetchRequests();
     fetchSessions();
-  }, [user, request.id]);
+  }, [user, request.id, request.ownerPub]);
+
+  // Safely infer session if request.sessionId is missing but the prompt is in a session's promptIds
+  useEffect(() => {
+    if (!selectedSessionId && existingSessions.length > 0) {
+      const foundSess = existingSessions.find(s => s.promptIds && s.promptIds.includes(request.id!));
+      if (foundSess) {
+        setSelectedSessionId(foundSess.id);
+      }
+    }
+  }, [existingSessions, request.id, selectedSessionId]);
 
   const handlePrerequisiteSelect = async (prereqId: string) => {
     setPrerequisitePromptId(prereqId);
@@ -502,11 +514,11 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
     }
   };
 
-  const sessionPrompts = request.sessionId
-    ? existingRequests.filter(r => r.sessionId === request.sessionId)
+  const sessionPrompts = selectedSessionId && selectedSessionId !== 'NEW'
+    ? existingRequests.filter(r => r.sessionId === selectedSessionId)
     : [];
-  const otherPrompts = request.sessionId
-    ? existingRequests.filter(r => r.sessionId !== request.sessionId)
+  const otherPrompts = selectedSessionId && selectedSessionId !== 'NEW'
+    ? existingRequests.filter(r => r.sessionId !== selectedSessionId)
     : existingRequests;
 
   const executeDelete = async () => {

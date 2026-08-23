@@ -557,7 +557,7 @@ export function EditPrompt({ request, onClose, onUpdate }: EditPromptProps) {
 
   return createPortal(
     <div className="fixed top-0 left-0 w-full h-[100dvh] z-[9999] flex items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-sm overscroll-none touch-none">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-xl shadow-2xl relative max-h-[90vh] overflow-y-auto overscroll-contain touch-auto">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-xl shadow-2xl relative max-h-[85dvh] overflow-y-auto overscroll-contain touch-auto">
         <button 
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-lg transition"

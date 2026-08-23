@@ -12,7 +12,7 @@ interface QueueModalProps {
 export function QueueModal({ queue, currentTrack, onPlay, onClose }: QueueModalProps) {
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-           <div className="bg-gray-900 border border-gray-700 rounded-lg w-11/12 md:max-w-xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+           <div className="bg-gray-900 border border-gray-700 rounded-lg w-11/12 md:max-w-xl max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                <div className="p-4 border-b border-gray-800 flex justify-between items-center">
                    <h3 className="text-lg font-bold text-white">Current Queue</h3>
                    <button onClick={onClose} className="text-gray-400 hover:text-white p-1">

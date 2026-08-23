@@ -129,8 +129,8 @@ export function AddToPlaylist({ submission, onClose }: AddToPlaylistProps) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-11/12 md:max-w-md max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-950/50">
             <h3 className="font-bold text-white flex items-center gap-2">
                 <Music className="w-4 h-4 text-blue-500" />

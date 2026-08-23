@@ -67,7 +67,7 @@ export function FilterPopover({
             {/* Backdrop */}
             <div className={`fixed inset-0 bg-black/80 z-[60] backdrop-blur-sm ${isModal ? 'block' : 'md:hidden'}`} onClick={onClose} />
             
-            <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto z-[60] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 ${!isModal ? 'md:absolute md:top-0 md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-12 md:w-[320px] lg:w-[380px] md:slide-in-from-right-2' : 'md:w-[450px]'}`}>
+            <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-h-[85dvh] overflow-y-auto z-[60] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 ${!isModal ? 'md:absolute md:top-0 md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-12 md:w-[320px] lg:w-[380px] md:slide-in-from-right-2' : 'md:w-[450px]'}`}>
                 <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                     <Filter className="w-5 h-5" /> Filters & Sort

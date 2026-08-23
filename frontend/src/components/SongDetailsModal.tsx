@@ -76,7 +76,7 @@ export function SongDetailsModal({ currentTrack, onClose, currentUserEmail }: So
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
-           <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+           <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                <div className="flex-1 overflow-y-auto custom-scrollbar">
                    {/* Header / Artwork Section */}
                    <div className="relative w-full aspect-video bg-gray-800 flex-shrink-0 flex items-center justify-center">

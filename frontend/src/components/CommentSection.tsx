@@ -252,14 +252,42 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
               return;
           }
 
-          const q = query(
-              collection(db, 'profiles'), 
-              where('alias', '>=', mentionQuery),
-              where('alias', '<=', mentionQuery + '\uf8ff'),
-              limit(5)
-          );
-          const snap = await getDocs(q);
-          setMentionResults(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+          const term = mentionQuery.trim();
+          const termLower = term.toLowerCase();
+          const variations = Array.from(new Set([
+              term,
+              termLower,
+              term.charAt(0).toUpperCase() + term.slice(1).toLowerCase(),
+              term.toUpperCase()
+          ]));
+
+          const queries = variations.flatMap(v => [
+              query(
+                  collection(db, 'profiles'), 
+                  where('alias', '>=', v),
+                  where('alias', '<=', v + '\uf8ff'),
+                  limit(5)
+              ),
+              query(
+                  collection(db, 'profiles'), 
+                  where('displayName', '>=', v),
+                  where('displayName', '<=', v + '\uf8ff'),
+                  limit(5)
+              )
+          ]);
+
+          const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+          
+          const resultsMap = new Map<string, UserProfile>();
+          snapshots.forEach(snap => {
+              snap.docs.forEach(d => {
+                  if (!resultsMap.has(d.id)) {
+                      resultsMap.set(d.id, { uid: d.id, ...d.data() } as UserProfile);
+                  }
+              });
+          });
+
+          setMentionResults(Array.from(resultsMap.values()).slice(0, 5));
       };
 
       const timer = setTimeout(() => {

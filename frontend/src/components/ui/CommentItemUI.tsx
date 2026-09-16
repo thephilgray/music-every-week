@@ -220,9 +220,13 @@ export function CommentItemUI({
                  <>
                     {text && (
                         <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">
-                            {text.split(/(@\w+)/g).map((part, i) => 
-                                part.startsWith('@') ? <span key={i} className="text-blue-400">{part}</span> : part
-                            )}
+                            {text.split(/(@"[^"]+"|@[a-zA-Z0-9_.-]+)/g).map((part, i) => {
+                                if (part.startsWith('@')) {
+                                    const displayPart = part.startsWith('@"') ? `@${part.slice(2, -1)}` : part;
+                                    return <span key={i} className="text-blue-400">{displayPart}</span>;
+                                }
+                                return part;
+                            })}
                         </p>
                     )}
                     {audioUrl && (

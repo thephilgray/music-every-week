@@ -324,7 +324,8 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
       const match = textBeforeCursor.match(/@([a-zA-Z0-9_.-]*)$/);
       if (match) {
           const startIdx = textBeforeCursor.lastIndexOf('@');
-          const newTextBefore = newComment.slice(0, startIdx) + `@${alias} `;
+          const mentionText = alias.includes(' ') ? `@"${alias}"` : `@${alias}`;
+          const newTextBefore = newComment.slice(0, startIdx) + `${mentionText} `;
           setNewComment(newTextBefore + textAfterCursor);
           
           setTimeout(() => {
@@ -416,9 +417,15 @@ export function CommentSection({ requestId, submissionId, highlightCommentId, su
         }
 
         // Handle Mentions Notifications
-        const mentions = newComment.match(/@([a-zA-Z0-9_.-]+)/g);
-        if (mentions) {
-            const uniqueAliases = [...new Set(mentions.map(m => m.slice(1)))];
+        const mentions: string[] = [];
+        const mentionRegex = /@"([^"]+)"|@([a-zA-Z0-9_.-]+)/g;
+        let match;
+        while ((match = mentionRegex.exec(newComment)) !== null) {
+            mentions.push(match[1] || match[2]);
+        }
+
+        if (mentions.length > 0) {
+            const uniqueAliases = [...new Set(mentions)];
             // Resolve aliases to UIDs
             // We do this server-side usually, but for now client-side.
             // Be careful of iterating too many.

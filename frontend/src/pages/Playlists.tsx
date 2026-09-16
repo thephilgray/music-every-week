@@ -1182,15 +1182,23 @@ function PlaylistDetail({ id }: { id: string }) {
         }
 
         let lockMessage = "";
-        const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
+        const hasSubmitted = submissions.some(s => {
+            const isUploader = s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase();
+            const isCollab = user?.uid ? s.collaborators?.[user.uid] === true : false;
+            return isUploader || isCollab;
+        });
         
         if (!isHost && effectiveLiveTime > 0) {
             if (Date.now() < effectiveLiveTime) {
                 if (hasSubmitted) {
                     const seed = `${id}-${participantEmail}`;
                     const random = seededRandom(seed);
-                    const myTrack = filtered.find(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
-                    const others = filtered.filter(s => s.uploaderEmail?.toLowerCase() !== participantEmail?.toLowerCase());
+                    const myTrack = filtered.find(s => {
+                        const isUploader = s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase();
+                        const isCollab = user?.uid ? s.collaborators?.[user.uid] === true : false;
+                        return isUploader || isCollab;
+                    });
+                    const others = filtered.filter(s => s.id !== myTrack?.id);
                     const shuffledOthers = [...others].sort(() => random() - 0.5).slice(0, 2);
                     
                     filtered = myTrack ? [myTrack, ...shuffledOthers] : shuffledOthers;
@@ -1288,7 +1296,11 @@ function PlaylistDetail({ id }: { id: string }) {
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500" /></div>;
     if (error || !playlist) return <div className="text-center p-20 text-red-500">{error || "Not Found"}</div>;
 
-    const hasSubmitted = submissions.some(s => s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase());
+    const hasSubmitted = submissions.some(s => {
+        const isUploader = s.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase();
+        const isCollab = user?.uid ? s.collaborators?.[user.uid] === true : false;
+        return isUploader || isCollab;
+    });
     
     const hasPlaylistAccessList = playlist.accessList && playlist.accessList.length > 0;
     const isOnPlaylistAccessList = playlist.accessList?.some(e => e.toLowerCase() === participantEmail?.toLowerCase());

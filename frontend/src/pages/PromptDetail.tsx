@@ -332,7 +332,14 @@ export function PromptDetail() {
       return submissions.find(s => s.uploaderEmail?.toLowerCase() === participantEmail.toLowerCase());
   }, [submissions, participantEmail]);
 
-  const hasSubmitted = !!userSubmission;
+  const hasDirectlySubmitted = !!userSubmission;
+
+  const isCollaborator = useMemo(() => {
+      if (!user?.uid) return false;
+      return submissions.some(s => s.collaborators && s.collaborators[user.uid] === true);
+  }, [submissions, user?.uid]);
+
+  const hasSubmitted = hasDirectlySubmitted || isCollaborator;
 
   // Deadline Logic
   const now = Date.now();
@@ -549,6 +556,7 @@ const computedVisibleSubmissions = useMemo(() => {
       let visibleAfterLocking = filtered.filter(sub => {
           if (isOwner || isAdmin) return true; // Owner/Admin sees all
           if (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) return true; // User sees their own submission
+          if (user?.uid && sub.collaborators && sub.collaborators[user.uid] === true) return true; // Collaborator sees this submission
           
           if (isPlaylistLive) {
               return hasSubmitted; // Only submitters see other tracks if playlist is live
@@ -885,8 +893,8 @@ const computedVisibleSubmissions = useMemo(() => {
                         disabled={isPastEffectiveDeadline && !isAdmin}
                         className={`w-full md:w-auto ${isPastEffectiveDeadline && !isAdmin ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-6 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition`}
                     >
-                        {(isPastEffectiveDeadline && !isAdmin) ? 'Submission Closed' : ((hasSubmitted && !isAdmin) ? 'Edit Submission' : 'Submit Track')}
-                        {(hasSubmitted && !isAdmin) ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                        {(isPastEffectiveDeadline && !isAdmin) ? 'Submission Closed' : ((hasDirectlySubmitted && !isAdmin) ? 'Edit Submission' : 'Submit Track')}
+                        {(hasDirectlySubmitted && !isAdmin) ? <Edit className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                     </button>
                     )}
                 </div>
@@ -975,7 +983,8 @@ const computedVisibleSubmissions = useMemo(() => {
                 ) : (
                     <div className="grid grid-cols-1 gap-4">
                         {visibleSubmissions.map((sub) => {
-                            const locked = !(isOwner || isAdmin || (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) || (isPlaylistLive && hasSubmitted) || (hasSubmitted && previewTrackIds.includes(sub.id)));
+                            const isCollaboratorOnSub = user?.uid ? (sub.collaborators?.[user.uid] === true) : false;
+                            const locked = !(isOwner || isAdmin || (sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase()) || isCollaboratorOnSub || (isPlaylistLive && hasSubmitted) || (hasSubmitted && previewTrackIds.includes(sub.id)));
                             const isMySubmission = sub.uploaderEmail?.toLowerCase() === participantEmail?.toLowerCase();
                             const commentCount = submissionCommentCounts[sub.id!] || 0;
                             const isCurrent = currentTrack?.id === sub.id;
